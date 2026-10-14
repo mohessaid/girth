@@ -79,7 +79,10 @@ fn repo_release_build_is_used_in_a_checkout() {
 fn missing_binary_explains_how_to_install() {
     let tmp = TempDir::new().unwrap();
     let script = install(tmp.path());
-    let out = run(&script, &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")]);
+    let out = run(
+        &script,
+        &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")],
+    );
     assert_eq!(out.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&out.stderr).contains("girth: binary not found"));
 }
@@ -114,7 +117,11 @@ fn sha256(path: &Path) -> String {
         .arg(path)
         .output()
         .unwrap();
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().unwrap().to_string()
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string()
 }
 
 /// A fake GitHub release dir: `<root>/v<version>/{girth-<target>,SHA256SUMS}`.
@@ -123,7 +130,11 @@ fn fake_release(root: &Path, checksum_override: Option<&str>) -> String {
     let asset = dir.join(format!("girth-{}", host_target()));
     fake_bin(&asset, "downloaded");
     let sum = checksum_override.map_or_else(|| sha256(&asset), str::to_string);
-    std::fs::write(dir.join("SHA256SUMS"), format!("{sum}  girth-{}\n", host_target())).unwrap();
+    std::fs::write(
+        dir.join("SHA256SUMS"),
+        format!("{sum}  girth-{}\n", host_target()),
+    )
+    .unwrap();
     format!("file://{}", root.display())
 }
 
@@ -133,10 +144,21 @@ fn downloads_verifies_and_caches_the_release_binary() {
     let script = install(&tmp.path().join("install"));
     let base = fake_release(&tmp.path().join("release"), None);
     let out = run(&script, &[("GIRTH_DOWNLOAD_BASE", &base)]);
-    assert_eq!(String::from_utf8_lossy(&out.stdout), "downloaded --flag\n", "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "downloaded --flag\n",
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(tmp.path().join("install/skills/girth/bin/girth").is_file());
-    let again = run(&script, &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")]);
-    assert_eq!(String::from_utf8_lossy(&again.stdout), "downloaded --flag\n");
+    let again = run(
+        &script,
+        &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")],
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&again.stdout),
+        "downloaded --flag\n"
+    );
 }
 
 #[test]
