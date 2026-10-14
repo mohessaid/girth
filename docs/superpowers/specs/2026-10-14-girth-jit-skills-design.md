@@ -81,7 +81,14 @@ Skillselion can be an optional remote source alongside skills.sh.
 
 **Helper language:** Python 3.10+, **standard library only at runtime**, so `python3 scripts/x.py` works for anyone who installs the skill. Dev-only dependencies (pytest, hypothesis, coverage, mutmut) are managed with `uv`. Helpers that read fetched content are run with `python3 -I`.
 
-**Configurable roots:** every helper takes its skill roots from `--roots` or the `GIRTH_SKILL_ROOTS` env var (`os.pathsep`-separated). The defaults are `~/.claude/skills`, `~/.agents/skills` and `./.claude/skills`. Nothing is hardcoded, so the local-first path can be tested in isolated eval runs, where `~` is unreadable.
+**Configurable roots and output:** helpers resolve skill roots in this order: `--roots`, then `GIRTH_SKILL_ROOTS` (`os.pathsep`-separated), then `roots` in `./.girth/config.json`, then the defaults `~/.claude/skills`, `~/.agents/skills`, `./.claude/skills`. The crafted-skill output dir resolves the same way (`--output`, `GIRTH_OUTPUT_DIR`, config `output`, default `./.claude/skills`) and is always searched, because it is the cache.
+
+**Findings from the 2026-10-14 eval spike** (these drove the rules above):
+- Eval child sessions receive only `EVAL_*` env vars, so the config file is how evals point Girth at fixture roots.
+- Writes into `.claude/` are denied during eval runs even with `Write` granted. Evals set `output` to a non-`.claude` dir. In interactive use, that write is a natural consent prompt.
+- A plugin's scripts are readable from the sandbox even when the plugin lives under `~`.
+- A pyenv `python3` shim breaks inside the sandbox, so evals run with `/usr/bin` first on `PATH`.
+- `claude -p --setting-sources project,local` hides user-level skills and plugins. In an empty project the author's user-level skills and plugins added **~13.3K input tokens per session** (35.8K vs 22.5K). This is the baseline for the acceptance demo.
 
 ### Components
 
@@ -90,7 +97,7 @@ Skillselion can be an optional remote source alongside skills.sh.
 | `skills/girth/SKILL.md` | Trigger description plus the craft procedure | Loaded by the harness; invoked by the model or `/girth` |
 | `scripts/girth_search.py <query>` | Ranks candidate skills by matching the query against name, description and headings across roots; optional remote fallback via `npx skills find` | Prints ranked list (text or `--json`): path, bytes, score, matched headings |
 | `scripts/girth_fetch.py <owner/repo[/path]>` | Shallow-fetches a remote skill into a fresh untrusted scratch dir; never into a skills dir; never executes fetched content | Prints the local path |
-| `scripts/girth_measure.py [roots…]` | Reports always-on description bytes/≈tokens and body sizes | Table or `--json`, plus totals |
+| `scripts/girth_measure.py [--roots …]` | Reports always-on description bytes/≈tokens and body sizes | Table or `--json`, plus totals |
 | `scripts/girth_validate.py <skill-dir>` | Checks a crafted skill against the contract (section 7) | Exit 0 if valid, else lists violations |
 | `.claude-plugin/plugin.json` | Makes the repo a plugin, enabling `claude plugin validate` / `eval` | It still installs via `npx skills add` |
 | Crafted skills `.claude/skills/girth-<domain>/` | The cache | Standard skill format (below) |
