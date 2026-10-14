@@ -9,6 +9,9 @@
 set -eu
 GIRTH_VERSION=0.2.0
 here=$(cd "$(dirname "$0")" && pwd)
+# Taste context names this path, so the model records choices with the same launcher.
+GIRTH_LAUNCHER="$here/$(basename "$0")"
+export GIRTH_LAUNCHER
 repo=$(cd "$here/../../.." && pwd)
 bin_dir="$here/../bin"
 base=${GIRTH_DOWNLOAD_BASE:-https://github.com/mohessaid/girth/releases/download}
