@@ -4,6 +4,7 @@ pub mod config;
 pub mod frontmatter;
 pub mod ledger;
 pub mod measure;
+pub mod record;
 pub mod search;
 pub mod sections;
 pub mod skill;

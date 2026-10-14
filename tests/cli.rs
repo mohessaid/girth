@@ -1,8 +1,14 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// The girth binary with its ledger isolated from the real `~/.girth`.
 fn girth() -> Command {
-    Command::cargo_bin("girth").unwrap()
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env(
+        "GIRTH_HOME",
+        std::env::temp_dir().join(format!("girth-test-home-{}", std::process::id())),
+    );
+    cmd
 }
 
 #[test]
@@ -129,7 +135,7 @@ fn validate_reports_valid_and_invalid_with_exit_code() {
         "",
     );
     girth()
-        .arg("validate")
+        .args(["validate", "--no-record"])
         .arg(&good)
         .assert()
         .success()
@@ -191,4 +197,67 @@ fn defaults_come_from_home_and_config_warnings_reach_stderr() {
         .success()
         .stdout(predicate::str::contains("\"count\": 1"))
         .stderr(predicate::str::contains("girth: ignoring invalid"));
+}
+
+#[test]
+fn validate_records_craft_events_and_reports_the_diff() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let src = tmp.path().join("src");
+    write_skill(
+        &src,
+        "video-mega",
+        "name: video-mega\ndescription: d",
+        "## Caption timing\nrule\n## Export\nx\n",
+    );
+    let fm = VALID_FM;
+    let body = "## Caption timing <!-- src: video-mega#caption-timing -->\nrule\n## House\nours\n";
+    let crafted = write_skill(tmp.path(), "girth-captions", fm, body);
+    let run = || {
+        girth()
+            .env("GIRTH_HOME", &home)
+            .args(["validate", "--roots"])
+            .arg(&src)
+            .arg("--")
+            .arg(&crafted)
+            .assert()
+            .success()
+    };
+    run().stdout("VALID girth-captions (recorded: +2 −0 sections)\n");
+    run().stdout("VALID girth-captions (recorded: +0 −0 sections)\n");
+    std::fs::write(
+        crafted.join("SKILL.md"),
+        format!("---\n{fm}\n---\n## House\nours\n"),
+    )
+    .unwrap();
+    run().stdout("VALID girth-captions (recorded: +0 −1 sections)\n");
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 3);
+    assert!(ledger.contains(r#""total":2"#) && ledger.contains(r#""used":["caption-timing"]"#));
+}
+
+#[test]
+fn validate_no_record_and_invalid_skills_write_nothing() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let good = write_skill(tmp.path(), "girth-captions", VALID_FM, "body\n");
+    let bad = write_skill(
+        tmp.path(),
+        "girth-bad",
+        "name: girth-bad\ndescription: d",
+        "",
+    );
+    girth()
+        .env("GIRTH_HOME", &home)
+        .args(["validate", "--no-record"])
+        .arg(&good)
+        .assert()
+        .success();
+    girth()
+        .env("GIRTH_HOME", &home)
+        .arg("validate")
+        .arg(&bad)
+        .assert()
+        .code(1);
+    assert!(!home.join("ledger.jsonl").exists());
 }

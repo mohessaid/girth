@@ -4,8 +4,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use girth::config::{Context, resolve_output_dir, resolve_roots};
+use girth::ledger::{self, Event, girth_home};
 use girth::measure::{format_table, measure, thousands};
+use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
+use girth::skill::CRAFTED_PREFIX;
 use girth::skill::{SkillInfo, discover_skills};
 use girth::validate::validate;
 use std::path::PathBuf;
@@ -47,6 +50,12 @@ enum Command {
     },
     /// Check crafted skills against the Girth contract.
     Validate {
+        /// Don't record a craft event in the ledger.
+        #[arg(long)]
+        no_record: bool,
+        /// Skill roots used to resolve `src` markers (default: configured roots).
+        #[arg(long, num_args = 1..)]
+        roots: Vec<String>,
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
@@ -165,19 +174,55 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Command::Validate { skill_dirs } => {
+        Command::Validate {
+            no_record,
+            roots,
+            skill_dirs,
+        } => {
             let mut all_valid = true;
+            let home = girth_home(&ctx);
+            let mut installed: Option<Vec<SkillInfo>> = None;
             for dir in &skill_dirs {
                 let name = dir.file_name().unwrap_or_default().to_string_lossy();
                 let errors = validate(dir);
-                if errors.is_empty() {
-                    let _ = writeln!(out, "VALID {name}");
-                }
                 for error in &errors {
                     all_valid = false;
                     let _ = writeln!(out, "INVALID {name}: {error}");
                 }
+                if !errors.is_empty() {
+                    continue;
+                }
+                if no_record || !name.starts_with(CRAFTED_PREFIX) {
+                    let _ = writeln!(out, "VALID {name}");
+                    continue;
+                }
+                let installed = installed.get_or_insert_with(|| {
+                    discover_skills(&resolve_roots(&roots, &ctx, &mut warnings))
+                });
+                let project = ctx.cwd.display().to_string();
+                let records = ledger::read(&home);
+                let event = craft_event(
+                    dir,
+                    &project,
+                    installed,
+                    last_craft(&records, &project, &name),
+                );
+                let (added, removed) = match &event {
+                    Event::Craft { added, removed, .. } => (added.len(), removed.len()),
+                    _ => (0, 0),
+                };
+                match ledger::append(&home, event) {
+                    Ok(()) => {
+                        let _ =
+                            writeln!(out, "VALID {name} (recorded: +{added} −{removed} sections)");
+                    }
+                    Err(e) => {
+                        let _ = writeln!(out, "VALID {name}");
+                        eprintln!("girth: could not record to ledger: {e}");
+                    }
+                }
             }
+            warn(&warnings);
             if all_valid {
                 ExitCode::SUCCESS
             } else {
