@@ -64,6 +64,17 @@ Girth keeps a local, append-only ledger (`~/.girth/ledger.jsonl`) of which skill
 
 **Sharing is opt-in and anonymous.** Girth asks once. If you allow it, only **content hashes of public skill sections plus counts** (used / kept / removed / up / down) would be shared, never names, paths, text, notes or anything from your project. Nothing is uploaded until the Girth index launches. Run `girth share preview` to see exactly what would be sent.
 
+## Taste memory
+
+For the things you make again and again (launch videos, decks, landing pages), Girth remembers two things per domain:
+
+- **House rules** you stated once: *"always end on the logo with the URL"*. They're applied every time, in every project, and a new or extra request never drops them.
+- **What recent deliverables chose**: palette, music, opening and so on. The next one varies them unless a rule or your request pins them, and Girth tells you what's fresh.
+
+Taste arrives on its own. When a skill linked to the domain loads, Girth's hook adds the taste to context (about 1 ms; nothing is added for unrelated skills). Say *"from now on, always…"* to add a rule, or *"girth taste launch-video"* to see what's remembered.
+
+Personal taste lives in `~/.girth/taste.jsonl` and follows you across projects. Project rules (`--project`) live in `.girth/taste.jsonl` and can be committed for a team; trust them as you trust that repo's `CLAUDE.md`. Taste is local only: `girth share` never reads it.
+
 ## CLI
 
 ```bash
@@ -73,6 +84,9 @@ target/release/girth search "caption timing" --json
 target/release/girth validate .claude/skills/girth-captions   # also records to the ledger
 target/release/girth stats                                      # what the ledger says
 target/release/girth share preview                              # exactly what would be shared
+target/release/girth taste add launch-video "End on the logo with the URL."
+target/release/girth made launch-video palette=paper-ink music=lo-fi
+target/release/girth taste show launch-video                    # rules + recent choices
 ```
 
 Skill roots resolve in this order:

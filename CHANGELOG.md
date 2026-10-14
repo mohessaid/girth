@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-14
+
+### Added
+- **Taste memory**: house rules and a variation history per domain, for recurring deliverables (launch videos, decks, landing pages).
+  - New commands: `girth taste`, `girth taste show|add|drop`, `girth made`.
+  - Two tiers: personal (`~/.girth/taste.jsonl`, follows you across projects) and project (`.girth/taste.jsonl`, can be committed). Local only; `share` never reads it.
+  - The `PostToolUse` hook now returns the taste as `additionalContext` when a crafted `girth-<domain>` skill, or one of its source skills, is used. Lines are pre-filtered, so a 1,000-event taste file adds about 1 ms.
+  - `validate` links a crafted skill's source skills to its domain.
+  - `stats` shows taste counts, never rule text.
+- The skill gains a taste section and `references/taste.md`, and triggers when the user states a lasting preference. Always-on cost: 74 → 92 tokens.
+- New eval `taste-launch`: a house rule is applied, recent choices are varied, and the deliverable is recorded (3 of 3 runs at 1.00).
+- The launcher exports `GIRTH_LAUNCHER`, so taste context names the exact command to run.
+
 ### Fixed
 - A third-party skill whose name happens to start with `girth-` is no longer counted as crafted. A crafted skill must also carry a `metadata.girth` block.
 - `search` printed the warning for an invalid `.girth/config.json` twice. It now prints it once.
@@ -39,7 +52,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mohessaid/girth/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mohessaid/girth/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mohessaid/girth/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mohessaid/girth/releases/tag/v0.1.0

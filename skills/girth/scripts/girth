@@ -7,7 +7,7 @@
 #   5. download the release binary for this platform (checksum-verified, cached in ../bin)
 #   6. cargo build, in a repo checkout
 set -eu
-GIRTH_VERSION=0.2.0
+GIRTH_VERSION=0.3.0
 here=$(cd "$(dirname "$0")" && pwd)
 # Taste context names this path, so the model records choices with the same launcher.
 GIRTH_LAUNCHER="$here/$(basename "$0")"
