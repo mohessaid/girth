@@ -62,7 +62,7 @@ Skillselion can be an optional remote source alongside skills.sh.
             ▼
    .claude/skills/girth-*/        ── hit ──▶ extend if needed, use it
             │ miss
-            │ 2. search sources (scripts/girth_search.py)
+            │ 2. search sources (scripts/girth search)
             ▼
    ~/.claude/skills, ~/.agents/skills   (local, no network)
             │ nothing relevant
@@ -72,7 +72,7 @@ Skillselion can be an optional remote source alongside skills.sh.
             │ 3. model reads candidates, extracts needed slice
             ▼
    write/extend .claude/skills/girth-<domain>/SKILL.md
-            │ 4. scripts/girth_measure.py reports token cost
+            │ 4. scripts/girth validate / measure
             ▼
    continue the original task using the crafted skill
 ```
@@ -157,7 +157,7 @@ metadata:
 
 ## 10. Success criteria
 
-1. **Token cost:** for a demo project, `girth_measure.py` shows always-on description cost after Girth (girth plus crafted skills only, with bulk installs removed) is **≥10× lower** than with the bulk installs.
+1. **Token cost:** for a demo project, `girth measure` shows always-on description cost after Girth (girth plus crafted skills only, with bulk installs removed) is **≥10× lower** than with the bulk installs.
 2. **Quality demo:** a real captioning or animation task, done with the author's 13-skill hyperframes stack versus one crafted `girth-hyperframes` skill, produces output judged **no worse** by the author. This is a side-by-side and becomes the launch artifact.
 3. **Incrementality:** a second, different need in the same domain extends the existing crafted skill rather than creating a new one.
 4. **Install:** a single `npx skills add <repo>` (or copy into `.claude/skills`) makes Girth usable.
@@ -169,12 +169,12 @@ metadata:
 girth/
   .claude-plugin/plugin.json
   skills/girth/SKILL.md
-  skills/girth/scripts/{girth_search,girth_fetch,girth_measure,girth_validate}.py
-  tests/                    # pytest unit + property tests, fixtures/
+  skills/girth/scripts/girth   # POSIX launcher for the girth binary
+  Cargo.toml  src/*.rs        # girth CLI: frontmatter, config, skill, measure, search, validate
+  tests/{cli,launcher,skill_md}.rs   # integration tests (unit + proptest live in src/)
   evals/                    # claude plugin eval suite
   examples/                 # before/after demo artefacts
   docs/superpowers/{specs,plans}/
-  pyproject.toml            # dev deps only (uv)
   CLAUDE.md  README.md
 ```
 
@@ -184,17 +184,17 @@ Development is test-driven: a failing test comes before every behaviour.
 
 | Level | Tool | What it covers | Gate |
 |---|---|---|---|
-| Unit | pytest | Each helper's functions: frontmatter parsing, scoring, sizing, contract checks | All pass |
-| Property | hypothesis (dev only) | Search ranking invariants (exact name match outranks partial; ranking is deterministic); measure is additive across roots; the validator never crashes on arbitrary frontmatter | All pass |
-| Coverage | pytest-cov | `scripts/` line and branch coverage | ≥ 90% |
-| Mutation | mutmut | Strength of the unit and property suites against `scripts/` | ≥ 80% killed; survivors reviewed |
-| Static | ruff, `claude plugin validate` | Lint plus plugin/skill schema | Clean |
+| Unit | `cargo test` (module tests, assert_cmd CLI and launcher tests) | Each helper's functions: frontmatter parsing, scoring, sizing, contract checks | All pass |
+| Property | proptest | Search ranking invariants (exact name match outranks partial; ranking is deterministic); measure is additive across roots; the validator never crashes on arbitrary frontmatter | All pass |
+| Coverage | cargo-llvm-cov | Line coverage of `src/` | ≥ 90% |
+| Mutation | cargo-mutants | Strength of the unit and property suites against `src/` | ≥ 80% killed; survivors reviewed |
+| Static | rustfmt, clippy `-D warnings`, `claude plugin validate` | Lint plus plugin/skill schema | Clean |
 | Behavioural | `claude plugin eval` | Skill trigger and output behaviour in isolated headless sessions, with/without baseline (Δ) | Threshold per case; pinned `--model`; `--max-cost-usd` |
 | E2E / acceptance | `claude -p` in fixture projects | Hyperframes side-by-side (13 skills vs one crafted); 5-session compounding measurement | Author judgment plus measured numbers |
 
 **Constraints from the eval harness** (these shape the interfaces):
 - Runs are isolated, and with Bash granted, `~` and the Claude config are unreadable. Cases therefore seed fixture skill roots with `context.scaffold_script` and point `GIRTH_SKILL_ROOTS` at them.
-- There are no custom-code graders. Contract conformance is checked by having the prompt run `girth_validate.py`/`girth_measure.py` and write results to a file, then grading it with `regex` and `file_exists`.
+- There are no custom-code graders. Contract conformance is checked by having the prompt run `girth validate` and grading its `VALID <dir>` output in the trace, then grading it with `regex` and `file_exists`.
 - Remote fetch needs `WebFetch(domain:…)` grants. Behavioural cases stay local-only; remote is covered by unit tests with a stubbed network.
 
 **Planned eval cases:**
@@ -209,9 +209,9 @@ Development is test-driven: a failing test comes before every behaviour.
 
 | Milestone | Goal | Exit criteria |
 |---|---|---|
-| **M0 Skeleton** | Project set up the TDD way | Plugin layout, `pyproject.toml`, failing unit tests and scaffolded eval cases; `make check` runs ruff, pytest, coverage and mutmut; the red suite runs end to end |
+| **M0 Skeleton** | Project set up the TDD way | Plugin layout, Cargo crate, failing tests and scaffolded eval cases; `make check` runs fmt, clippy, tests, coverage and plugin validate; the red suite runs end to end |
 | **M1 Local-first `/girth`** *(traction artefact)* | User-triggered crafting from local skills | `search`, `measure` and `validate` implemented to the gates in section 12; eval cases 3, 5 and 6 pass; **hyperframes 13→1 side-by-side** judged no worse; measured description-cost drop recorded in `examples/` |
-| **M2 Self-trigger and growth** | The model calls Girth on its own; the cache compounds | Description tuned until eval Δ > 0; cases 1, 2 and 4 pass; `girth_fetch.py` remote fallback; 5-session compounding numbers recorded |
+| **M2 Self-trigger and growth** | The model calls Girth on its own; the cache compounds | Description tuned until eval Δ > 0; cases 1, 2 and 4 pass; `girth fetch` remote fallback; 5-session compounding numbers recorded |
 | **M3 Launch** | Traction | README with before/after numbers and demo; published to skills.sh; announcement post |
 | Later | Next layers | Hooks (correction-phrase trigger), MCP server, usage-based pruning (including **stale plugin-cache versions**: the author's `~/.claude/plugins/cache` keeps several old versions of the same plugin skills), **Radar** (below) |
 

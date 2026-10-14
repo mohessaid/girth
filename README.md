@@ -6,7 +6,7 @@ Status: pre-release (M1). Design: `docs/superpowers/specs/`.
 
 ## Measured so far (2026-10-14, one machine)
 
-| | Before | With Girth |
+| | Before | With Girth (bulk skills removed) |
 |---|---|---|
 | Always-on skill cost (39 user skills vs crafted) | 17,022 B ≈ 4.3K tok | 448 B ≈ 112 tok (**38× less**) |
 | Per-session new prompt tokens, HyperFrames task | 35.7K | 22.0K (**−38%**) |
