@@ -53,6 +53,12 @@ enum Command {
         #[command(subcommand)]
         what: RecordWhat,
     },
+    /// Summarise the local ledger: crafted skills, uses, removals, ratings.
+    Stats {
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
         skill: String,
@@ -235,6 +241,20 @@ fn main() -> ExitCode {
             what: RecordWhat::Use { skill },
         } => {
             record_use(skill, &ctx);
+            ExitCode::SUCCESS
+        }
+        Command::Stats { json } => {
+            let home = girth_home(&ctx);
+            let stats = girth::stats::compute(&ledger::read(&home), ledger::sharing(&home));
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&stats).expect("stats serialise")
+                );
+            } else {
+                let _ = writeln!(out, "{}", girth::stats::render(&stats));
+            }
             ExitCode::SUCCESS
         }
         Command::Feedback {

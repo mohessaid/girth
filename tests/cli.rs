@@ -361,3 +361,34 @@ fn feedback_records_rating_and_optional_note() {
         .assert()
         .code(2);
 }
+
+#[test]
+fn stats_summarises_the_ledger_in_text_and_json() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("empty"));
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["record", "use", "--skill", "hyperframes"])
+        .assert()
+        .success();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Most used skills"))
+        .stdout(predicate::str::contains("hyperframes 1"));
+    let out = girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["stats", "--json"])
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["events"], 1);
+    assert_eq!(json["sharing"], "unset");
+}
