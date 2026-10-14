@@ -46,22 +46,8 @@ pub fn extract_headings(markdown: &str) -> Vec<String> {
         let trimmed = line.trim_start();
         if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
             in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-        let hashes = line.bytes().take_while(|&b| b == b'#').count();
-        if !(1..=6).contains(&hashes) {
-            continue;
-        }
-        let rest = &line[hashes..];
-        if !rest.starts_with([' ', '\t']) {
-            continue;
-        }
-        let text = rest.trim().trim_end_matches('#').trim_end();
-        if !text.is_empty() {
-            headings.push(text.to_string());
+        } else if !in_fence {
+            headings.extend(crate::sections::heading_text(line));
         }
     }
     headings
@@ -295,6 +281,14 @@ mod tests {
     fn headings_inside_code_fences_are_ignored() {
         let md = "# Top\n```\n# not a heading\n```\n~~~\n## nor this\n~~~\n## Real ##\n#nospace\n####### seven\n";
         assert_eq!(extract_headings(md), vec!["Top", "Real"]);
+    }
+
+    #[test]
+    fn headings_drop_provenance_markers() {
+        assert_eq!(
+            extract_headings("## Timing <!-- src: a#b -->\n"),
+            vec!["Timing"]
+        );
     }
 
     #[test]

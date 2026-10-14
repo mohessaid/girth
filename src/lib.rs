@@ -4,6 +4,7 @@ pub mod config;
 pub mod frontmatter;
 pub mod measure;
 pub mod search;
+pub mod sections;
 pub mod skill;
 #[cfg(test)]
 pub(crate) mod testutil;
