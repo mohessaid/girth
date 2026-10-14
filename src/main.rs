@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use girth::config::{Context, resolve_output_dir, resolve_roots};
-use girth::ledger::{self, Event, girth_home};
+use girth::ledger::{self, Event, Rating, girth_home};
 use girth::measure::{format_table, measure, thousands};
 use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
@@ -48,6 +48,19 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Record an event in the local ledger (used by the plugin hook).
+    Record {
+        #[command(subcommand)]
+        what: RecordWhat,
+    },
+    /// Rate a crafted skill: up or down, with an optional private note.
+    Feedback {
+        skill: String,
+        rating: RatingArg,
+        /// Stays on this machine; never shared.
+        #[arg(long)]
+        note: Option<String>,
+    },
     /// Check crafted skills against the Girth contract.
     Validate {
         /// Don't record a craft event in the ledger.
@@ -59,6 +72,50 @@ enum Command {
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum RecordWhat {
+    /// A skill was used. Reads Claude Code hook JSON from stdin unless --skill is given.
+    Use {
+        #[arg(long)]
+        skill: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum RatingArg {
+    Up,
+    Down,
+}
+
+/// (skill, project) from a PostToolUse hook payload.
+fn hook_use(stdin: &str) -> Option<(String, Option<String>)> {
+    let value: serde_json::Value = serde_json::from_str(stdin).ok()?;
+    let skill = value.pointer("/tool_input/skill")?.as_str()?.trim();
+    let cwd = value
+        .get("cwd")
+        .and_then(|c| c.as_str())
+        .map(str::to_string);
+    (!skill.is_empty()).then(|| (skill.to_string(), cwd))
+}
+
+fn record_use(skill: Option<String>, ctx: &Context) {
+    use std::io::{IsTerminal, Read};
+    let found = match skill {
+        Some(skill) => Some((skill, None)),
+        None if !std::io::stdin().is_terminal() => {
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            hook_use(&input)
+        }
+        None => None,
+    };
+    if let Some((skill, cwd)) = found {
+        let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
+        // Never disturb the session: a failed append is silently dropped.
+        let _ = ledger::append(&girth_home(ctx), Event::Use { skill, project });
+    }
 }
 
 fn warn(warnings: &[String]) {
@@ -173,6 +230,42 @@ fn main() -> ExitCode {
                 }
             }
             ExitCode::SUCCESS
+        }
+        Command::Record {
+            what: RecordWhat::Use { skill },
+        } => {
+            record_use(skill, &ctx);
+            ExitCode::SUCCESS
+        }
+        Command::Feedback {
+            skill,
+            rating,
+            note,
+        } => {
+            let rating = match rating {
+                RatingArg::Up => Rating::Up,
+                RatingArg::Down => Rating::Down,
+            };
+            let project = ctx.cwd.display().to_string();
+            let label = if rating == Rating::Up { "👍" } else { "👎" };
+            match ledger::append(
+                &girth_home(&ctx),
+                Event::Feedback {
+                    skill: skill.clone(),
+                    project,
+                    rating,
+                    note,
+                },
+            ) {
+                Ok(()) => {
+                    let _ = writeln!(out, "recorded {label} for {skill}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("girth: could not record feedback: {e}");
+                    ExitCode::from(1)
+                }
+            }
         }
         Command::Validate {
             no_record,

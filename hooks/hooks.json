@@ -1,0 +1,17 @@
+{
+  "description": "Girth: record skill use in the local ledger (~/.girth/ledger.jsonl). Never blocks or fails the session.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/skills/girth/scripts/girth\" record use 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

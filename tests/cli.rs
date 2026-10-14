@@ -261,3 +261,103 @@ fn validate_no_record_and_invalid_skills_write_nothing() {
         .code(1);
     assert!(!home.join("ledger.jsonl").exists());
 }
+
+fn ledger_lines(home: &std::path::Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(home.join("ledger.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+#[test]
+fn record_use_reads_hook_json_from_stdin() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["record", "use"])
+        .write_stdin(r#"{"tool_name":"Skill","tool_input":{"skill":"girth:girth"},"cwd":"/proj"}"#)
+        .assert()
+        .success()
+        .stdout("");
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["kind"], "use");
+    assert_eq!(lines[0]["skill"], "girth:girth");
+    assert_eq!(lines[0]["project"], "/proj");
+}
+
+#[test]
+fn record_use_with_bad_stdin_records_nothing_and_exits_zero() {
+    let tmp = TempDir::new().unwrap();
+    for input in [
+        "",
+        "garbage",
+        r#"{"tool_input":{}}"#,
+        r#"{"tool_input":{"skill":""}}"#,
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path())
+            .args(["record", "use"])
+            .write_stdin(input)
+            .assert()
+            .success();
+    }
+    assert!(ledger_lines(tmp.path()).is_empty());
+}
+
+#[test]
+fn record_use_with_flag_uses_cwd_as_project() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("proj");
+    std::fs::create_dir(&project).unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .current_dir(&project)
+        .args(["record", "use", "--skill", "girth-captions"])
+        .assert()
+        .success();
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(lines[0]["skill"], "girth-captions");
+    assert_eq!(lines[0]["project"], project.display().to_string());
+}
+
+#[test]
+fn record_use_never_fails_even_when_the_ledger_is_unwritable() {
+    let tmp = TempDir::new().unwrap();
+    let file = tmp.path().join("not-a-dir");
+    std::fs::write(&file, "").unwrap();
+    girth()
+        .env("GIRTH_HOME", &file)
+        .args(["record", "use", "--skill", "x"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn feedback_records_rating_and_optional_note() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "up", "--note", "great pacing"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("girth-captions"));
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "down"])
+        .assert()
+        .success();
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(
+        (lines[0]["rating"].as_str(), lines[0]["note"].as_str()),
+        (Some("up"), Some("great pacing"))
+    );
+    assert_eq!(lines[1]["rating"], "down");
+    assert!(lines[1].get("note").is_none());
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "meh"])
+        .assert()
+        .code(2);
+}
