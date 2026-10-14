@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.svg" alt="Girth logo" width="160">
+
 # Girth
 
 **Just-in-time, project-scoped agent skills.**<br>
