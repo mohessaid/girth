@@ -79,7 +79,7 @@ Skillselion can be an optional remote source alongside skills.sh.
 
 **Division of labour:** the running model does the distillation. The scripts only search, fetch, measure and validate. That keeps v1 to one `SKILL.md` and a few helpers, with no LLM calls of their own.
 
-**Helper language:** Python 3.10+, **standard library only at runtime**, so `python3 scripts/x.py` works for anyone who installs the skill. Dev-only dependencies (pytest, hypothesis, coverage, mutmut) are managed with `uv`. Helpers that read fetched content are run with `python3 -I`.
+**Helper language (revised 2026-10-14): Rust.** There is one `girth` binary with subcommands `search`, `measure` and `validate`. The skill calls it through a POSIX launcher, `skills/girth/scripts/girth`, which tries in order: `$GIRTH_BIN`, a bundled `skills/girth/bin/girth`, the repo's `target/release/girth`, `girth` on `PATH`, and finally `cargo build --release`. Prebuilt per-platform binaries are an M3 release task. YAML is parsed **strictly** (a real YAML parser) when validating crafted skills, and **leniently** during discovery: if strict parsing fails, a fallback scan recovers `name` and `description`, and the number of fallbacks is reported on stderr. That way discovery never drops a real-world skill. The verified Python reference implementation in the M0–M1 plan defines the behaviour; its tests are ported one-to-one.
 
 **Configurable roots and output:** helpers resolve skill roots in this order: `--roots`, then `GIRTH_SKILL_ROOTS` (`os.pathsep`-separated), then `roots` in `./.girth/config.json`, then the defaults `~/.claude/skills`, `~/.agents/skills`, `./.claude/skills`. The crafted-skill output dir resolves the same way (`--output`, `GIRTH_OUTPUT_DIR`, config `output`, default `./.claude/skills`) and is always searched, because it is the cache.
 
@@ -95,10 +95,10 @@ Skillselion can be an optional remote source alongside skills.sh.
 | Unit | Purpose | Interface |
 |---|---|---|
 | `skills/girth/SKILL.md` | Trigger description plus the craft procedure | Loaded by the harness; invoked by the model or `/girth` |
-| `scripts/girth_search.py <query>` | Ranks candidate skills by matching the query against name, description and headings across roots; optional remote fallback via `npx skills find` | Prints ranked list (text or `--json`): path, bytes, score, matched headings |
-| `scripts/girth_fetch.py <owner/repo[/path]>` | Shallow-fetches a remote skill into a fresh untrusted scratch dir; never into a skills dir; never executes fetched content | Prints the local path |
-| `scripts/girth_measure.py [--roots …]` | Reports always-on description bytes/≈tokens and body sizes. Default roots are *search sources*; pass `--roots ~/.claude/skills` (plus project skills) to measure what the harness actually loads | Table or `--json`, plus totals |
-| `scripts/girth_validate.py <skill-dir>` | Checks a crafted skill against the contract (section 7) | Exit 0 if valid, else lists violations |
+| `girth search <query>` | Ranks candidate skills by matching the query against name, description and headings across roots; optional remote fallback via `npx skills find` | Prints ranked list (text or `--json`): path, bytes, score, matched headings |
+| `girth fetch <owner/repo[/path]>` (M2) | Shallow-fetches a remote skill into a fresh untrusted scratch dir; never into a skills dir; never executes fetched content | Prints the local path |
+| `girth measure [--roots …]` | Reports always-on description bytes/≈tokens and body sizes. Default roots are *search sources*; pass `--roots ~/.claude/skills` (plus project skills) to measure what the harness actually loads | Table or `--json`, plus totals |
+| `girth validate <skill-dir>…` | Checks a crafted skill against the contract (section 7) | Exit 0 if valid, else lists violations |
 | `.claude-plugin/plugin.json` | Makes the repo a plugin, enabling `claude plugin validate` / `eval` | It still installs via `npx skills add` |
 | Crafted skills `.claude/skills/girth-<domain>/` | The cache | Standard skill format (below) |
 
@@ -213,7 +213,15 @@ Development is test-driven: a failing test comes before every behaviour.
 | **M1 Local-first `/girth`** *(traction artefact)* | User-triggered crafting from local skills | `search`, `measure` and `validate` implemented to the gates in section 12; eval cases 3, 5 and 6 pass; **hyperframes 13→1 side-by-side** judged no worse; measured description-cost drop recorded in `examples/` |
 | **M2 Self-trigger and growth** | The model calls Girth on its own; the cache compounds | Description tuned until eval Δ > 0; cases 1, 2 and 4 pass; `girth_fetch.py` remote fallback; 5-session compounding numbers recorded |
 | **M3 Launch** | Traction | README with before/after numbers and demo; published to skills.sh; announcement post |
-| Later | Next layers | Hooks (correction-phrase trigger), MCP server, usage-based pruning, **Radar** (below) |
+| Later | Next layers | Hooks (correction-phrase trigger), MCP server, usage-based pruning (including **stale plugin-cache versions**: the author's `~/.claude/plugins/cache` keeps several old versions of the same plugin skills), **Radar** (below) |
+
+## 13a. Dogfooding (bootstrapping)
+
+Girth is built with Girth, the way a self-hosting compiler is built with itself.
+- **Stage 0:** the core (`search`, `measure`, `validate`) is written without Girth.
+- **Stage 1:** right after that, the stage-0 binary crafts this repo's own project skills, e.g. `girth-skill-authoring` from the superpowers `writing-skills` and Anthropic `skill-creator` skills. Girth's own `SKILL.md` is then written following that crafted skill.
+- Domains with no local source are recorded as "no source found", which exercises spec case 6.
+- Results (sizes, sources, what was reused) are recorded in `examples/dogfood/`.
 
 ## 14. Roadmap: Radar layer (separate spec)
 

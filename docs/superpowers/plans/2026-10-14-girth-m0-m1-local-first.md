@@ -10,6 +10,35 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-14-girth-jit-skills-design.md` (sections 4–13; this plan covers milestones M0 and M1).
 
+## Rust Port (supersedes the Python runtime; decided 2026-10-14)
+
+The user directed: Rust wherever it is feasible, and dogfood Girth to build Girth. The Python code in Tasks 1–7 below stays as the **verified reference implementation** (77 tests, 97% coverage in a scratch run). The Rust port must reproduce its behaviour, and its tests port one-to-one. The interface is **frozen**: JSON keys (`output_dir`, `hits[].{name,path,score,exact,crafted,description,skill_md_bytes,total_md_bytes,matched_headings[].{file,heading}}`, measure `skills[]`/`totals{}`), text strings (`output_dir: `, `no matching skills`, `VALID <dir>`, `INVALID <dir>: <msg>`, `TOTAL: `) and `.girth/config.json` keys.
+
+**Crate layout** (repo root):
+- `Cargo.toml`: package `girth`, edition 2024, bin `girth`
+- `src/frontmatter.rs` replaces Task 2. It does a strict YAML parse (`yaml-rust2`) and returns `Result`; `parse_lenient` falls back to a line scan for `name`/`description`, including `>`/`|` blocks.
+- `src/config.rs` replaces Task 3: `resolve_roots`, `resolve_output_dir`.
+- `src/skill.rs` replaces Task 4: `SkillInfo`, `load_skill`, `discover_skills` (deduped by real path and by name), `extract_headings`, `approx_tokens`.
+- `src/measure.rs`, `src/search.rs`, `src/validate.rs` replace Tasks 5, 6 and 7.
+- `src/main.rs` is the clap CLI: `girth search|measure|validate`.
+- `skills/girth/scripts/girth` is the POSIX launcher described in the spec.
+
+**Test mapping:**
+
+| Python | Rust |
+|---|---|
+| pytest unit | `#[cfg(test)]` modules plus `tests/cli.rs` (assert_cmd) |
+| hypothesis | proptest |
+| pytest-cov | `cargo llvm-cov --fail-under-lines 90` |
+| mutmut | `cargo mutants` (≥80% caught) |
+| ruff | `cargo clippy -- -D warnings` plus `cargo fmt --check` |
+
+**Makefile:** `check` = fmt, clippy, test, cov, validate. `evals` depends on `build` (release), because cargo cannot run inside the eval sandbox. The eval grant becomes `--allow-tools Write Edit Bash`, since the sandbox still confines Bash.
+
+**Dogfood stage 1** comes between Task 7 and Task 9. Create a repo `.girth/config.json` whose roots include the superpowers `skills/` dir and the skill-creator dir, run `girth search` for the skill-authoring need, craft and validate `.claude/skills/girth-skill-authoring`, and write `skills/girth/SKILL.md` following it. Record the results in `examples/dogfood/RESULTS.md`.
+
+**Out of scope here (M3):** prebuilt per-platform binaries in `skills/girth/bin/`.
+
 ## Global Constraints
 
 - Runtime helpers: Python 3.10+, **standard library only**. Each script starts by inserting its own directory into `sys.path`, so it works under `python3 -I`.
