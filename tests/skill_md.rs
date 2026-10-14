@@ -93,6 +93,21 @@ fn reference_flows_exist_are_small_and_name_their_command() {
 }
 
 #[test]
+fn crafted_template_tells_the_skill_to_record_deliverables() {
+    // Hook context is tool output, which models rightly won't take orders from;
+    // the instruction to record must live in the crafted skill itself.
+    let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
+    let (_, body) = split_frontmatter(&text);
+    let template = body
+        .split("```markdown")
+        .nth(1)
+        .and_then(|t| t.split("```").next())
+        .expect("crafted-skill template present");
+    assert!(template.contains("## Record"), "{template}");
+    assert!(template.contains("`made` command"), "{template}");
+}
+
+#[test]
 fn consent_never_blocks_and_comes_after_the_task_is_served() {
     let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
     let (_, body) = split_frontmatter(&text);
