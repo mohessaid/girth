@@ -9,6 +9,7 @@ pub mod record;
 pub mod search;
 pub mod sections;
 pub mod share;
+pub mod show;
 pub mod skill;
 pub mod stats;
 pub mod taste;

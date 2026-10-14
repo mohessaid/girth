@@ -86,6 +86,14 @@ enum Command {
         #[arg(required = true)]
         choices: Vec<String>,
     },
+    /// Print a skill's frontmatter and contents, or only the sections you name.
+    Show {
+        /// The skill dir (as printed by `search`).
+        dir: PathBuf,
+        /// A heading to print with its subsections; repeatable.
+        #[arg(long = "heading")]
+        headings: Vec<String>,
+    },
     /// Shallow-clone a public GitHub skill repo (owner/repo[/path]) into an untrusted scratch dir.
     Fetch {
         /// owner/repo or owner/repo/sub/path.
@@ -549,6 +557,16 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Command::Taste { action } => run_taste(action, &ctx, &mut out),
+        Command::Show { dir, headings } => match girth::show::show(&dir, &headings) {
+            Ok(text) => {
+                out.push_str(&text);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("girth: {e}");
+                ExitCode::from(1)
+            }
+        },
         Command::Fetch { spec } => match girth::fetch::parse_spec(&spec) {
             Err(e) => {
                 eprintln!("girth: {e}");

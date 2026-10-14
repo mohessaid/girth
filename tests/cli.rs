@@ -482,3 +482,35 @@ fn fetch_prints_the_local_path_and_rejects_bad_specs() {
         .code(1)
         .stderr(predicate::str::contains("git clone failed"));
 }
+
+#[test]
+fn show_prints_overview_or_only_the_requested_sections() {
+    let tmp = TempDir::new().unwrap();
+    let dir = write_skill(
+        tmp.path(),
+        "video-mega",
+        "name: video-mega\ndescription: All video.",
+        "## Caption timing\nHold 1.2 s.\n## Audio mixing\nDuck 12 dB.\n",
+    );
+    girth()
+        .arg("show")
+        .arg(&dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "SKILL.md: Caption timing · Audio mixing",
+        ));
+    girth()
+        .arg("show")
+        .arg(&dir)
+        .args(["--heading", "Caption timing"])
+        .assert()
+        .success()
+        .stdout("=== SKILL.md ===\n## Caption timing\nHold 1.2 s.\n");
+    girth()
+        .arg("show")
+        .arg(tmp.path())
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("no SKILL.md"));
+}

@@ -27,7 +27,7 @@ git init -q .
 for n in 1 2 3 4 5; do
   if [ "$arm" = jit ]; then rm -rf .claude/skills/girth-*; fi
   claude -p --model "${DEMO_MODEL:-claude-sonnet-5-5}" --setting-sources "project,local" \
-    --plugin-dir "$plugin" --permission-mode acceptEdits --allowedTools Bash Skill \
+    --plugin-dir "$plugin" --add-dir "$HOME/.claude/skills" --permission-mode acceptEdits --allowedTools Bash Skill Read \
     --max-turns 40 --output-format json "$(cat "$here/tasks/$n.md")" < /dev/null > "$out/$n.json" || true
   ls -d .claude/skills/girth-* 2>/dev/null > "$out/$n.crafted" || true
   python3 "$here/summarize.py" "$out/$n.json" "$arm s$n"

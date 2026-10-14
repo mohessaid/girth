@@ -44,6 +44,7 @@ fn body_names_every_helper_and_rule() {
     let (_, body) = split_frontmatter(&text);
     for needle in [
         "scripts/girth search",
+        "scripts/girth show",
         "scripts/girth validate",
         "output_dir",
         "matched_headings",

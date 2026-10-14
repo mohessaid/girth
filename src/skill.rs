@@ -56,14 +56,14 @@ pub fn extract_headings(markdown: &str) -> Vec<String> {
     headings
 }
 
-fn read_lossy(path: &Path) -> Option<String> {
+pub(crate) fn read_lossy(path: &Path) -> Option<String> {
     std::fs::read(path)
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
 /// Markdown files under `dir`, sorted; symlinked subdirectories are not entered.
-fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
