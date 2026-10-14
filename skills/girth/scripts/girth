@@ -1,17 +1,74 @@
 #!/bin/sh
-# Run the girth binary. Lookup order: $GIRTH_BIN, a bundled ../bin/girth,
-# a repo checkout's target/release/girth, girth on PATH, then a cargo build.
+# Run the girth binary. Lookup order:
+#   1. $GIRTH_BIN
+#   2. a bundled or previously downloaded ../bin/girth
+#   3. a repo checkout's target/release/girth
+#   4. girth on PATH
+#   5. download the release binary for this platform (checksum-verified, cached in ../bin)
+#   6. cargo build, in a repo checkout
 set -eu
+GIRTH_VERSION=0.1.0
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
+bin_dir="$here/../bin"
+base=${GIRTH_DOWNLOAD_BASE:-https://github.com/mohessaid/girth/releases/download}
 
 if [ -n "${GIRTH_BIN:-}" ] && [ -x "$GIRTH_BIN" ]; then exec "$GIRTH_BIN" "$@"; fi
-if [ -x "$here/../bin/girth" ]; then exec "$here/../bin/girth" "$@"; fi
+if [ -x "$bin_dir/girth" ]; then exec "$bin_dir/girth" "$@"; fi
 if [ -f "$repo/Cargo.toml" ] && [ -x "$repo/target/release/girth" ]; then exec "$repo/target/release/girth" "$@"; fi
 if command -v girth >/dev/null 2>&1; then exec girth "$@"; fi
+
+target() {
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64 | Linux-amd64) echo x86_64-unknown-linux-musl ;;
+    Linux-aarch64 | Linux-arm64) echo aarch64-unknown-linux-musl ;;
+    Darwin-x86_64) echo x86_64-apple-darwin ;;
+    Darwin-arm64 | Darwin-aarch64) echo aarch64-apple-darwin ;;
+    *) return 1 ;;
+  esac
+}
+
+fetch() { # url dest
+  if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then wget -q "$1" -O "$2"
+  else return 1; fi
+}
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+# Returns 0 after installing $bin_dir/girth, 1 if no release could be fetched;
+# exits 1 on a checksum mismatch.
+download() {
+  t=$(target) || return 1
+  url="$base/v$GIRTH_VERSION"
+  mkdir -p "$bin_dir"
+  tmp=$(mktemp "$bin_dir/.girth-download.XXXXXX")
+  sums="$tmp.sums"
+  trap 'rm -f "$tmp" "$sums"' EXIT
+  fetch "$url/girth-$t" "$tmp" 2>/dev/null || return 1
+  fetch "$url/SHA256SUMS" "$sums" 2>/dev/null || return 1
+  expected=$(grep " girth-$t\$" "$sums" | cut -d' ' -f1 || true)
+  actual=$(sha256 "$tmp")
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+    echo "girth: checksum mismatch for girth-$t v$GIRTH_VERSION; refusing to run it." >&2
+    exit 1
+  fi
+  chmod 755 "$tmp"
+  mv "$tmp" "$bin_dir/girth"
+  rm -f "$sums"
+  trap - EXIT
+  echo "girth: installed v$GIRTH_VERSION ($t) to $bin_dir/girth" >&2
+}
+
+if download; then exec "$bin_dir/girth" "$@"; fi
+
 if [ -f "$repo/Cargo.toml" ] && command -v cargo >/dev/null 2>&1; then
   cargo build --release --quiet --manifest-path "$repo/Cargo.toml" >&2
   exec "$repo/target/release/girth" "$@"
 fi
-echo "girth: binary not found. Build it with 'cargo build --release' in the girth repo, or set GIRTH_BIN." >&2
+echo "girth: binary not found and no release for this platform could be downloaded." >&2
+echo "girth: get one from https://github.com/mohessaid/girth/releases or set GIRTH_BIN." >&2
 exit 127

@@ -1,0 +1,11 @@
+{
+  "name": "girth",
+  "owner": { "name": "mohessaid" },
+  "plugins": [
+    {
+      "name": "girth",
+      "source": "./",
+      "description": "Just-in-time, project-scoped skills distilled from the skills you already have."
+    }
+  ]
+}

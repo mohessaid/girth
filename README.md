@@ -15,6 +15,18 @@ Status: pre-release (M1). Design: `docs/superpowers/specs/`.
 
 These are single runs. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (3 cases, 9 runs, all 1.00).
 
+## Install
+
+In Claude Code (2.1.275 or later):
+
+```
+/plugin install girth --marketplace mohessaid/girth
+```
+
+Or, with the skills CLI: `npx skills add mohessaid/girth`.
+
+You don't need Rust. The first time the skill runs, it downloads the prebuilt `girth` binary for your platform from [Releases](https://github.com/mohessaid/girth/releases) and verifies it against `SHA256SUMS` before running it. Builds exist for Linux x86_64 and ARM64 (static musl) and macOS (Intel and Apple Silicon). To use your own build, set `GIRTH_BIN`.
+
 ## How it works
 
 1. During a task, the model (or you: "use girth for …") names a need.

@@ -79,7 +79,7 @@ fn repo_release_build_is_used_in_a_checkout() {
 fn missing_binary_explains_how_to_install() {
     let tmp = TempDir::new().unwrap();
     let script = install(tmp.path());
-    let out = run(&script, &[]);
+    let out = run(&script, &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")]);
     assert_eq!(out.status.code(), Some(127));
     assert!(String::from_utf8_lossy(&out.stderr).contains("girth: binary not found"));
 }
@@ -93,4 +93,65 @@ fn real_launcher_runs_the_real_binary_from_another_cwd() {
         "unknown --flag should be a clap usage error"
     );
     assert!(String::from_utf8_lossy(&out.stderr).contains("Usage: girth"));
+}
+
+/// The Rust target triple the launcher should pick on this machine.
+fn host_target() -> &'static str {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => "x86_64-unknown-linux-musl",
+        ("linux", "aarch64") => "aarch64-unknown-linux-musl",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        other => panic!("unsupported test host {other:?}"),
+    }
+}
+
+fn sha256(path: &Path) -> String {
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg("sha256sum \"$1\" 2>/dev/null || shasum -a 256 \"$1\"")
+        .arg("sh")
+        .arg(path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).split_whitespace().next().unwrap().to_string()
+}
+
+/// A fake GitHub release dir: `<root>/v<version>/{girth-<target>,SHA256SUMS}`.
+fn fake_release(root: &Path, checksum_override: Option<&str>) -> String {
+    let dir = root.join(format!("v{}", env!("CARGO_PKG_VERSION")));
+    let asset = dir.join(format!("girth-{}", host_target()));
+    fake_bin(&asset, "downloaded");
+    let sum = checksum_override.map_or_else(|| sha256(&asset), str::to_string);
+    std::fs::write(dir.join("SHA256SUMS"), format!("{sum}  girth-{}\n", host_target())).unwrap();
+    format!("file://{}", root.display())
+}
+
+#[test]
+fn downloads_verifies_and_caches_the_release_binary() {
+    let tmp = TempDir::new().unwrap();
+    let script = install(&tmp.path().join("install"));
+    let base = fake_release(&tmp.path().join("release"), None);
+    let out = run(&script, &[("GIRTH_DOWNLOAD_BASE", &base)]);
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "downloaded --flag\n", "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(tmp.path().join("install/skills/girth/bin/girth").is_file());
+    let again = run(&script, &[("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")]);
+    assert_eq!(String::from_utf8_lossy(&again.stdout), "downloaded --flag\n");
+}
+
+#[test]
+fn checksum_mismatch_refuses_and_leaves_nothing_behind() {
+    let tmp = TempDir::new().unwrap();
+    let script = install(&tmp.path().join("install"));
+    let base = fake_release(&tmp.path().join("release"), Some(&"0".repeat(64)));
+    let out = run(&script, &[("GIRTH_DOWNLOAD_BASE", &base)]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("checksum mismatch"));
+    assert!(!tmp.path().join("install/skills/girth/bin/girth").exists());
+}
+
+#[test]
+fn launcher_version_matches_the_crate() {
+    let text = std::fs::read_to_string(launcher()).unwrap();
+    assert!(text.contains(&format!("GIRTH_VERSION={}\n", env!("CARGO_PKG_VERSION"))));
 }
