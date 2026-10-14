@@ -26,7 +26,7 @@ Write the need as one sentence. Pick a lowercase, hyphenated domain slug broad e
 ## 2. Search, cache first
 Run `scripts/girth search "<need>" --json`. Note `output_dir` (where crafted skills live).
 - A `girth-<domain>` hit is a cache hit. If it covers the need, set `last_used` to today, use it, and skip to step 6; if it covers part, extend it (step 4).
-- Otherwise read the top candidates' `matched_headings` via `scripts/girth show <path> --heading "<heading>"…` (no args: frontmatter and contents), never whole files.
+- Otherwise read the top candidates' `matched_headings` via `scripts/girth show <path> --heading "<heading>"…` (no args lists headings; then request the ones you need), never whole files.
 
 ## 3. Decide
 If no local candidate fits, try `references/remote.md`; if that finds nothing, reply `Girth: no source found for "<need>"`, write nothing, and continue unaided. Never present your own knowledge as distilled.

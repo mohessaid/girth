@@ -78,6 +78,11 @@ pub fn show(dir: &Path, headings: &[String]) -> Result<String, String> {
     if headings.is_empty() {
         let (frontmatter, _) = crate::frontmatter::split_frontmatter(&main);
         let _ = writeln!(out, "---\n{}\n---", frontmatter.trim_matches('\n'));
+        let _ = writeln!(
+            out,
+            "headings only; print sections with: girth show {} --heading \"<heading>\"",
+            dir.display()
+        );
         for file in &files {
             let text = read_lossy(file).unwrap_or_default();
             let (_, body) = crate::frontmatter::split_frontmatter(&text);
@@ -209,6 +214,14 @@ end
             "{out}"
         );
         assert!(!out.contains("Duck 12 dB"), "no bodies without --heading");
+        // The overview must not read as the whole skill.
+        assert!(
+            out.contains(&format!(
+                "headings only; print sections with: girth show {} --heading \"<heading>\"\n",
+                dir.display()
+            )),
+            "{out}"
+        );
     }
 
     #[test]
