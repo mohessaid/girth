@@ -1,6 +1,6 @@
 # Sharing consent
 
-Ask once, with AskUserQuestion:
+Ask once, after the user's task is done, with AskUserQuestion. If you can't ask interactively, skip it; never block the task.
 
 > **Help Girth recommend better skills?** Girth can share anonymous counts: which public skill sections were used, kept or removed, plus 👍/👎, as content hashes. **Never** names, paths, text, notes or anything from your project. Nothing is uploaded until the Girth index launches.
 

@@ -57,7 +57,7 @@ fn body_names_every_helper_and_rule() {
         assert!(body.contains(needle), "body lacks '{needle}'");
     }
     assert!(
-        body.split_whitespace().count() <= 650,
+        body.split_whitespace().count() <= 700,
         "body has {} words",
         body.split_whitespace().count()
     );
@@ -80,4 +80,24 @@ fn reference_flows_exist_are_small_and_name_their_command() {
     for promise in ["Never", "Nothing is uploaded", "preview"] {
         assert!(sharing.contains(promise), "sharing.md lacks '{promise}'");
     }
+}
+
+#[test]
+fn consent_never_blocks_and_comes_after_the_task_is_served() {
+    let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
+    let (_, body) = split_frontmatter(&text);
+    let consent = body
+        .find("scripts/girth share status")
+        .expect("consent check present");
+    let report = body
+        .find("## 6. Report and continue")
+        .expect("report step present");
+    assert!(
+        consent > report,
+        "consent must come after the task is served"
+    );
+    assert!(
+        body.contains("Never block"),
+        "consent must say it never blocks the task"
+    );
 }

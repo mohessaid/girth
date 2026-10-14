@@ -238,6 +238,17 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_and_slugless_src_entries_are_collapsed() {
+        let (_tmp, dir, installed) = setup(
+            "## A <!-- src: video-mega#export, video-mega#export, video-mega -->\nx\n## B <!-- src: video-mega#export -->\ny\n",
+        );
+        let event = craft_event(&dir, "/p", &installed, None);
+        let (_, sources, _, _) = parts(&event);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].used, ["export"]);
+    }
+
+    #[test]
     fn identical_revalidate_is_plus_zero_minus_zero() {
         let (_tmp, dir, installed) = setup("## A <!-- src: video-mega#export -->\nx\n");
         let first = craft_event(&dir, "/p", &installed, None);

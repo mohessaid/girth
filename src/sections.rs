@@ -190,6 +190,15 @@ mod tests {
     }
 
     #[test]
+    fn parse_src_reads_past_other_comments_on_the_line() {
+        assert_eq!(parse_src("## T <!----> <!-- src: a#b -->"), ["a#b"]);
+        assert_eq!(
+            parse_src("## T <!-- note --> <!-- src: a#b --> <!-- src: c#d -->"),
+            ["a#b", "c#d"]
+        );
+    }
+
+    #[test]
     fn sections_carry_heading_slug_src_and_hash() {
         let s =
             &split_sections("## Caption timing <!-- src: video-mega#caption-timing -->\nRule.\n")

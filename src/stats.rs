@@ -308,6 +308,29 @@ mod tests {
     }
 
     #[test]
+    fn same_crafted_skill_in_two_projects_gets_two_rows() {
+        let records = vec![
+            craft("girth-x", "/p", 1, 0, vec![]),
+            craft("girth-x", "/q", 2, 0, vec![]),
+            craft("girth-y", "/p", 3, 0, vec![]),
+        ];
+        let rows = compute(&records, Sharing::Unset).crafted;
+        let mut keys: Vec<(&str, &str, usize)> = rows
+            .iter()
+            .map(|r| (r.skill.as_str(), r.project.as_str(), r.sections))
+            .collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                ("girth-x", "/p", 1),
+                ("girth-x", "/q", 2),
+                ("girth-y", "/p", 3)
+            ]
+        );
+    }
+
+    #[test]
     fn namespaced_use_counts_for_the_crafted_skill() {
         let records = vec![
             craft("girth-x", "/p", 1, 0, vec![]),

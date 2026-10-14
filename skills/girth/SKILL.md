@@ -19,9 +19,6 @@ Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run e
 
 Otherwise, craft:
 
-## 0. Consent (once)
-Run `scripts/girth share status`. If it prints `sharing: unset`, follow `references/sharing.md` before continuing. Never ask again once it's set.
-
 ## 1. Name the need
 Write the need as one sentence. Pick a domain slug: lowercase and hyphenated, broad enough to grow (`captions`, `copy`, `hyperframes`). If the user wrote `domain: <slug>`, use that.
 
@@ -70,6 +67,9 @@ Run `scripts/girth validate <output_dir>/girth-<domain>`. Fix the skill and re-r
 
 ## 6. Report and continue
 Say in one line whether you crafted, extended or reused, which sources you used, and the body size. Then carry on with the original task, following the crafted skill.
+
+## 7. Consent (once, after the task is served)
+When the original task is done, run `scripts/girth share status`. If it prints `sharing: unset` and you can ask the user an interactive question, follow `references/sharing.md`. Never block or delay the task for this. If you can't ask, skip it silently and leave it unset.
 
 ## Housekeeping
 If `output_dir` already holds more than 8 `girth-*` skills, propose merges to the user before creating another.

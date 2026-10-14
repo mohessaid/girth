@@ -13,7 +13,7 @@ Distil only the slice your project needs from the skills you already have — 38
   <a href="https://github.com/mohessaid/girth/releases"><img alt="Release" src="https://img.shields.io/github/v/release/mohessaid/girth?sort=semver"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/mohessaid/girth"></a>
   <a href="Cargo.toml"><img alt="MSRV" src="https://img.shields.io/badge/MSRV-1.85-orange?logo=rust"></a>
-  <a href="docs/mutation-notes.md"><img alt="Mutation score" src="https://img.shields.io/badge/mutation-99.2%25-brightgreen"></a>
+  <a href="docs/mutation-notes.md"><img alt="Mutation score" src="https://img.shields.io/badge/mutation-99.5%25-brightgreen"></a>
   <a href="docs/eval-log.md"><img alt="Evals" src="https://img.shields.io/badge/evals-3%2F3%20passing-brightgreen"></a>
   <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-d97757"></a>
 </p>
