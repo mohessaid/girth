@@ -24,15 +24,15 @@ Otherwise, craft:
 Write the need as one sentence. Pick a lowercase, hyphenated domain slug broad enough to grow (`captions`, `hyperframes`): the user's `domain: <slug>` if given, else a fitting one listed by `scripts/girth taste`, so taste carries across projects.
 
 ## 2. Search, cache first
-Run `scripts/girth search "<need>" --json`. Note `output_dir`, which is where crafted skills live.
+Run `scripts/girth search "<need>" --json`. Note `output_dir` (where crafted skills live).
 - A `girth-<domain>` hit is a cache hit. If it covers the need, set `last_used` to today, use it, and skip to step 6; if it covers part, extend it (step 4).
 - Otherwise read only the top candidates' frontmatter and the sections listed in `matched_headings`, never whole skill trees.
 
 ## 3. Decide
-If no candidate covers the need, reply `Girth: no source found for "<need>"`, write nothing, and continue unaided. Never present your own knowledge as distilled.
+If no local candidate fits, try `references/remote.md`; if that finds nothing, reply `Girth: no source found for "<need>"`, write nothing, and continue unaided. Never present your own knowledge as distilled.
 
 ## 4. Write or extend `<output_dir>/girth-<domain>/SKILL.md`
-There is one skill per domain. If it already exists, merge the new slice into it and add the new sources; never create a second skill for the domain.
+One skill per domain: if it exists, merge the new slice and sources into it; never create a second.
 
 ```markdown
 ---
