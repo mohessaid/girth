@@ -4,13 +4,13 @@ description: Use when building a short HyperFrames promo with a word-by-word hig
 metadata:
   girth:
     sources:
-      - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-creative
+      - path-or-repo: ~/.claude/skills/hyperframes-creative
         sections: [frame-presets/coral/caption-skin.html]
-      - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-core
+      - path-or-repo: ~/.claude/skills/hyperframes-core
         sections: [SKILL.md pitfalls, references/sub-compositions.md, references/minimal-composition.md]
-      - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-studio
+      - path-or-repo: ~/.claude/skills/hyperframes-studio
         sections: [2. One caption track, safe zones]
-      - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-cli
+      - path-or-repo: ~/.claude/skills/hyperframes-cli
         sections: [development loop]
     crafted_for: short HyperFrames promo with word-by-word caption highlighting
     created: 2026-10-14

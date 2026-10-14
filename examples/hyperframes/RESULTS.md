@@ -27,8 +27,8 @@ Task (`task.md`): build a 6-second HyperFrames composition with word-by-word cap
 
 | Arm | Cache-creation tok (new prompt content) | Cache-read tok | Output tok | Turns | Cost | HyperFrames check | Author verdict |
 |---|---|---|---|---|---|---|---|
-| bulk | 35,683 | 185,568 | 1,918 | 8 | $0.1805 | 0 errors, **1 warning** (`nested_structure_needs_subcomposition`) | _pending_ |
-| girth | **21,995** | 217,955 | 3,929 | 10 | **$0.1491** | 0 errors, **0 warnings** | _pending_ |
+| bulk | 35,683 | 185,568 | 1,918 | 8 | $0.1805 | 0 errors, **1 warning** (`nested_structure_needs_subcomposition`) | baseline |
+| girth | **21,995** | 217,955 | 3,929 | 10 | **$0.1491** | 0 errors, **0 warnings** | **no worse** (see below) |
 
 ### Reading the numbers
 - The **fixed per-session context fell 38%** (35.7K → 22.0K cache-creation tokens). That gap is the skill listing plus the bulk skill bodies the model pulled in.
@@ -40,6 +40,13 @@ Task (`task.md`): build a 6-second HyperFrames composition with word-by-word cap
 - `outputs/bulk/index.html`: a single-file composition.
 - `outputs/girth/index.html` + `outputs/girth/compositions/captions.html`: a root plus a caption sub-composition. The generated `narration.wav` and `transcript.json` were not copied.
 
+## Verdict (delegated by the author to Claude, 2026-10-14)
+
+**No worse overall.**
+- **Where girth is better:** it follows HyperFrames conventions more closely. Word states change through seek-safe `tl.set` className, there is one caption track in a sub-composition, real word timings come from `tts` + `transcribe`, and the check reports 0 warnings.
+- **Where girth is weaker:** it timed the highlights to a generated 1.3 s voice-over, so all the highlighting happens in the first ~1.8 s of the 6 s piece. The bulk arm spread the four words across the clip, which reads better as a silent promo. This is a fidelity-to-brief issue: the crafted skill's "never invent word timings" rule was applied to a brief that had no audio.
+- **Follow-up for M2:** when crafting, carry the *scope* of a rule ("when narration exists"), not just the rule.
+
 ## M1 exit status
 - Always-on reduction ≥ 10×: **met (38×)**.
-- Author verdict "no worse": **pending the author's review** of the two outputs above.
+- Quality "no worse": **met**, with the pacing caveat above.
