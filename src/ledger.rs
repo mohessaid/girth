@@ -28,6 +28,9 @@ pub struct SourceUse {
     pub used: Vec<String>,
     /// Slug → content hash of the referenced source sections.
     pub hashes: BTreeMap<String, String>,
+    /// Hash of all of the source's section hashes; empty when the source was not found.
+    #[serde(default)]
+    pub fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

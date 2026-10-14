@@ -61,6 +61,14 @@ pub fn section_hash(heading_line: &str, content: &str) -> String {
     digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
+/// Identity of a whole skill: hash of its sorted section hashes.
+pub fn fingerprint(section_hashes: &[String]) -> String {
+    let mut sorted: Vec<&str> = section_hashes.iter().map(String::as_str).collect();
+    sorted.sort_unstable();
+    let digest = Sha256::digest(sorted.join("\n").as_bytes());
+    digest.iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
 pub fn parse_src(heading_line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut rest = heading_line;
@@ -190,6 +198,14 @@ mod tests {
         assert_eq!(s.slug, "caption-timing");
         assert_eq!(s.src, ["video-mega#caption-timing"]);
         assert_eq!(s.hash, section_hash("## Caption timing", "Rule."));
+    }
+
+    #[test]
+    fn fingerprint_is_order_independent_and_16_hex() {
+        let a = fingerprint(&["b".to_string(), "a".to_string()]);
+        assert_eq!(a, fingerprint(&["a".to_string(), "b".to_string()]));
+        assert_eq!(a.len(), 16);
+        assert_ne!(a, fingerprint(&["a".to_string()]));
     }
 
     #[test]

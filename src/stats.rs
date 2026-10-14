@@ -240,6 +240,7 @@ mod tests {
                     total,
                     used: (0..used).map(|i| format!("s{i}")).collect(),
                     hashes: Default::default(),
+                    fingerprint: String::new(),
                 })
                 .collect(),
             added: vec![],

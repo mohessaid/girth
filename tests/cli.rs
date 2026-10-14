@@ -392,3 +392,34 @@ fn stats_summarises_the_ledger_in_text_and_json() {
     assert_eq!(json["events"], 1);
     assert_eq!(json["sharing"], "unset");
 }
+
+#[test]
+fn share_status_allow_deny_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    let share = |arg: &str| {
+        girth()
+            .env("GIRTH_HOME", tmp.path())
+            .args(["share", arg])
+            .assert()
+            .success()
+    };
+    share("status").stdout("sharing: unset\n");
+    share("allow").stdout(predicate::str::contains("sharing: allowed"));
+    share("status").stdout("sharing: allowed\n");
+    share("deny").stdout(predicate::str::contains("sharing: denied"));
+    share("status").stdout("sharing: denied\n");
+}
+
+#[test]
+fn share_preview_prints_payload_json_and_says_nothing_is_uploaded() {
+    let tmp = TempDir::new().unwrap();
+    let out = girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["share", "preview"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("nothing is uploaded"));
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["girth"], env!("CARGO_PKG_VERSION"));
+    assert!(json["sections"].as_array().unwrap().is_empty());
+}

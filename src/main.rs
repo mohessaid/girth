@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use girth::config::{Context, resolve_output_dir, resolve_roots};
-use girth::ledger::{self, Event, Rating, girth_home};
+use girth::ledger::{self, Event, Rating, Sharing, girth_home};
 use girth::measure::{format_table, measure, thousands};
 use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
@@ -53,6 +53,11 @@ enum Command {
         #[command(subcommand)]
         what: RecordWhat,
     },
+    /// Consent for sharing anonymous metrics, and a preview of exactly what would be shared.
+    Share {
+        #[arg(value_enum)]
+        action: ShareAction,
+    },
     /// Summarise the local ledger: crafted skills, uses, removals, ratings.
     Stats {
         /// Print JSON.
@@ -87,6 +92,14 @@ enum RecordWhat {
         #[arg(long)]
         skill: Option<String>,
     },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ShareAction {
+    Status,
+    Allow,
+    Deny,
+    Preview,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -242,6 +255,41 @@ fn main() -> ExitCode {
         } => {
             record_use(skill, &ctx);
             ExitCode::SUCCESS
+        }
+        Command::Share { action } => {
+            let home = girth_home(&ctx);
+            let set = |value| ledger::set_sharing(&home, value);
+            let result = match action {
+                ShareAction::Status => Ok(()),
+                ShareAction::Allow => set(Sharing::Allowed),
+                ShareAction::Deny => set(Sharing::Denied),
+                ShareAction::Preview => {
+                    eprintln!(
+                        "girth: nothing is uploaded in v{}; this is exactly what would be shared.",
+                        env!("CARGO_PKG_VERSION")
+                    );
+                    let payload = girth::share::payload(&ledger::read(&home));
+                    let _ = writeln!(
+                        out,
+                        "{}",
+                        serde_json::to_string_pretty(&payload).expect("payload serialises")
+                    );
+                    Ok(())
+                }
+            };
+            match result {
+                Err(e) => {
+                    eprintln!("girth: could not save sharing choice: {e}");
+                    ExitCode::from(1)
+                }
+                Ok(()) => {
+                    if !matches!(action, ShareAction::Preview) {
+                        let label = girth::stats::sharing_label(ledger::sharing(&home));
+                        let _ = writeln!(out, "sharing: {label}");
+                    }
+                    ExitCode::SUCCESS
+                }
+            }
         }
         Command::Stats { json } => {
             let home = girth_home(&ctx);

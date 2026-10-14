@@ -54,11 +54,18 @@ fn source_use(skill: String, used: Vec<String>, installed: &[SkillInfo]) -> Sour
         .filter(|s| used.contains(&s.slug))
         .map(|s| (s.slug.clone(), s.hash.clone()))
         .collect();
+    let all: Vec<String> = source_sections.iter().map(|s| s.hash.clone()).collect();
+    let fingerprint = if all.is_empty() {
+        String::new()
+    } else {
+        crate::sections::fingerprint(&all)
+    };
     SourceUse {
         skill,
         total: source_sections.len() as u32,
         used,
         hashes,
+        fingerprint,
     }
 }
 
@@ -187,6 +194,11 @@ mod tests {
             .unwrap()
             .hash;
         assert_eq!(source.hashes["caption-timing"], expected);
+        let all: Vec<String> = split_sections(SOURCE_BODY)
+            .into_iter()
+            .map(|s| s.hash)
+            .collect();
+        assert_eq!(source.fingerprint, crate::sections::fingerprint(&all));
         match &event {
             Event::Craft {
                 skill,
@@ -214,7 +226,7 @@ mod tests {
             (ghost.total, ghost.used.as_slice()),
             (0, ["a".to_string()].as_slice())
         );
-        assert!(ghost.hashes.is_empty());
+        assert!(ghost.hashes.is_empty() && ghost.fingerprint.is_empty());
         assert_eq!(
             sources
                 .iter()
