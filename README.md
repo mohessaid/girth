@@ -56,13 +56,21 @@ You don't need Rust. The first time the skill runs, it downloads the prebuilt `g
 3. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 4. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 
+## Ledger & feedback
+
+Girth keeps a local, append-only ledger (`~/.girth/ledger.jsonl`) of which skills you use, which sections of which source skills your crafted skills keep or drop, and your 👍/👎. Ask *"girth stats"* to see which installed skills actually earn their place, or *"girth review captions"* to remove sections you don't want. Removals become signal too.
+
+**Sharing is opt-in and anonymous.** Girth asks once. If you allow it, only **content hashes of public skill sections plus counts** (used / kept / removed / up / down) would be shared, never names, paths, text, notes or anything from your project. Nothing is uploaded until the Girth index launches. Run `girth share preview` to see exactly what would be sent.
+
 ## CLI
 
 ```bash
 cargo build --release
 target/release/girth measure                      # what your skills cost in context
 target/release/girth search "caption timing" --json
-target/release/girth validate .claude/skills/girth-captions
+target/release/girth validate .claude/skills/girth-captions   # also records to the ledger
+target/release/girth stats                                      # what the ledger says
+target/release/girth share preview                              # exactly what would be shared
 ```
 
 Skill roots resolve in this order:
