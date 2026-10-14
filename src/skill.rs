@@ -21,6 +21,8 @@ pub struct SkillInfo {
     pub headings: Vec<(String, String)>,
     /// Frontmatter was not valid YAML and was recovered leniently.
     pub fell_back: bool,
+    /// Frontmatter carries a `metadata.girth` block (Girth wrote this skill).
+    pub girth_meta: bool,
 }
 
 impl SkillInfo {
@@ -29,8 +31,9 @@ impl SkillInfo {
         (self.name.len() + self.description.len()) as u64
     }
 
+    /// Crafted by Girth: the `girth-` prefix alone could be a third-party skill.
     pub fn crafted(&self) -> bool {
-        self.name.starts_with(CRAFTED_PREFIX)
+        self.girth_meta && self.name.starts_with(CRAFTED_PREFIX)
     }
 }
 
@@ -132,6 +135,11 @@ pub fn load_skill(dir: &Path) -> Option<SkillInfo> {
         total_md_bytes: total,
         headings,
         fell_back: parsed.fell_back,
+        girth_meta: parsed
+            .meta
+            .get("metadata")
+            .and_then(|m| m.get("girth"))
+            .is_some_and(Value::is_object),
     })
 }
 
@@ -220,13 +228,27 @@ mod tests {
         let s = load_skill(&write_skill(
             tmp.path(),
             "girth-x",
-            "name: girth-x\ndescription: café",
+            "name: girth-x\ndescription: café\nmetadata:\n  girth:\n    created: 2026-10-14",
             "",
             &[],
         ))
         .unwrap();
         assert!(s.crafted());
         assert_eq!(s.always_on_bytes(), (7 + "café".len()) as u64);
+    }
+
+    #[test]
+    fn girth_prefix_without_girth_metadata_is_not_crafted() {
+        let tmp = TempDir::new().unwrap();
+        let s = load_skill(&write_skill(
+            tmp.path(),
+            "girth-lookalike",
+            "name: girth-lookalike\ndescription: third-party skill",
+            "",
+            &[],
+        ))
+        .unwrap();
+        assert!(!s.crafted());
     }
 
     #[test]

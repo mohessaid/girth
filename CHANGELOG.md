@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- A third-party skill whose name happens to start with `girth-` is no longer counted as crafted. A crafted skill must also carry a `metadata.girth` block.
+- `search` printed the warning for an invalid `.girth/config.json` twice. It now prints it once.
+
 ## [0.2.0] - 2026-10-14
 
 ### Added

@@ -128,7 +128,7 @@ mod tests {
         write_skill(
             tmp.path(),
             "girth-b",
-            "name: girth-b\ndescription: bb",
+            "name: girth-b\ndescription: bb\nmetadata:\n  girth: {}",
             "",
             &[],
         );
@@ -197,6 +197,7 @@ mod tests {
             total_md_bytes: 1_234_567,
             headings: vec![],
             fell_back: false,
+            girth_meta: true,
         };
         let table = format_table(&measure(&[skill]));
         assert!(table.contains("girth-b *"), "{table}");
@@ -211,6 +212,7 @@ mod tests {
     fn skill_strategy() -> impl Strategy<Value = SkillInfo> {
         ("[a-z][a-z-]{0,12}", ".{0,40}", 0u64..10_000, 0u64..100_000).prop_map(
             |(name, description, a, b)| SkillInfo {
+                girth_meta: name.starts_with("girth-"),
                 name,
                 description,
                 path: PathBuf::from("/s"),

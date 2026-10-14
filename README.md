@@ -77,7 +77,7 @@ target/release/girth share preview                              # exactly what w
 
 Skill roots resolve in this order:
 1. `--roots`
-2. `GIRTH_SKILL_ROOTS`
+2. `GIRTH_SKILL_ROOTS` (colon-separated, POSIX style)
 3. `.girth/config.json` (`{"roots": [...], "output": "..."}`)
 4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`
 
