@@ -87,6 +87,7 @@ target/release/girth share preview                              # exactly what w
 target/release/girth taste add launch-video "End on the logo with the URL."
 target/release/girth made launch-video palette=paper-ink music=lo-fi
 target/release/girth taste show launch-video                    # rules + recent choices
+target/release/girth fetch obra/superpowers/skills              # shallow, untrusted, never executed
 ```
 
 Skill roots resolve in this order:
