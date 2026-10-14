@@ -264,6 +264,25 @@ end
     }
 
     #[test]
+    fn skill_md_is_listed_first_even_when_another_file_sorts_before_it() {
+        let tmp = TempDir::new().unwrap();
+        let dir = write_skill(
+            tmp.path(),
+            "s",
+            "name: s\ndescription: d",
+            "## Main\nm\n",
+            &[("ABOUT.md", "## Main\nabout\n")],
+        );
+        let overview = show(&dir, &[]).unwrap();
+        assert!(
+            overview.find("SKILL.md:").unwrap() < overview.find("ABOUT.md:").unwrap(),
+            "{overview}"
+        );
+        let sections = show(&dir, &["Main".into()]).unwrap();
+        assert!(sections.starts_with("=== SKILL.md ==="), "{sections}");
+    }
+
+    #[test]
     fn show_rejects_a_dir_without_skill_md() {
         let tmp = TempDir::new().unwrap();
         assert!(show(tmp.path(), &[]).unwrap_err().contains("no SKILL.md"));

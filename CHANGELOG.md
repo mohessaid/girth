@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - `girth fetch owner/repo[/path]` shallow-clones a public GitHub skill repo into an untrusted scratch dir (`~/.girth/fetch/`).
   - Only plain `owner/repo` specs are accepted, so no URL, ssh, file transport or flag can reach git.
   - Git hooks are disabled, submodules are skipped, and only the https protocol is allowed.
+- `girth show <skill-dir> [--heading H]…` prints a skill's frontmatter and table of contents, or only the named sections (with their subsections). Crafting now reads sources through it, so it needs no reads outside the project and never loads whole files.
 - Remote fallback (`references/remote.md`): when no installed skill covers a need, Girth finds candidates with `npx skills find`, fetches at most two and distils from them.
 - M2 evals: `auto-captions` (Girth fires unprompted on a specialised task: 3 of 3), `no-fire-generic` (it stays silent on a generic task: 0 of 3 fired) and `extend-captions` (a second need extends the existing skill).
 - `examples/compounding/`: the 5-session compounding benchmark (bulk vs per-session JIT vs Girth's persistent cache).
