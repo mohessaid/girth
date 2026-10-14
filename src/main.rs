@@ -177,17 +177,25 @@ fn record_use(skill: Option<String>, ctx: &Context) -> String {
     };
     let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
     let home = girth_home(ctx);
-    let (personal, project_tier) = taste_tiers(&home, std::path::Path::new(&project));
     // Never disturb the session: a failed append is silently dropped.
     let _ = ledger::append(
         &home,
         Event::Use {
             skill: skill.clone(),
-            project,
+            project: project.clone(),
         },
     );
-    let all: Vec<TasteRecord> = personal.iter().chain(&project_tier).cloned().collect();
-    let domains = taste::resolve_domains(&skill, &all);
+    // The hook runs on every Skill call: parse only lines that can matter.
+    let project = std::path::Path::new(&project);
+    let files = [Tier::Personal, Tier::Project].map(|t| taste::path(t, &home, project));
+    let name = skill.rsplit(':').next().unwrap_or(&skill);
+    let links: Vec<TasteRecord> = files
+        .iter()
+        .flat_map(|f| taste::read_matching(f, &[name]))
+        .collect();
+    let domains = taste::resolve_domains(&skill, &links);
+    let needles: Vec<&str> = domains.iter().map(String::as_str).collect();
+    let [personal, project_tier] = files.map(|f| taste::read_matching(&f, &needles));
     let views: Vec<_> = domains
         .iter()
         .map(|d| taste::view(&personal, &project_tier, d))

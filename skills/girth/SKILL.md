@@ -70,7 +70,7 @@ Run `scripts/girth validate <output_dir>/girth-<domain>` and fix until it prints
 Say in one line whether you crafted, extended or reused, the sources and the body size; then continue the original task following the crafted skill.
 
 ## Taste (recurring deliverables)
-Taste context may arrive after a skill loads, or via `scripts/girth taste show <domain>`. Apply every house rule; vary each recent key unless a rule, the request or a source skill's confirmed preference pins it, and say what is fresh. When done, run `scripts/girth made <domain> key=value…`. New requests add to rules; never drop them. See `references/taste.md`.
+Before producing a deliverable, run `scripts/girth taste show <domain>` unless taste context already arrived. Apply every house rule; vary each recent key unless a rule, the request or a source skill's confirmed preference pins it, and say what is fresh. When done, run `scripts/girth made <domain> key=value…`. New requests add to rules; never drop them. See `references/taste.md`.
 
 ## 7. Consent (once, after the task is served)
 When the original task is done, run `scripts/girth share status`. If it prints `sharing: unset` and you can ask interactively, follow `references/sharing.md`; otherwise skip silently. Never block or delay the task for this.

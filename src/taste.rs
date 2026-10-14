@@ -114,6 +114,17 @@ pub fn read(path: &Path) -> Vec<TasteRecord> {
         .collect()
 }
 
+/// Like `read`, but only lines containing one of `needles` are parsed (a cheap pre-filter).
+pub fn read_matching(path: &Path, needles: &[&str]) -> Vec<TasteRecord> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter(|line| needles.iter().any(|n| line.contains(n)))
+        .filter_map(|line| serde_json::from_str::<TasteRecord>(line).ok())
+        .collect()
+}
+
 /// A crafted-skill domain slug: `[a-z0-9]+(-[a-z0-9]+)*`.
 pub fn is_domain(s: &str) -> bool {
     !s.is_empty()
@@ -407,6 +418,67 @@ mod tests {
         assert!(matches!(records[0].event, TasteEvent::Link { .. }));
         assert!(matches!(records[1].event, TasteEvent::Rule { .. }));
         assert!(records[1].ts > 0 && records[1].v == SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn each_kind_needs_its_fields_and_extra_fields_are_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("taste.jsonl");
+        std::fs::write(
+            &file,
+            [
+                r#"{"v":1,"ts":1,"kind":"rule","domain":"d","text":"t","op":"add","extra":true}"#,
+                r#"{"v":1,"ts":2,"kind":"made","domain":"d","project":"/p","choices":{"k":"v"}}"#,
+                r#"{"v":1,"ts":3,"kind":"link","domain":"d","skill":"s"}"#,
+                r#"{"v":1,"ts":4,"kind":"rule","domain":"d","text":"t"}"#,
+                r#"{"v":1,"ts":5,"kind":"rule","domain":"d","op":"add"}"#,
+                r#"{"v":1,"ts":6,"kind":"made","domain":"d","choices":{"k":"v"}}"#,
+                r#"{"v":1,"ts":7,"kind":"made","domain":"d","project":"/p"}"#,
+                r#"{"v":1,"ts":8,"kind":"link","domain":"d"}"#,
+                r#"{"v":1,"ts":9,"kind":"link","skill":"s"}"#,
+                r#"{"ts":10,"kind":"link","domain":"d","skill":"s"}"#,
+            ]
+            .join("\n"),
+        )
+        .unwrap();
+        let ts: Vec<u64> = read(&file).iter().map(|r| r.ts).collect();
+        assert_eq!(ts, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn read_matching_parses_only_lines_containing_a_needle() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("taste.jsonl");
+        for (domain, skill) in [
+            ("captions", "video-mega"),
+            ("copy", "copy-mega"),
+            ("launch-video", "x"),
+        ] {
+            append(
+                &file,
+                TasteEvent::Link {
+                    domain: domain.into(),
+                    skill: skill.into(),
+                },
+            )
+            .unwrap();
+        }
+        let domains_of = |needles: &[&str]| -> Vec<String> {
+            read_matching(&file, needles)
+                .into_iter()
+                .map(|r| match r.event {
+                    TasteEvent::Link { domain, .. } => domain,
+                    _ => unreachable!(),
+                })
+                .collect()
+        };
+        assert_eq!(domains_of(&["video-mega"]), vec!["captions"]);
+        assert_eq!(
+            domains_of(&["copy", "launch-video"]),
+            vec!["copy", "launch-video"]
+        );
+        assert!(domains_of(&[]).is_empty());
+        assert!(read_matching(&tmp.path().join("none"), &["x"]).is_empty());
     }
 
     #[test]

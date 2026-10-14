@@ -60,6 +60,7 @@ fn body_names_every_helper_and_rule() {
         "references/taste.md",
         "scripts/girth taste",
         "scripts/girth made",
+        "scripts/girth taste show",
         "never drop",
     ] {
         assert!(body.contains(needle), "body lacks '{needle}'");
