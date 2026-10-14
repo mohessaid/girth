@@ -2086,6 +2086,8 @@ input_match: '"skill"\s*:\s*"(?:[\w-]+:)?girth"'
 
 - [ ] **Step 4: Single-run smoke, then the full gate**
 
+Watch for this: the grant `Bash(python3 *)` is a prefix match. If a run fails because the model wrapped the helper in `cd … &&` or a pipe, add one line to SKILL.md step 2: "Run each helper as a single `python3 …` command, without `cd` or pipes." Don't add it pre-emptively.
+
 Run: `make evals EVAL_RUNS=1 EVAL_MAX_USD=1`
 Expected: three cases load and run; a case that fails prints which grader failed. Fix the skill text (Task 9) or the grader. **Do not loosen a grader to make it pass** unless the grader is wrong about the spec. Then run:
 
@@ -2109,7 +2111,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Create: `examples/hyperframes/run_arm.sh`, `examples/hyperframes/task.md`, `examples/hyperframes/craft.md`, `examples/hyperframes/RESULTS.md`
 
 **Interfaces:**
-- Consumes: the `girth` plugin (`--plugin-dir <repo>`), `girth_measure.py`, and the verified fact that `claude -p --setting-sources project,local` hides user-level skills and plugins.
+- Consumes: the `girth` plugin (`--plugin-dir <repo>`), `girth_measure.py`, and the verified fact that `claude -p --setting-sources project,local` hides user-level skills and plugins. The A/B therefore varies **only** the project's `.claude/skills`.
 
 - [ ] **Step 1: Write the arm runner**
 
@@ -2117,19 +2119,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```bash
 #!/usr/bin/env bash
 # Usage: run_arm.sh <bulk|girth> <project-dir> <prompt-file> <out-json>
-#   bulk : user-level skills and plugins loaded (today's setup)
-#   girth: user-level skills hidden; girth plugin + project's crafted skills only
+#   Both arms hide user-level settings and load the girth plugin, so the ONLY
+#   difference is the project's .claude/skills: bulk = symlinks to every skill the
+#   harness loads today; girth = the crafted girth-* skill(s) only.
 set -euo pipefail
 arm=$1 project=$2 prompt_file=$3 out=$4
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 prompt=$(cat "$prompt_file")
 case "$arm" in
-  bulk) set -- --setting-sources "user,project,local" ;;
-  girth) set -- --setting-sources "project,local" --plugin-dir "$repo" ;;
+  bulk|girth) ;;
   *) echo "arm must be bulk or girth" >&2; exit 2 ;;
 esac
 cd "$project"
-claude -p --model "${DEMO_MODEL:-claude-sonnet-5-5}" "$@" \
+claude -p --model "${DEMO_MODEL:-claude-sonnet-5-5}" --setting-sources "project,local" --plugin-dir "$repo" \
   --permission-mode acceptEdits --output-format json "$prompt" > "$out"
 python3 - "$out" "$arm" <<'EOF'
 import json, sys
@@ -2155,7 +2157,8 @@ Create a 6-second HyperFrames composition in ./promo/ that shows the headline "S
 Run:
 ```bash
 chmod +x examples/hyperframes/run_arm.sh
-W=$(mktemp -d) && mkdir -p $W/bulk $W/girth && echo "W=$W"
+W=$(mktemp -d) && mkdir -p $W/bulk/.claude/skills $W/girth && echo "W=$W"
+for s in ~/.claude/skills/*/; do ln -s "$(realpath "$s")" "$W/bulk/.claude/skills/"; done
 examples/hyperframes/run_arm.sh girth $W/girth examples/hyperframes/craft.md $W/craft.json
 ls $W/girth/.claude/skills/ && python3 skills/girth/scripts/girth_validate.py $W/girth/.claude/skills/girth-*
 ```
@@ -2167,7 +2170,7 @@ Run:
 ```bash
 examples/hyperframes/run_arm.sh bulk  $W/bulk  examples/hyperframes/task.md $W/bulk.json
 examples/hyperframes/run_arm.sh girth $W/girth examples/hyperframes/task.md $W/girth.json
-python3 skills/girth/scripts/girth_measure.py --json > $W/before.json
+python3 skills/girth/scripts/girth_measure.py --roots ~/.claude/skills --json > $W/before.json
 python3 skills/girth/scripts/girth_measure.py --roots $W/girth/.claude/skills skills --json > $W/after.json
 ```
 Expected: two summary lines with token counts and cost; before/after always-on totals.
@@ -2176,7 +2179,7 @@ Expected: two summary lines with token counts and cost; before/after always-on t
 
 Show the author both `promo/` outputs, plus the lint/check results reported in each arm's `result`. The author decides whether the girth arm's output is no worse. Write `examples/hyperframes/RESULTS.md` with:
 - a table with rows bulk/girth and columns `context tokens`, `output tokens`, `cost`, `lint/check`, `author verdict`
-- the before/after always-on bytes and tokens, and the reduction factor
+- the before/after always-on bytes and tokens, and the reduction factor. "Before" counts only `~/.claude/skills`, the set the harness actually loads; `~/.agents/skills` is a search source, not a cost. Note that the arms differ only in project skills: user-level plugins and MCP servers are hidden in both, so the token delta is attributable to skills.
 - the crafted `SKILL.md`, pasted in full
 - the date and model
 

@@ -97,7 +97,7 @@ Skillselion can be an optional remote source alongside skills.sh.
 | `skills/girth/SKILL.md` | Trigger description plus the craft procedure | Loaded by the harness; invoked by the model or `/girth` |
 | `scripts/girth_search.py <query>` | Ranks candidate skills by matching the query against name, description and headings across roots; optional remote fallback via `npx skills find` | Prints ranked list (text or `--json`): path, bytes, score, matched headings |
 | `scripts/girth_fetch.py <owner/repo[/path]>` | Shallow-fetches a remote skill into a fresh untrusted scratch dir; never into a skills dir; never executes fetched content | Prints the local path |
-| `scripts/girth_measure.py [--roots …]` | Reports always-on description bytes/≈tokens and body sizes | Table or `--json`, plus totals |
+| `scripts/girth_measure.py [--roots …]` | Reports always-on description bytes/≈tokens and body sizes. Default roots are *search sources*; pass `--roots ~/.claude/skills` (plus project skills) to measure what the harness actually loads | Table or `--json`, plus totals |
 | `scripts/girth_validate.py <skill-dir>` | Checks a crafted skill against the contract (section 7) | Exit 0 if valid, else lists violations |
 | `.claude-plugin/plugin.json` | Makes the repo a plugin, enabling `claude plugin validate` / `eval` | It still installs via `npx skills add` |
 | Crafted skills `.claude/skills/girth-<domain>/` | The cache | Standard skill format (below) |
