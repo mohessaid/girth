@@ -19,6 +19,10 @@ fn description_is_a_trigger_not_a_workflow_summary() {
         info.description
     );
     assert!(info.description.len() < 500);
+    assert!(
+        info.description.contains("lasting preference"),
+        "taste must be able to trigger the skill"
+    );
     for workflow_word in ["search", "validate", "distil", "write", "step"] {
         assert!(
             !info.description.to_lowercase().contains(workflow_word),
@@ -53,6 +57,11 @@ fn body_names_every_helper_and_rule() {
         "references/feedback.md",
         "references/stats.md",
         "references/sharing.md",
+        "references/taste.md",
+        "scripts/girth taste",
+        "scripts/girth made",
+        "scripts/girth taste show",
+        "never drop",
     ] {
         assert!(body.contains(needle), "body lacks '{needle}'");
     }
@@ -70,6 +79,7 @@ fn reference_flows_exist_are_small_and_name_their_command() {
         ("feedback.md", "scripts/girth feedback"),
         ("stats.md", "scripts/girth stats"),
         ("sharing.md", "scripts/girth share"),
+        ("taste.md", "scripts/girth taste add"),
     ] {
         let path = skill_dir().join("references").join(file);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("missing {file}"));
@@ -80,6 +90,21 @@ fn reference_flows_exist_are_small_and_name_their_command() {
     for promise in ["Never", "Nothing is uploaded", "preview"] {
         assert!(sharing.contains(promise), "sharing.md lacks '{promise}'");
     }
+}
+
+#[test]
+fn crafted_template_tells_the_skill_to_record_deliverables() {
+    // Hook context is tool output, which models rightly won't take orders from;
+    // the instruction to record must live in the crafted skill itself.
+    let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
+    let (_, body) = split_frontmatter(&text);
+    let template = body
+        .split("```markdown")
+        .nth(1)
+        .and_then(|t| t.split("```").next())
+        .expect("crafted-skill template present");
+    assert!(template.contains("## Record"), "{template}");
+    assert!(template.contains("`made` command"), "{template}");
 }
 
 #[test]

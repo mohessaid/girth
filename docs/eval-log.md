@@ -34,3 +34,23 @@ metadata:
 - Each caption stays on screen for at least 1.2 seconds.
 - Always break lines at natural phrase boundaries, never mid-phrase.
 ```
+
+## 2026-10-14: v0.3 taste memory
+
+`make evals` (claude-sonnet-5-5, 3 runs per case) on the release tree: **4 of 4 cases at 1.00, $0.93.**
+
+| Case | Score | Cost |
+|---|---|---|
+| craft-captions | 1.00 | $0.23 |
+| no-source | 1.00 | $0.16 |
+| taste-launch (new) | 1.00 | $0.29 |
+| tone-copy | 1.00 | $0.25 |
+
+What `taste-launch` checks:
+- The scaffold seeds a project-tier house rule (an end card with `girth.dev`), plus three earlier launch videos that all used `neon-on-black` / `synthwave`.
+- In run 1, the model picked paper-ink and minimal-techno, said why ("your last video used neon-on-black and synthwave"), put girth.dev on the end card, and recorded its choices with `girth made`.
+
+**Manual end-to-end check** (claude-haiku-5-5, a plugin-style hook calling the real launcher, an isolated `GIRTH_HOME`):
+- The hook injected the taste, and the model applied the house rule.
+- The first run refused to execute the `made` line, because it appeared only in hook output. The crafted-skill template gained a `## Record` section for this reason.
+- With that section, the model recorded `mood=hopeful` and explicitly varied away from the last recorded `melancholy`.

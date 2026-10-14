@@ -194,6 +194,7 @@ mod tests {
                 .map(|h| ("SKILL.md".to_string(), h.to_string()))
                 .collect(),
             fell_back: false,
+            girth_meta: name.starts_with("girth-"),
         }
     }
 

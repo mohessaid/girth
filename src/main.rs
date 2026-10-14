@@ -10,6 +10,7 @@ use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
 use girth::skill::CRAFTED_PREFIX;
 use girth::skill::{SkillInfo, discover_skills};
+use girth::taste::{self, TasteEvent, TasteRecord, Tier};
 use girth::validate::validate;
 use std::path::PathBuf;
 
@@ -72,6 +73,19 @@ enum Command {
         #[arg(long)]
         note: Option<String>,
     },
+    /// House rules and recent choices per domain (local only, never shared).
+    Taste {
+        #[command(subcommand)]
+        action: Option<TasteAction>,
+    },
+    /// Remember what a finished deliverable chose, so the next one can vary it.
+    Made {
+        /// Domain slug, e.g. launch-video.
+        domain: String,
+        /// Choices as key=value, e.g. palette=neon-on-black.
+        #[arg(required = true)]
+        choices: Vec<String>,
+    },
     /// Check crafted skills against the Girth contract.
     Validate {
         /// Don't record a craft event in the ledger.
@@ -82,6 +96,33 @@ enum Command {
         roots: Vec<String>,
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum TasteAction {
+    /// House rules and recent choices for one domain.
+    Show {
+        domain: String,
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remember a house rule (personal tier unless --project).
+    Add {
+        domain: String,
+        text: String,
+        /// Store in this project's .girth/taste.jsonl instead.
+        #[arg(long)]
+        project: bool,
+    },
+    /// Forget rule N, as numbered by `taste show`.
+    Drop {
+        domain: String,
+        n: usize,
+        /// The rule is a project rule.
+        #[arg(long)]
+        project: bool,
     },
 }
 
@@ -119,7 +160,8 @@ fn hook_use(stdin: &str) -> Option<(String, Option<String>)> {
     (!skill.is_empty()).then(|| (skill.to_string(), cwd))
 }
 
-fn record_use(skill: Option<String>, ctx: &Context) {
+/// Record a use; for a skill with remembered taste, return the hook JSON that injects it.
+fn record_use(skill: Option<String>, ctx: &Context) -> String {
     use std::io::{IsTerminal, Read};
     let found = match skill {
         Some(skill) => Some((skill, None)),
@@ -130,10 +172,255 @@ fn record_use(skill: Option<String>, ctx: &Context) {
         }
         None => None,
     };
-    if let Some((skill, cwd)) = found {
-        let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
-        // Never disturb the session: a failed append is silently dropped.
-        let _ = ledger::append(&girth_home(ctx), Event::Use { skill, project });
+    let Some((skill, cwd)) = found else {
+        return String::new();
+    };
+    let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
+    let home = girth_home(ctx);
+    // Never disturb the session: a failed append is silently dropped.
+    let _ = ledger::append(
+        &home,
+        Event::Use {
+            skill: skill.clone(),
+            project: project.clone(),
+        },
+    );
+    // The hook runs on every Skill call: parse only lines that can matter.
+    let project = std::path::Path::new(&project);
+    let files = [Tier::Personal, Tier::Project].map(|t| taste::path(t, &home, project));
+    let name = skill.rsplit(':').next().unwrap_or(&skill);
+    let links: Vec<TasteRecord> = files
+        .iter()
+        .flat_map(|f| taste::read_matching(f, &[name]))
+        .collect();
+    let domains = taste::resolve_domains(&skill, &links);
+    let needles: Vec<&str> = domains.iter().map(String::as_str).collect();
+    let [personal, project_tier] = files.map(|f| taste::read_matching(&f, &needles));
+    let views: Vec<_> = domains
+        .iter()
+        .map(|d| taste::view(&personal, &project_tier, d))
+        .filter(|v| !v.is_empty())
+        .collect();
+    if views.is_empty() {
+        return String::new();
+    }
+    let budget = HOOK_CONTEXT_MAX / views.len();
+    let context: Vec<String> = views
+        .iter()
+        .map(|v| taste::render_capped(v, &launcher(ctx), budget))
+        .collect();
+    let payload = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": context.join("\n"),
+        }
+    });
+    format!("{payload}\n")
+}
+
+const HOOK_CONTEXT_MAX: usize = 1500;
+
+fn taste_tiers(
+    home: &std::path::Path,
+    project: &std::path::Path,
+) -> (Vec<TasteRecord>, Vec<TasteRecord>) {
+    (
+        taste::read(&taste::path(Tier::Personal, home, project)),
+        taste::read(&taste::path(Tier::Project, home, project)),
+    )
+}
+
+/// How the model should invoke girth: the plugin launcher when it exported itself.
+fn launcher(ctx: &Context) -> String {
+    ctx.env
+        .get("GIRTH_LAUNCHER")
+        .filter(|v| !v.is_empty())
+        .cloned()
+        .unwrap_or_else(|| "girth".to_string())
+}
+
+fn check_domain(domain: &str) -> Result<(), ExitCode> {
+    if taste::is_domain(domain) {
+        Ok(())
+    } else {
+        eprintln!(
+            "girth: invalid domain '{domain}' (use a lowercase hyphenated slug, e.g. launch-video)"
+        );
+        Err(ExitCode::from(2))
+    }
+}
+
+fn run_taste(action: Option<TasteAction>, ctx: &Context, out: &mut String) -> ExitCode {
+    let home = girth_home(ctx);
+    let (personal, project) = taste_tiers(&home, &ctx.cwd);
+    let Some(action) = action else {
+        let rows = taste::domains(&personal, &project);
+        if rows.is_empty() {
+            let _ = writeln!(out, "no taste remembered yet");
+        }
+        for row in rows {
+            let _ = writeln!(
+                out,
+                "{}  {} rules, {} made",
+                row.domain, row.rules, row.made
+            );
+        }
+        return ExitCode::SUCCESS;
+    };
+    match action {
+        TasteAction::Show { domain, json } => {
+            if let Err(code) = check_domain(&domain) {
+                return code;
+            }
+            let view = taste::view(&personal, &project, &domain);
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&view).expect("view serialises")
+                );
+            } else {
+                out.push_str(&taste::render(&view, &launcher(ctx)));
+            }
+            ExitCode::SUCCESS
+        }
+        TasteAction::Add {
+            domain,
+            text,
+            project: in_project,
+        } => {
+            if let Err(code) = check_domain(&domain) {
+                return code;
+            }
+            let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            if text.is_empty() {
+                eprintln!("girth: a rule needs some text");
+                return ExitCode::from(2);
+            }
+            let tier = if in_project {
+                Tier::Project
+            } else {
+                Tier::Personal
+            };
+            let event = TasteEvent::Rule {
+                domain: domain.clone(),
+                text: text.clone(),
+                op: taste::Op::Add,
+            };
+            match taste::append(&taste::path(tier, &home, &ctx.cwd), event) {
+                Ok(()) => {
+                    let _ = writeln!(out, "remembered for {domain}: {text}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("girth: could not write taste: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        TasteAction::Drop {
+            domain,
+            n,
+            project: in_project,
+        } => {
+            if let Err(code) = check_domain(&domain) {
+                return code;
+            }
+            let view = taste::view(&personal, &project, &domain);
+            let Some(row) = view.rules.iter().find(|r| r.n == n) else {
+                eprintln!("girth: no rule {n} in {domain}");
+                return ExitCode::from(1);
+            };
+            let tier = if in_project {
+                Tier::Project
+            } else {
+                Tier::Personal
+            };
+            if row.tier != tier {
+                match row.tier {
+                    Tier::Project => eprintln!("girth: rule {n} is a project rule (add --project)"),
+                    Tier::Personal => {
+                        eprintln!("girth: rule {n} is a personal rule (drop --project)")
+                    }
+                }
+                return ExitCode::from(1);
+            }
+            let event = TasteEvent::Rule {
+                domain: domain.clone(),
+                text: row.text.clone(),
+                op: taste::Op::Drop,
+            };
+            match taste::append(&taste::path(tier, &home, &ctx.cwd), event) {
+                Ok(()) => {
+                    let _ = writeln!(out, "dropped from {domain}: {}", row.text);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("girth: could not write taste: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+    }
+}
+
+fn run_made(domain: &str, pairs: &[String], ctx: &Context, out: &mut String) -> ExitCode {
+    if let Err(code) = check_domain(domain) {
+        return code;
+    }
+    let mut choices = std::collections::BTreeMap::new();
+    for pair in pairs {
+        match taste::parse_choice(pair) {
+            Ok((key, value)) => {
+                choices.insert(key, value);
+            }
+            Err(e) => {
+                eprintln!("girth: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let count = choices.len();
+    let event = TasteEvent::Made {
+        domain: domain.to_string(),
+        project: ctx.cwd.display().to_string(),
+        choices,
+    };
+    let home = girth_home(ctx);
+    match taste::append(&taste::path(Tier::Personal, &home, &ctx.cwd), event) {
+        Ok(()) => {
+            let _ = writeln!(out, "remembered {count} choices for {domain}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("girth: could not write taste: {e}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+/// Link each source skill of a recorded craft to its domain, once per pair.
+fn link_sources(home: &std::path::Path, ctx: &Context, crafted: &str, event: &Event) {
+    let (Some(domain), Event::Craft { sources, .. }) =
+        (crafted.strip_prefix(CRAFTED_PREFIX), event)
+    else {
+        return;
+    };
+    let file = taste::path(Tier::Personal, home, &ctx.cwd);
+    let existing = taste::read(&file);
+    for source in sources {
+        let known = existing.iter().any(|r| {
+            matches!(&r.event, TasteEvent::Link { domain: d, skill } if d == domain && *skill == source.skill)
+        });
+        if !known {
+            let _ = taste::append(
+                &file,
+                TasteEvent::Link {
+                    domain: domain.to_string(),
+                    skill: source.skill.clone(),
+                },
+            );
+        }
     }
 }
 
@@ -253,9 +540,11 @@ fn main() -> ExitCode {
         Command::Record {
             what: RecordWhat::Use { skill },
         } => {
-            record_use(skill, &ctx);
+            out.push_str(&record_use(skill, &ctx));
             ExitCode::SUCCESS
         }
+        Command::Taste { action } => run_taste(action, &ctx, &mut out),
+        Command::Made { domain, choices } => run_made(&domain, &choices, &ctx, &mut out),
         Command::Share { action } => {
             let home = girth_home(&ctx);
             let set = |value| ledger::set_sharing(&home, value);
@@ -294,14 +583,30 @@ fn main() -> ExitCode {
         Command::Stats { json } => {
             let home = girth_home(&ctx);
             let stats = girth::stats::compute(&ledger::read(&home), ledger::sharing(&home));
+            let (personal, project) = taste_tiers(&home, &ctx.cwd);
+            let domains = taste::domains(&personal, &project);
+            let taste_counts = (!domains.is_empty()).then(|| {
+                (
+                    domains.len(),
+                    domains.iter().map(|d| d.rules).sum::<usize>(),
+                    domains.iter().map(|d| d.made).sum::<usize>(),
+                )
+            });
             if json {
+                let mut value = serde_json::to_value(&stats).expect("stats serialise");
+                if let Some((d, r, m)) = taste_counts {
+                    value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
+                }
                 let _ = writeln!(
                     out,
                     "{}",
-                    serde_json::to_string_pretty(&stats).expect("stats serialise")
+                    serde_json::to_string_pretty(&value).expect("stats serialise")
                 );
             } else {
                 let _ = writeln!(out, "{}", girth::stats::render(&stats));
+                if let Some((d, r, m)) = taste_counts {
+                    let _ = writeln!(out, "taste: {d} domains, {r} rules, {m} made");
+                }
             }
             ExitCode::SUCCESS
         }
@@ -372,6 +677,7 @@ fn main() -> ExitCode {
                     Event::Craft { added, removed, .. } => (added.len(), removed.len()),
                     _ => (0, 0),
                 };
+                link_sources(&home, &ctx, &name, &event);
                 match ledger::append(&home, event) {
                     Ok(()) => {
                         let _ =

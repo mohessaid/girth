@@ -68,7 +68,7 @@ fn search_json_includes_output_dir_and_searches_cache() {
     write_skill(
         &out,
         "girth-captions",
-        "name: girth-captions\ndescription: captions here",
+        "name: girth-captions\ndescription: captions here\nmetadata:\n  girth: {}",
         "",
     );
     let assert = girth()
@@ -197,6 +197,27 @@ fn defaults_come_from_home_and_config_warnings_reach_stderr() {
         .success()
         .stdout(predicate::str::contains("\"count\": 1"))
         .stderr(predicate::str::contains("girth: ignoring invalid"));
+}
+
+#[test]
+fn search_warns_about_an_invalid_config_exactly_once() {
+    let tmp = TempDir::new().unwrap();
+    std::fs::create_dir_all(tmp.path().join("proj/.girth")).unwrap();
+    std::fs::write(tmp.path().join("proj/.girth/config.json"), "{not json").unwrap();
+    let assert = girth()
+        .args(["search", "anything"])
+        .env("HOME", tmp.path().join("home"))
+        .env_remove("GIRTH_SKILL_ROOTS")
+        .env_remove("GIRTH_OUTPUT_DIR")
+        .current_dir(tmp.path().join("proj"))
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert_eq!(
+        stderr.matches("girth: ignoring invalid").count(),
+        1,
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -342,12 +363,13 @@ fn feedback_records_rating_and_optional_note() {
         .args(["feedback", "girth-captions", "up", "--note", "great pacing"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("girth-captions"));
+        .stdout(predicate::str::contains("girth-captions").and(predicate::str::contains("👍")));
     girth()
         .env("GIRTH_HOME", tmp.path())
         .args(["feedback", "girth-captions", "down"])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("👎").and(predicate::str::contains("👍").not()));
     let lines = ledger_lines(tmp.path());
     assert_eq!(
         (lines[0]["rating"].as_str(), lines[0]["note"].as_str()),

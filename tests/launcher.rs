@@ -177,3 +177,19 @@ fn launcher_version_matches_the_crate() {
     let text = std::fs::read_to_string(launcher()).unwrap();
     assert!(text.contains(&format!("GIRTH_VERSION={}\n", env!("CARGO_PKG_VERSION"))));
 }
+
+#[test]
+fn launcher_exports_its_own_path_for_the_taste_record_line() {
+    let tmp = TempDir::new().unwrap();
+    let script = install(tmp.path());
+    let bin = tmp.path().join("skills/girth/bin/girth");
+    std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+    std::fs::write(&bin, "#!/bin/sh\necho \"$GIRTH_LAUNCHER\"\n").unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let out = run(&script, &[]);
+    let expected = std::fs::canonicalize(&script).unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim(),
+        expected.display().to_string()
+    );
+}

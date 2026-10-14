@@ -62,7 +62,11 @@ impl Context {
         match serde_json::from_str::<Value>(&text) {
             Ok(Value::Object(map)) => map,
             _ => {
-                warnings.push(format!("girth: ignoring invalid {}", path.display()));
+                // Several resolvers read the config; say it once.
+                let warning = format!("girth: ignoring invalid {}", path.display());
+                if !warnings.contains(&warning) {
+                    warnings.push(warning);
+                }
                 Map::new()
             }
         }

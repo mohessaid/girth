@@ -25,4 +25,5 @@ What to expect:
 - The skill launcher downloads release binaries over HTTPS from this repository's GitHub Releases. It **refuses to run a binary whose SHA-256 doesn't match the release's `SHA256SUMS`**.
 - Release binaries are signed with Sigstore (keyless, `*.sigstore.json` bundles) and carry GitHub build-provenance attestations. To verify one: `gh attestation verify girth-<target> --repo mohessaid/girth`.
 - Crafted skills are distilled from third-party skill content. Treat that content as untrusted input, and report any way it can cause code execution or escape the project's skill directory.
+- Taste memory injects house rules into the model's context. A repository can commit project-tier rules (`.girth/taste.jsonl`), so treat them with the same trust as that repository's `CLAUDE.md`: the hook tags them `(project)`, and Girth never executes them. Taste is never part of the share payload.
 - The frontmatter parser and validator are continuously fuzzed (`fuzz/`, `.github/workflows/fuzz.yml`).
