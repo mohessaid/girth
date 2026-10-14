@@ -1,0 +1,9 @@
+{
+  "roots": [
+    "~/.claude/skills",
+    "~/.agents/skills",
+    "~/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills",
+    "~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills"
+  ],
+  "output": ".claude/skills"
+}

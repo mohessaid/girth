@@ -142,3 +142,28 @@ fn validate_reports_valid_and_invalid_with_exit_code() {
             "INVALID girth-bad: metadata.girth block is required",
         ));
 }
+
+#[test]
+fn closed_stdout_does_not_panic() {
+    use std::process::{Command as Std, Stdio};
+    let tmp = TempDir::new().unwrap();
+    for i in 0..50 {
+        write_skill(
+            tmp.path(),
+            &format!("s{i}"),
+            &format!("name: s{i}\ndescription: captions"),
+            "",
+        );
+    }
+    let mut child = Std::new(env!("CARGO_BIN_EXE_girth"))
+        .args(["search", "captions", "--roots"])
+        .arg(tmp.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}

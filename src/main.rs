@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+use std::io::Write as _;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
@@ -71,11 +73,25 @@ fn report_fallbacks(skills: &[SkillInfo]) {
     }
 }
 
+/// Write all output at once; a reader that went away (e.g. `| head`) is not an error.
+fn emit(out: &str) {
+    let mut stdout = std::io::stdout().lock();
+    if let Err(e) = stdout
+        .write_all(out.as_bytes())
+        .and_then(|()| stdout.flush())
+    {
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            eprintln!("girth: failed writing output: {e}");
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let ctx = Context::from_process();
     let mut warnings = Vec::new();
-    match cli.command {
+    let mut out = String::new();
+    let code = match cli.command {
         Command::Measure { roots, json } => {
             let roots = resolve_roots(&roots, &ctx, &mut warnings);
             warn(&warnings);
@@ -83,13 +99,15 @@ fn main() -> ExitCode {
             report_fallbacks(&skills);
             let report = measure(&skills);
             if json {
-                println!(
+                let _ = writeln!(
+                    out,
                     "{}",
                     serde_json::to_string_pretty(&report).expect("report serialises")
                 );
             } else {
-                println!("{}", format_table(&report));
+                let _ = writeln!(out, "{}", format_table(&report));
             }
+            ExitCode::SUCCESS
         }
         Command::Search {
             query,
@@ -112,14 +130,15 @@ fn main() -> ExitCode {
                     "output_dir": output_dir.display().to_string(),
                     "hits": hits.iter().map(HitJson::from).collect::<Vec<_>>(),
                 });
-                println!(
+                let _ = writeln!(
+                    out,
                     "{}",
                     serde_json::to_string_pretty(&payload).expect("hits serialise")
                 );
             } else {
-                println!("output_dir: {}", output_dir.display());
+                let _ = writeln!(out, "output_dir: {}", output_dir.display());
                 if hits.is_empty() {
-                    println!("no matching skills");
+                    let _ = writeln!(out, "no matching skills");
                 }
                 for hit in &hits {
                     let flags = format!(
@@ -131,7 +150,8 @@ fn main() -> ExitCode {
                         },
                         if hit.exact { " [exact]" } else { "" }
                     );
-                    println!(
+                    let _ = writeln!(
+                        out,
                         "{:>4}  {}{flags}  {} B md  {}",
                         hit.score,
                         hit.skill.name,
@@ -139,10 +159,11 @@ fn main() -> ExitCode {
                         hit.skill.path.display()
                     );
                     for (file, heading) in &hit.matched_headings {
-                        println!("        {file} > {heading}");
+                        let _ = writeln!(out, "        {file} > {heading}");
                     }
                 }
             }
+            ExitCode::SUCCESS
         }
         Command::Validate { skill_dirs } => {
             let mut all_valid = true;
@@ -150,17 +171,20 @@ fn main() -> ExitCode {
                 let name = dir.file_name().unwrap_or_default().to_string_lossy();
                 let errors = validate(dir);
                 if errors.is_empty() {
-                    println!("VALID {name}");
+                    let _ = writeln!(out, "VALID {name}");
                 }
                 for error in &errors {
                     all_valid = false;
-                    println!("INVALID {name}: {error}");
+                    let _ = writeln!(out, "INVALID {name}: {error}");
                 }
             }
-            if !all_valid {
-                return ExitCode::from(1);
+            if all_valid {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
             }
         }
-    }
-    ExitCode::SUCCESS
+    };
+    emit(&out);
+    code
 }
