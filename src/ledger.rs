@@ -107,21 +107,29 @@ pub fn now() -> u64 {
 
 /// Append one event as a single line.
 pub fn append(home: &Path, event: Event) -> std::io::Result<()> {
-    use std::io::Write;
     std::fs::create_dir_all(home)?;
     let record = Record {
         v: SCHEMA_VERSION,
         ts: now(),
         event,
     };
-    let mut line = serde_json::to_string(&record).map_err(std::io::Error::other)?;
+    append_json_line(&home.join(LEDGER_FILE), &record)
+}
+
+/// Append `value` as one JSON line, creating parent dirs; crash-safe like the ledger.
+pub(crate) fn append_json_line<T: Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut line = serde_json::to_string(value).map_err(std::io::Error::other)?;
     line.push('\n');
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(home.join(LEDGER_FILE))?;
+        .open(path)?;
     // Begin on a fresh line if a previous write was cut short.
-    if file.metadata()?.len() > 0 && !ends_with_newline(&home.join(LEDGER_FILE)) {
+    if file.metadata()?.len() > 0 && !ends_with_newline(path) {
         line.insert(0, '\n');
     }
     file.write_all(line.as_bytes())
