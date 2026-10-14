@@ -5,6 +5,8 @@ use girth::config::{Context, resolve_output_dir, resolve_roots};
 use girth::measure::{format_table, measure, thousands};
 use girth::search::{HitJson, rank};
 use girth::skill::{SkillInfo, discover_skills};
+use girth::validate::validate;
+use std::path::PathBuf;
 
 /// Just-in-time, project-scoped agent skills.
 #[derive(Parser)]
@@ -40,6 +42,11 @@ enum Command {
         /// Print JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Check crafted skills against the Girth contract.
+    Validate {
+        #[arg(required = true)]
+        skill_dirs: Vec<PathBuf>,
     },
 }
 
@@ -135,6 +142,23 @@ fn main() -> ExitCode {
                         println!("        {file} > {heading}");
                     }
                 }
+            }
+        }
+        Command::Validate { skill_dirs } => {
+            let mut all_valid = true;
+            for dir in &skill_dirs {
+                let name = dir.file_name().unwrap_or_default().to_string_lossy();
+                let errors = validate(dir);
+                if errors.is_empty() {
+                    println!("VALID {name}");
+                }
+                for error in &errors {
+                    all_valid = false;
+                    println!("INVALID {name}: {error}");
+                }
+            }
+            if !all_valid {
+                return ExitCode::from(1);
             }
         }
     }

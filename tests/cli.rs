@@ -112,3 +112,33 @@ fn search_text_output_and_no_hits() {
         .success()
         .stdout(predicate::str::contains("no matching skills"));
 }
+
+const VALID_FM: &str = "name: girth-captions\ndescription: Caption rules.\nmetadata:\n  girth:\n    sources:\n      - path-or-repo: x\n    crafted_for: captions\n    created: 2026-10-14\n    last_used: 2026-10-14";
+
+#[test]
+fn validate_reports_valid_and_invalid_with_exit_code() {
+    let tmp = TempDir::new().unwrap();
+    let good = write_skill(tmp.path(), "girth-captions", VALID_FM, "body\n");
+    let bad = write_skill(
+        tmp.path(),
+        "girth-bad",
+        "name: girth-bad\ndescription: d",
+        "",
+    );
+    girth()
+        .arg("validate")
+        .arg(&good)
+        .assert()
+        .success()
+        .stdout("VALID girth-captions\n");
+    girth()
+        .arg("validate")
+        .arg(&good)
+        .arg(&bad)
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("VALID girth-captions"))
+        .stdout(predicate::str::contains(
+            "INVALID girth-bad: metadata.girth block is required",
+        ));
+}

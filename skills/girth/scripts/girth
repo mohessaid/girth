@@ -1,0 +1,17 @@
+#!/bin/sh
+# Run the girth binary. Lookup order: $GIRTH_BIN, a bundled ../bin/girth,
+# a repo checkout's target/release/girth, girth on PATH, then a cargo build.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../../.." && pwd)
+
+if [ -n "${GIRTH_BIN:-}" ] && [ -x "$GIRTH_BIN" ]; then exec "$GIRTH_BIN" "$@"; fi
+if [ -x "$here/../bin/girth" ]; then exec "$here/../bin/girth" "$@"; fi
+if [ -f "$repo/Cargo.toml" ] && [ -x "$repo/target/release/girth" ]; then exec "$repo/target/release/girth" "$@"; fi
+if command -v girth >/dev/null 2>&1; then exec girth "$@"; fi
+if [ -f "$repo/Cargo.toml" ] && command -v cargo >/dev/null 2>&1; then
+  cargo build --release --quiet --manifest-path "$repo/Cargo.toml" >&2
+  exec "$repo/target/release/girth" "$@"
+fi
+echo "girth: binary not found. Build it with 'cargo build --release' in the girth repo, or set GIRTH_BIN." >&2
+exit 127

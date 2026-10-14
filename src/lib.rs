@@ -7,3 +7,4 @@ pub mod search;
 pub mod skill;
 #[cfg(test)]
 pub(crate) mod testutil;
+pub mod validate;
