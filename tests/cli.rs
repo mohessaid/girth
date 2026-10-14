@@ -167,3 +167,25 @@ fn closed_stdout_does_not_panic() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains("panicked"), "{stderr}");
 }
+
+#[test]
+fn defaults_come_from_home_and_config_warnings_reach_stderr() {
+    let tmp = TempDir::new().unwrap();
+    write_skill(
+        &tmp.path().join("home/.claude/skills"),
+        "a",
+        "name: a\ndescription: d",
+        "",
+    );
+    std::fs::create_dir_all(tmp.path().join("proj/.girth")).unwrap();
+    std::fs::write(tmp.path().join("proj/.girth/config.json"), "{not json").unwrap();
+    girth()
+        .args(["measure", "--json"])
+        .env("HOME", tmp.path().join("home"))
+        .env_remove("GIRTH_SKILL_ROOTS")
+        .current_dir(tmp.path().join("proj"))
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"count\": 1"))
+        .stderr(predicate::str::contains("girth: ignoring invalid"));
+}

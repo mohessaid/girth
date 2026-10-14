@@ -1,0 +1,39 @@
+{
+  "usage": {
+    "input_tokens": 22,
+    "cache_creation_input_tokens": 35585,
+    "cache_read_input_tokens": 330853,
+    "output_tokens": 5412,
+    "output_tokens_details": {
+      "thinking_tokens": 315
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 35585,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 434,
+        "cache_read_input_tokens": 43196,
+        "cache_creation_input_tokens": 3300,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 3300
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "total_cost_usd": 0.22958930000000002,
+  "num_turns": 13,
+  "result": "I crafted a new project skill, `girth-hyperframes`, and it passes `girth validate` (VALID). There was no cached skill for this domain. I haven't built the promo itself yet.\n\n- **Sources:**\n  - `hyperframes-creative`: the coral `caption-skin.html`, which has the word-highlight script.\n  - `hyperframes-core`: composition and sub-composition rules.\n  - `hyperframes-studio`: the one-caption-track rule and safe zones.\n  - `hyperframes-cli`: the check, preview and render loop.\n- **Skipped:** I didn't use `embedded-captions`. It targets talking-head footage, not a promo.\n- **Size:** the body is about 2.8 KB. The full caption sub-composition code is in `references/caption-skin.md`.\n- **Location:** `/tmp/girth-demo-LGfM/girth/.claude/skills/girth-hyperframes/`\n\nTwo things the skill enforces:\n- **Seek-safe highlighting:** word states change through `tl.set` className, never `tl.call`.\n- **Render gate:** it renders only after the preview is approved.\n\nThe skill expects word timings from `npx hyperframes transcribe` or `tts`. For the promo itself I'd need the script or brief, the length, and the aspect ratio."
+}

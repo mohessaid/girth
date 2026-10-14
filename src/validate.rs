@@ -290,6 +290,37 @@ metadata:
         );
     }
 
+    #[test]
+    fn dates_respect_month_lengths_and_leap_years() {
+        let ok = |s: &str| is_date(Some(&serde_json::json!(s)));
+        for valid in [
+            "2000-02-29",
+            "2028-02-29",
+            "2026-04-30",
+            "2026-12-31",
+            "2026-01-01",
+        ] {
+            assert!(ok(valid), "{valid}");
+        }
+        for invalid in [
+            "1900-02-29",
+            "2026-02-29",
+            "2026-04-31",
+            "2026-06-31",
+            "2026-00-10",
+            "2026-01-00",
+            "2026-13-01",
+            "2026/10/14",
+            "2026-1-014",
+            "26-10-14",
+            "2026-10-1x",
+        ] {
+            assert!(!ok(invalid), "{invalid}");
+        }
+        assert!(!is_date(Some(&serde_json::json!(20261014))));
+        assert!(!is_date(None));
+    }
+
     proptest! {
         #[test]
         fn validate_text_never_panics(text in any::<String>()) {

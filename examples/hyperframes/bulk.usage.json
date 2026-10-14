@@ -1,0 +1,39 @@
+{
+  "usage": {
+    "input_tokens": 12,
+    "cache_creation_input_tokens": 35683,
+    "cache_read_input_tokens": 185568,
+    "output_tokens": 1918,
+    "output_tokens_details": {
+      "thinking_tokens": 123
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 35683,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 378,
+        "cache_read_input_tokens": 42603,
+        "cache_creation_input_tokens": 1688,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1688
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "total_cost_usd": 0.1804928,
+  "num_turns": 8,
+  "result": "I've built the composition and `npx hyperframes check` passes: 0 errors, with 1 lint warning. I haven't rendered or previewed it.\n\n**What it is:** `promo/index.html` is a 6-second, 1920\u00d71080 composition. \"Ship faster with Girth\" sits centered on a dark background. Each of the four words lights up in turn: Ship 0.5s, faster 1.5s, with 2.5s, Girth 3.4s. The earlier words go back to grey as the next one lights. \"Girth\" stays highlighted, turns green, and the line fades out at 5.6s.\n\n**Check results:**\n- **Lint:** 0 errors, 1 warning (`nested_structure_needs_subcomposition`). It says the caption section would read better on the Studio timeline as a sub-composition. I left it as one file because the piece is only one scene. Say if you want it split.\n- **Runtime, motion and layout:** no issues.\n- **Contrast:** 18 of 18 text checks pass WCAG AA.\n\nI skipped the usual intent interview because your request already specified the headline, length and caption style. Say if you want a different palette, font or timing."
+}

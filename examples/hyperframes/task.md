@@ -1,0 +1,1 @@
+Create a 6-second HyperFrames composition in ./promo/ that shows the headline "Ship faster with Girth" with word-by-word caption highlighting. Follow HyperFrames conventions, then run its lint/check command if one is available and report the result.

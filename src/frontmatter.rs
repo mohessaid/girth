@@ -303,6 +303,33 @@ mod tests {
         assert!(parse_lenient("- a\n").meta.is_empty());
     }
 
+    #[test]
+    fn lenient_unquotes_only_matching_quotes() {
+        let parsed = parse_lenient(
+            "a: \"say \\\"hi\\\"\"\nb: 'it''s'\nc: 'mismatch\"\nd: x # note\nbad: [\n",
+        );
+        assert_eq!(parsed.meta["a"], "say \"hi\"");
+        assert_eq!(parsed.meta["b"], "it's");
+        assert_eq!(parsed.meta["c"], "'mismatch\"");
+        assert_eq!(parsed.meta["d"], "x");
+    }
+
+    #[test]
+    fn lenient_skips_list_items_and_handles_block_at_end_of_text() {
+        let parsed = parse_lenient("- x: y\nbad: [\nd: >\n\n  a\n  b\n\n  c");
+        assert!(!parsed.meta.contains_key("- x"));
+        assert_eq!(parsed.meta["d"], "a b\nc");
+        assert_eq!(
+            parse_lenient("bad: [\nl: |\n  one\n  two").meta["l"],
+            "one\ntwo"
+        );
+    }
+
+    #[test]
+    fn strict_keeps_numeric_and_boolean_keys_as_strings() {
+        assert_eq!(strict("1: a\ntrue: b\n"), json!({"1": "a", "true": "b"}));
+    }
+
     proptest! {
         #[test]
         fn lenient_never_panics(text in any::<String>()) {

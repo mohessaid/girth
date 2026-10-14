@@ -246,6 +246,25 @@ mod tests {
     }
 
     #[test]
+    fn tilde_user_paths_are_not_expanded() {
+        let dir = TempDir::new().unwrap();
+        let roots = resolve_roots(&s(&["~other/x", "~"]), &ctx(&dir, &[]), &mut vec![]);
+        assert_eq!(
+            roots,
+            vec![dir.path().join("~other/x"), dir.path().join("home")]
+        );
+    }
+
+    #[test]
+    fn empty_config_roots_warn_and_fall_back() {
+        let dir = TempDir::new().unwrap();
+        config(&dir, r#"{"roots": []}"#);
+        let mut warnings = vec![];
+        assert_eq!(resolve_roots(&[], &ctx(&dir, &[]), &mut warnings).len(), 3);
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
     fn output_dir_resolution_order() {
         let dir = TempDir::new().unwrap();
         let none = ctx(&dir, &[]);

@@ -214,6 +214,11 @@ mod tests {
     }
 
     #[test]
+    fn tokenize_keeps_two_char_words_but_not_one_char() {
+        assert_eq!(tokenize("x y zz"), ["zz"]);
+    }
+
+    #[test]
     fn score_weights_name_description_heading_once_per_distinct_term() {
         let s = mk("video-captions", "Timing for captions", &["Caption timing"]);
         assert_eq!(score(&s, &terms(&["captions"])), 5 + 2);
