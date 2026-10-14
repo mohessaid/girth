@@ -7,7 +7,7 @@
 #   5. download the release binary for this platform (checksum-verified, cached in ../bin)
 #   6. cargo build, in a repo checkout
 set -eu
-GIRTH_VERSION=0.1.0
+GIRTH_VERSION=0.1.1
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../../.." && pwd)
 bin_dir="$here/../bin"

@@ -11,7 +11,10 @@ fn version_flag_prints_name_and_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("girth 0.1.0"));
+        .stdout(predicate::str::contains(concat!(
+            "girth ",
+            env!("CARGO_PKG_VERSION")
+        )));
 }
 
 mod common;

@@ -3,3 +3,7 @@
 evals/results/
 .superpowers/
 skills/girth/bin/
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/
