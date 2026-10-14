@@ -1,8 +1,14 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// The girth binary with its ledger isolated from the real `~/.girth`.
 fn girth() -> Command {
-    Command::cargo_bin("girth").unwrap()
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env(
+        "GIRTH_HOME",
+        std::env::temp_dir().join(format!("girth-test-home-{}", std::process::id())),
+    );
+    cmd
 }
 
 #[test]
@@ -129,7 +135,7 @@ fn validate_reports_valid_and_invalid_with_exit_code() {
         "",
     );
     girth()
-        .arg("validate")
+        .args(["validate", "--no-record"])
         .arg(&good)
         .assert()
         .success()
@@ -191,4 +197,229 @@ fn defaults_come_from_home_and_config_warnings_reach_stderr() {
         .success()
         .stdout(predicate::str::contains("\"count\": 1"))
         .stderr(predicate::str::contains("girth: ignoring invalid"));
+}
+
+#[test]
+fn validate_records_craft_events_and_reports_the_diff() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let src = tmp.path().join("src");
+    write_skill(
+        &src,
+        "video-mega",
+        "name: video-mega\ndescription: d",
+        "## Caption timing\nrule\n## Export\nx\n",
+    );
+    let fm = VALID_FM;
+    let body = "## Caption timing <!-- src: video-mega#caption-timing -->\nrule\n## House\nours\n";
+    let crafted = write_skill(tmp.path(), "girth-captions", fm, body);
+    let run = || {
+        girth()
+            .env("GIRTH_HOME", &home)
+            .args(["validate", "--roots"])
+            .arg(&src)
+            .arg("--")
+            .arg(&crafted)
+            .assert()
+            .success()
+    };
+    run().stdout("VALID girth-captions (recorded: +2 −0 sections)\n");
+    run().stdout("VALID girth-captions (recorded: +0 −0 sections)\n");
+    std::fs::write(
+        crafted.join("SKILL.md"),
+        format!("---\n{fm}\n---\n## House\nours\n"),
+    )
+    .unwrap();
+    run().stdout("VALID girth-captions (recorded: +0 −1 sections)\n");
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 3);
+    assert!(ledger.contains(r#""total":2"#) && ledger.contains(r#""used":["caption-timing"]"#));
+}
+
+#[test]
+fn validate_no_record_and_invalid_skills_write_nothing() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let good = write_skill(tmp.path(), "girth-captions", VALID_FM, "body\n");
+    let bad = write_skill(
+        tmp.path(),
+        "girth-bad",
+        "name: girth-bad\ndescription: d",
+        "",
+    );
+    girth()
+        .env("GIRTH_HOME", &home)
+        .args(["validate", "--no-record"])
+        .arg(&good)
+        .assert()
+        .success();
+    girth()
+        .env("GIRTH_HOME", &home)
+        .arg("validate")
+        .arg(&bad)
+        .assert()
+        .code(1);
+    assert!(!home.join("ledger.jsonl").exists());
+}
+
+fn ledger_lines(home: &std::path::Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(home.join("ledger.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+#[test]
+fn record_use_reads_hook_json_from_stdin() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["record", "use"])
+        .write_stdin(r#"{"tool_name":"Skill","tool_input":{"skill":"girth:girth"},"cwd":"/proj"}"#)
+        .assert()
+        .success()
+        .stdout("");
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["kind"], "use");
+    assert_eq!(lines[0]["skill"], "girth:girth");
+    assert_eq!(lines[0]["project"], "/proj");
+}
+
+#[test]
+fn record_use_with_bad_stdin_records_nothing_and_exits_zero() {
+    let tmp = TempDir::new().unwrap();
+    for input in [
+        "",
+        "garbage",
+        r#"{"tool_input":{}}"#,
+        r#"{"tool_input":{"skill":""}}"#,
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path())
+            .args(["record", "use"])
+            .write_stdin(input)
+            .assert()
+            .success();
+    }
+    assert!(ledger_lines(tmp.path()).is_empty());
+}
+
+#[test]
+fn record_use_with_flag_uses_cwd_as_project() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("proj");
+    std::fs::create_dir(&project).unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .current_dir(&project)
+        .args(["record", "use", "--skill", "girth-captions"])
+        .assert()
+        .success();
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(lines[0]["skill"], "girth-captions");
+    assert_eq!(lines[0]["project"], project.display().to_string());
+}
+
+#[test]
+fn record_use_never_fails_even_when_the_ledger_is_unwritable() {
+    let tmp = TempDir::new().unwrap();
+    let file = tmp.path().join("not-a-dir");
+    std::fs::write(&file, "").unwrap();
+    girth()
+        .env("GIRTH_HOME", &file)
+        .args(["record", "use", "--skill", "x"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn feedback_records_rating_and_optional_note() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "up", "--note", "great pacing"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("girth-captions"));
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "down"])
+        .assert()
+        .success();
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(
+        (lines[0]["rating"].as_str(), lines[0]["note"].as_str()),
+        (Some("up"), Some("great pacing"))
+    );
+    assert_eq!(lines[1]["rating"], "down");
+    assert!(lines[1].get("note").is_none());
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["feedback", "girth-captions", "meh"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn stats_summarises_the_ledger_in_text_and_json() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("empty"));
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["record", "use", "--skill", "hyperframes"])
+        .assert()
+        .success();
+    girth()
+        .env("GIRTH_HOME", tmp.path())
+        .arg("stats")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Most used skills"))
+        .stdout(predicate::str::contains("hyperframes 1"));
+    let out = girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["stats", "--json"])
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["events"], 1);
+    assert_eq!(json["sharing"], "unset");
+}
+
+#[test]
+fn share_status_allow_deny_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    let share = |arg: &str| {
+        girth()
+            .env("GIRTH_HOME", tmp.path())
+            .args(["share", arg])
+            .assert()
+            .success()
+    };
+    share("status").stdout("sharing: unset\n");
+    share("allow").stdout(predicate::str::contains("sharing: allowed"));
+    share("status").stdout("sharing: allowed\n");
+    share("deny").stdout(predicate::str::contains("sharing: denied"));
+    share("status").stdout("sharing: denied\n");
+}
+
+#[test]
+fn share_preview_prints_payload_json_and_says_nothing_is_uploaded() {
+    let tmp = TempDir::new().unwrap();
+    let out = girth()
+        .env("GIRTH_HOME", tmp.path())
+        .args(["share", "preview"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("nothing is uploaded"));
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["girth"], env!("CARGO_PKG_VERSION"));
+    assert!(json["sections"].as_array().unwrap().is_empty());
 }

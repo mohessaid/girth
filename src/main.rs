@@ -4,8 +4,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use girth::config::{Context, resolve_output_dir, resolve_roots};
+use girth::ledger::{self, Event, Rating, Sharing, girth_home};
 use girth::measure::{format_table, measure, thousands};
+use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
+use girth::skill::CRAFTED_PREFIX;
 use girth::skill::{SkillInfo, discover_skills};
 use girth::validate::validate;
 use std::path::PathBuf;
@@ -45,11 +48,93 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Record an event in the local ledger (used by the plugin hook).
+    Record {
+        #[command(subcommand)]
+        what: RecordWhat,
+    },
+    /// Consent for sharing anonymous metrics, and a preview of exactly what would be shared.
+    Share {
+        #[arg(value_enum)]
+        action: ShareAction,
+    },
+    /// Summarise the local ledger: crafted skills, uses, removals, ratings.
+    Stats {
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rate a crafted skill: up or down, with an optional private note.
+    Feedback {
+        skill: String,
+        rating: RatingArg,
+        /// Stays on this machine; never shared.
+        #[arg(long)]
+        note: Option<String>,
+    },
     /// Check crafted skills against the Girth contract.
     Validate {
+        /// Don't record a craft event in the ledger.
+        #[arg(long)]
+        no_record: bool,
+        /// Skill roots used to resolve `src` markers (default: configured roots).
+        #[arg(long, num_args = 1..)]
+        roots: Vec<String>,
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum RecordWhat {
+    /// A skill was used. Reads Claude Code hook JSON from stdin unless --skill is given.
+    Use {
+        #[arg(long)]
+        skill: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum ShareAction {
+    Status,
+    Allow,
+    Deny,
+    Preview,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum RatingArg {
+    Up,
+    Down,
+}
+
+/// (skill, project) from a PostToolUse hook payload.
+fn hook_use(stdin: &str) -> Option<(String, Option<String>)> {
+    let value: serde_json::Value = serde_json::from_str(stdin).ok()?;
+    let skill = value.pointer("/tool_input/skill")?.as_str()?.trim();
+    let cwd = value
+        .get("cwd")
+        .and_then(|c| c.as_str())
+        .map(str::to_string);
+    (!skill.is_empty()).then(|| (skill.to_string(), cwd))
+}
+
+fn record_use(skill: Option<String>, ctx: &Context) {
+    use std::io::{IsTerminal, Read};
+    let found = match skill {
+        Some(skill) => Some((skill, None)),
+        None if !std::io::stdin().is_terminal() => {
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            hook_use(&input)
+        }
+        None => None,
+    };
+    if let Some((skill, cwd)) = found {
+        let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
+        // Never disturb the session: a failed append is silently dropped.
+        let _ = ledger::append(&girth_home(ctx), Event::Use { skill, project });
+    }
 }
 
 fn warn(warnings: &[String]) {
@@ -165,19 +250,140 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
-        Command::Validate { skill_dirs } => {
+        Command::Record {
+            what: RecordWhat::Use { skill },
+        } => {
+            record_use(skill, &ctx);
+            ExitCode::SUCCESS
+        }
+        Command::Share { action } => {
+            let home = girth_home(&ctx);
+            let set = |value| ledger::set_sharing(&home, value);
+            let result = match action {
+                ShareAction::Status => Ok(()),
+                ShareAction::Allow => set(Sharing::Allowed),
+                ShareAction::Deny => set(Sharing::Denied),
+                ShareAction::Preview => {
+                    eprintln!(
+                        "girth: nothing is uploaded in v{}; this is exactly what would be shared.",
+                        env!("CARGO_PKG_VERSION")
+                    );
+                    let payload = girth::share::payload(&ledger::read(&home));
+                    let _ = writeln!(
+                        out,
+                        "{}",
+                        serde_json::to_string_pretty(&payload).expect("payload serialises")
+                    );
+                    Ok(())
+                }
+            };
+            match result {
+                Err(e) => {
+                    eprintln!("girth: could not save sharing choice: {e}");
+                    ExitCode::from(1)
+                }
+                Ok(()) => {
+                    if !matches!(action, ShareAction::Preview) {
+                        let label = girth::stats::sharing_label(ledger::sharing(&home));
+                        let _ = writeln!(out, "sharing: {label}");
+                    }
+                    ExitCode::SUCCESS
+                }
+            }
+        }
+        Command::Stats { json } => {
+            let home = girth_home(&ctx);
+            let stats = girth::stats::compute(&ledger::read(&home), ledger::sharing(&home));
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&stats).expect("stats serialise")
+                );
+            } else {
+                let _ = writeln!(out, "{}", girth::stats::render(&stats));
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Feedback {
+            skill,
+            rating,
+            note,
+        } => {
+            let rating = match rating {
+                RatingArg::Up => Rating::Up,
+                RatingArg::Down => Rating::Down,
+            };
+            let project = ctx.cwd.display().to_string();
+            let label = if rating == Rating::Up { "👍" } else { "👎" };
+            match ledger::append(
+                &girth_home(&ctx),
+                Event::Feedback {
+                    skill: skill.clone(),
+                    project,
+                    rating,
+                    note,
+                },
+            ) {
+                Ok(()) => {
+                    let _ = writeln!(out, "recorded {label} for {skill}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("girth: could not record feedback: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
+        Command::Validate {
+            no_record,
+            roots,
+            skill_dirs,
+        } => {
             let mut all_valid = true;
+            let home = girth_home(&ctx);
+            let mut installed: Option<Vec<SkillInfo>> = None;
             for dir in &skill_dirs {
                 let name = dir.file_name().unwrap_or_default().to_string_lossy();
                 let errors = validate(dir);
-                if errors.is_empty() {
-                    let _ = writeln!(out, "VALID {name}");
-                }
                 for error in &errors {
                     all_valid = false;
                     let _ = writeln!(out, "INVALID {name}: {error}");
                 }
+                if !errors.is_empty() {
+                    continue;
+                }
+                if no_record || !name.starts_with(CRAFTED_PREFIX) {
+                    let _ = writeln!(out, "VALID {name}");
+                    continue;
+                }
+                let installed = installed.get_or_insert_with(|| {
+                    discover_skills(&resolve_roots(&roots, &ctx, &mut warnings))
+                });
+                let project = ctx.cwd.display().to_string();
+                let records = ledger::read(&home);
+                let event = craft_event(
+                    dir,
+                    &project,
+                    installed,
+                    last_craft(&records, &project, &name),
+                );
+                let (added, removed) = match &event {
+                    Event::Craft { added, removed, .. } => (added.len(), removed.len()),
+                    _ => (0, 0),
+                };
+                match ledger::append(&home, event) {
+                    Ok(()) => {
+                        let _ =
+                            writeln!(out, "VALID {name} (recorded: +{added} −{removed} sections)");
+                    }
+                    Err(e) => {
+                        let _ = writeln!(out, "VALID {name}");
+                        eprintln!("girth: could not record to ledger: {e}");
+                    }
+                }
             }
+            warn(&warnings);
             if all_valid {
                 ExitCode::SUCCESS
             } else {

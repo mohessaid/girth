@@ -47,12 +47,57 @@ fn body_names_every_helper_and_rule() {
         "verbatim",
         "3 KB",
         "never run",
+        "scripts/girth share status",
+        "<!-- src:",
+        "references/review.md",
+        "references/feedback.md",
+        "references/stats.md",
+        "references/sharing.md",
     ] {
         assert!(body.contains(needle), "body lacks '{needle}'");
     }
     assert!(
-        body.split_whitespace().count() <= 650,
+        body.split_whitespace().count() <= 700,
         "body has {} words",
         body.split_whitespace().count()
+    );
+}
+
+#[test]
+fn reference_flows_exist_are_small_and_name_their_command() {
+    for (file, command) in [
+        ("review.md", "scripts/girth validate"),
+        ("feedback.md", "scripts/girth feedback"),
+        ("stats.md", "scripts/girth stats"),
+        ("sharing.md", "scripts/girth share"),
+    ] {
+        let path = skill_dir().join("references").join(file);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("missing {file}"));
+        assert!(text.len() <= 1536, "{file} is {} bytes", text.len());
+        assert!(text.contains(command), "{file} lacks '{command}'");
+    }
+    let sharing = std::fs::read_to_string(skill_dir().join("references/sharing.md")).unwrap();
+    for promise in ["Never", "Nothing is uploaded", "preview"] {
+        assert!(sharing.contains(promise), "sharing.md lacks '{promise}'");
+    }
+}
+
+#[test]
+fn consent_never_blocks_and_comes_after_the_task_is_served() {
+    let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
+    let (_, body) = split_frontmatter(&text);
+    let consent = body
+        .find("scripts/girth share status")
+        .expect("consent check present");
+    let report = body
+        .find("## 6. Report and continue")
+        .expect("report step present");
+    assert!(
+        consent > report,
+        "consent must come after the task is served"
+    );
+    assert!(
+        body.contains("Never block"),
+        "consent must say it never blocks the task"
     );
 }

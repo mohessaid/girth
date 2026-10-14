@@ -13,5 +13,5 @@ cov: ; cargo llvm-cov --quiet --fail-under-lines 90 --ignore-filename-regex 'mai
 mutate: ; cargo mutants --no-shuffle -j 4
 build: ; cargo build --release -q
 validate: ; claude plugin validate .
-dist: build ; rm -rf $(DIST) && mkdir -p $(DIST) && cp -R .claude-plugin skills evals $(DIST)/ && rm -rf $(DIST)/evals/results && mkdir -p $(DIST)/skills/girth/bin && cp target/release/girth $(DIST)/skills/girth/bin/girth
+dist: build ; rm -rf $(DIST) && mkdir -p $(DIST) && cp -R .claude-plugin hooks skills evals $(DIST)/ && rm -rf $(DIST)/evals/results && mkdir -p $(DIST)/skills/girth/bin && cp target/release/girth $(DIST)/skills/girth/bin/girth
 evals: dist ; cd $(DIST) && PATH=$(SYS_PATH) claude plugin eval . --scaffold --trust-plugin --no-publish --ablation none --runs $(EVAL_RUNS) --threshold 0.66 --model $(EVAL_MODEL) --max-cost-usd $(EVAL_MAX_USD) --allow-tools Write Edit Bash
