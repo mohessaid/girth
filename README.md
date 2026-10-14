@@ -1,17 +1,28 @@
+<div align="center">
+
 # Girth
 
-[![CI](https://github.com/mohessaid/girth/actions/workflows/ci.yml/badge.svg)](https://github.com/mohessaid/girth/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/mohessaid/girth/graph/badge.svg)](https://codecov.io/gh/mohessaid/girth)
-[![CodeQL](https://github.com/mohessaid/girth/actions/workflows/codeql.yml/badge.svg)](https://github.com/mohessaid/girth/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mohessaid/girth/badge)](https://scorecard.dev/viewer/?uri=github.com/mohessaid/girth)
-[![Release](https://img.shields.io/github/v/release/mohessaid/girth?sort=semver)](https://github.com/mohessaid/girth/releases)
-[![License: MIT](https://img.shields.io/github/license/mohessaid/girth)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-orange?logo=rust)](Cargo.toml)
-[![Mutation score](https://img.shields.io/badge/mutation-99.2%25-brightgreen)](docs/mutation-notes.md)
-[![Evals](https://img.shields.io/badge/evals-3%2F3%20passing-brightgreen)](docs/eval-log.md)
-[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#install)
+**Just-in-time, project-scoped agent skills.**<br>
+Distil only the slice your project needs from the skills you already have — 38× lower always-on skill cost.
 
-**Just-in-time, project-scoped agent skills.** Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
+<p>
+  <a href="https://github.com/mohessaid/girth/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mohessaid/girth/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/mohessaid/girth"><img alt="codecov" src="https://codecov.io/gh/mohessaid/girth/graph/badge.svg"></a>
+  <a href="https://github.com/mohessaid/girth/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/mohessaid/girth/actions/workflows/codeql.yml/badge.svg"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/mohessaid/girth"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/mohessaid/girth/badge"></a>
+  <a href="https://github.com/mohessaid/girth/releases"><img alt="Release" src="https://img.shields.io/github/v/release/mohessaid/girth?sort=semver"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/github/license/mohessaid/girth"></a>
+  <a href="Cargo.toml"><img alt="MSRV" src="https://img.shields.io/badge/MSRV-1.85-orange?logo=rust"></a>
+  <a href="docs/mutation-notes.md"><img alt="Mutation score" src="https://img.shields.io/badge/mutation-99.2%25-brightgreen"></a>
+  <a href="docs/eval-log.md"><img alt="Evals" src="https://img.shields.io/badge/evals-3%2F3%20passing-brightgreen"></a>
+  <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-d97757"></a>
+</p>
+
+<a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="examples/hyperframes/RESULTS.md">Results</a> · <a href="CONTRIBUTING.md">Contributing</a>
+
+</div>
+
+Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
 
 Status: pre-release (M1). Design: `docs/superpowers/specs/`.
 
