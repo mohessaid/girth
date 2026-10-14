@@ -1,0 +1,190 @@
+use std::fmt::Write as _;
+use std::io::Write as _;
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+use girth::config::{Context, resolve_output_dir, resolve_roots};
+use girth::measure::{format_table, measure, thousands};
+use girth::search::{HitJson, rank};
+use girth::skill::{SkillInfo, discover_skills};
+use girth::validate::validate;
+use std::path::PathBuf;
+
+/// Just-in-time, project-scoped agent skills.
+#[derive(Parser)]
+#[command(name = "girth", version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Report what installed skills cost in context.
+    Measure {
+        /// Skill root dirs (default: GIRTH_SKILL_ROOTS, .girth/config.json, standard locations).
+        #[arg(long, num_args = 1..)]
+        roots: Vec<String>,
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rank local skills (and the crafted-skill cache) for a need.
+    Search {
+        /// The need, in words.
+        query: String,
+        /// Skill root dirs.
+        #[arg(long, num_args = 1..)]
+        roots: Vec<String>,
+        /// Crafted-skill dir (the cache); always searched.
+        #[arg(long)]
+        output: Option<String>,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check crafted skills against the Girth contract.
+    Validate {
+        #[arg(required = true)]
+        skill_dirs: Vec<PathBuf>,
+    },
+}
+
+fn warn(warnings: &[String]) {
+    for w in warnings {
+        eprintln!("{w}");
+    }
+}
+
+fn report_fallbacks(skills: &[SkillInfo]) {
+    let names: Vec<&str> = skills
+        .iter()
+        .filter(|s| s.fell_back)
+        .map(|s| s.name.as_str())
+        .collect();
+    if !names.is_empty() {
+        eprintln!(
+            "girth: recovered invalid YAML frontmatter leniently in {} skill(s): {}",
+            names.len(),
+            names.join(", ")
+        );
+    }
+}
+
+/// Write all output at once; a reader that went away (e.g. `| head`) is not an error.
+fn emit(out: &str) {
+    let mut stdout = std::io::stdout().lock();
+    if let Err(e) = stdout
+        .write_all(out.as_bytes())
+        .and_then(|()| stdout.flush())
+    {
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            eprintln!("girth: failed writing output: {e}");
+        }
+    }
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let ctx = Context::from_process();
+    let mut warnings = Vec::new();
+    let mut out = String::new();
+    let code = match cli.command {
+        Command::Measure { roots, json } => {
+            let roots = resolve_roots(&roots, &ctx, &mut warnings);
+            warn(&warnings);
+            let skills = discover_skills(&roots);
+            report_fallbacks(&skills);
+            let report = measure(&skills);
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("report serialises")
+                );
+            } else {
+                let _ = writeln!(out, "{}", format_table(&report));
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Search {
+            query,
+            roots,
+            output,
+            limit,
+            json,
+        } => {
+            let output_dir = resolve_output_dir(output.as_deref(), &ctx, &mut warnings);
+            let mut roots = resolve_roots(&roots, &ctx, &mut warnings);
+            if !roots.contains(&output_dir) {
+                roots.push(output_dir.clone());
+            }
+            warn(&warnings);
+            let skills = discover_skills(&roots);
+            report_fallbacks(&skills);
+            let hits = rank(&skills, &query, limit);
+            if json {
+                let payload = serde_json::json!({
+                    "output_dir": output_dir.display().to_string(),
+                    "hits": hits.iter().map(HitJson::from).collect::<Vec<_>>(),
+                });
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&payload).expect("hits serialise")
+                );
+            } else {
+                let _ = writeln!(out, "output_dir: {}", output_dir.display());
+                if hits.is_empty() {
+                    let _ = writeln!(out, "no matching skills");
+                }
+                for hit in &hits {
+                    let flags = format!(
+                        "{}{}",
+                        if hit.skill.crafted() {
+                            " [crafted]"
+                        } else {
+                            ""
+                        },
+                        if hit.exact { " [exact]" } else { "" }
+                    );
+                    let _ = writeln!(
+                        out,
+                        "{:>4}  {}{flags}  {} B md  {}",
+                        hit.score,
+                        hit.skill.name,
+                        thousands(hit.skill.total_md_bytes),
+                        hit.skill.path.display()
+                    );
+                    for (file, heading) in &hit.matched_headings {
+                        let _ = writeln!(out, "        {file} > {heading}");
+                    }
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Validate { skill_dirs } => {
+            let mut all_valid = true;
+            for dir in &skill_dirs {
+                let name = dir.file_name().unwrap_or_default().to_string_lossy();
+                let errors = validate(dir);
+                if errors.is_empty() {
+                    let _ = writeln!(out, "VALID {name}");
+                }
+                for error in &errors {
+                    all_valid = false;
+                    let _ = writeln!(out, "INVALID {name}: {error}");
+                }
+            }
+            if all_valid {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+    };
+    emit(&out);
+    code
+}

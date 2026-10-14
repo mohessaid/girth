@@ -1,0 +1,39 @@
+{
+  "usage": {
+    "input_tokens": 18,
+    "cache_creation_input_tokens": 21995,
+    "cache_read_input_tokens": 217955,
+    "output_tokens": 3929,
+    "output_tokens_details": {
+      "thinking_tokens": 440
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 21995,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 567,
+        "cache_read_input_tokens": 31428,
+        "cache_creation_input_tokens": 969,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 969
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "total_cost_usd": 0.14910150000000003,
+  "num_turns": 10,
+  "result": "The 6-second composition is in `./promo/`, and `npx hyperframes check` passes. Lint, runtime, layout, motion and contrast all report 0 errors and 0 warnings. I haven't previewed or rendered it, because the build loop says to wait for your approval first.\n\n- **Headline:** \"Ship faster with Girth\" is a single caption group, highlighted word by word.\n- **Highlight:** each word's state changes with `tl.set` (faint, then active, then spoken). The highlight is a `box-shadow`, so nothing shifts.\n- **Files:** `index.html` is the root, and `compositions/captions.html` is the one caption host on a single `data-track-kind=\"captions\"` track. `narration.wav` is the generated voice-over.\n\n**Where the timings come from:** you gave me no audio, and I can't invent word timings. So I generated a voice-over with `hyperframes tts` (about 1.3s) and ran `hyperframes transcribe` on it. The captions use those word timings, shifted by 0.5s to match where the audio starts. The audio is an addition you didn't ask for. If you have your own voice-over, give me the file and I'll redo the timings.\n\n**One interpretation:** the skill says the registered timeline id must match the root `data-composition-id`. That conflicted with the caption host having the same id, so I gave the root its own id, `girth-promo`, and marked it `data-no-timeline`. The captions timeline is registered as `captions`, matching its host.\n\nThe first `check` failed with `missing_timeline_registry` because I had given the root the same id as the captions host. Fixing the ids resolved it.\n\nNext step is `npx hyperframes preview --background` so you can review it. I'll render once you approve."
+}

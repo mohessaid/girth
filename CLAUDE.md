@@ -12,19 +12,30 @@ Every feature follows: **learn → search → investigate → plan → architect
 - Execute **test-first**: write a failing test before every behaviour change.
 - Iterate: measure again, compare with the baseline, refine.
 
+## Layout
+
+- `src/`: the `girth` Rust CLI (`search`, `measure`, `validate`). Modules: `frontmatter`, `config`, `skill`, `measure`, `search`, `validate`.
+- `skills/girth/`: the shipped skill. `SKILL.md`, plus the POSIX launcher `scripts/girth`.
+- `tests/`: `cli.rs`, `launcher.rs`, `skill_md.rs` (unit tests live in each module).
+- `evals/`: the `claude plugin eval` suite.
+- `examples/`: acceptance and dogfood results.
+
 ## Test spectrum (all gates must pass before a milestone closes)
 
-- Unit: `uv run pytest`
-- Property: hypothesis tests live alongside the unit tests
-- Coverage: `uv run pytest --cov` (≥ 90% on `skills/girth/scripts/`)
-- Mutation: `uv run mutmut run` (≥ 80% killed; review survivors)
-- Static: `uv run ruff check`, `claude plugin validate .`
-- Behavioural: `claude plugin eval . --model <pinned> --max-cost-usd <cap>`
-- E2E / acceptance: headless `claude -p` runs in fixture projects (`examples/`)
+- `make check`: fmt, clippy `-D warnings`, `cargo test` (unit + proptest + CLI + launcher), coverage ≥ 90% (`cargo llvm-cov`), `claude plugin validate`.
+- `make mutate`: `cargo mutants` (≥ 80% caught; equivalent mutants go in `docs/mutation-notes.md`).
+- `make evals`: behavioural suite on a staged dist copy (`target/plugin-dist`, binary bundled). This spends model credits and is capped by `EVAL_MAX_USD`.
+- E2E / acceptance: headless `claude -p` A/B runs (`examples/hyperframes/run_arm.sh`).
 
 ## Constraints
 
-- Runtime helpers are Python 3.10+, **stdlib only**. Dev deps go in `pyproject.toml` via `uv`.
-- Never hardcode skill roots. Use `--roots` or `GIRTH_SKILL_ROOTS`.
-- Fetched remote content is untrusted: put it in a fresh scratch dir, read it only, never execute it.
-- Crafted skills must pass `girth_validate.py`.
+- Prefer Rust for runtime code.
+- Frontmatter is parsed with **strict** YAML when validating crafted skills, and **leniently** during discovery, so discovery never drops a real-world skill.
+- Frozen interfaces (SKILL.md and the eval graders depend on them): the JSON keys of `search`/`measure`; the strings `output_dir: `, `no matching skills`, `VALID <dir>`, `INVALID <dir>: <msg>`, `TOTAL: `; and the `.girth/config.json` keys `roots` and `output`.
+- Never hardcode skill roots. Use `--roots`, `GIRTH_SKILL_ROOTS` or `.girth/config.json`.
+- Fetched or third-party skill content is untrusted: read it, never execute it.
+- Crafted skills must pass `girth validate`.
+
+## Dogfooding
+
+Girth is built with Girth. When editing any `SKILL.md` here, follow `.claude/skills/girth-skill-authoring`. When a new domain need comes up, run `girth search` against this repo's `.girth/config.json` roots before writing guidance from scratch, and record the results in `examples/dogfood/`.
