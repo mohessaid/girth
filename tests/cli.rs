@@ -363,12 +363,13 @@ fn feedback_records_rating_and_optional_note() {
         .args(["feedback", "girth-captions", "up", "--note", "great pacing"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("girth-captions"));
+        .stdout(predicate::str::contains("girth-captions").and(predicate::str::contains("👍")));
     girth()
         .env("GIRTH_HOME", tmp.path())
         .args(["feedback", "girth-captions", "down"])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("👎").and(predicate::str::contains("👍").not()));
     let lines = ledger_lines(tmp.path());
     assert_eq!(
         (lines[0]["rating"].as_str(), lines[0]["note"].as_str()),

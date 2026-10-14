@@ -526,6 +526,8 @@ mod tests {
             rule(6, "d", "c", Op::Add),
         ];
         assert_eq!(rules_in(&recs, "d"), vec!["b", "c"]);
+        let twice = vec![rule(1, "d", "a", Op::Add), rule(2, "d", "a", Op::Add)];
+        assert_eq!(rules_in(&twice, "d"), vec!["a"]);
     }
 
     #[test]

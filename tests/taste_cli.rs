@@ -296,3 +296,31 @@ fn stats_counts_taste_without_its_text() {
         serde_json::json!({"domains": 2, "rules": 1, "made": 2})
     );
 }
+
+#[test]
+fn two_linked_domains_share_the_context_budget() {
+    let env = Env::new();
+    for domain in ["captions", "launch-video"] {
+        let file = env.home.join("taste.jsonl");
+        std::fs::create_dir_all(&env.home).unwrap();
+        let link = serde_json::json!({"v": 1, "ts": 1, "kind": "link", "domain": domain, "skill": "video-mega"});
+        let mut text = std::fs::read_to_string(&file).unwrap_or_default();
+        text.push_str(&format!("{link}\n"));
+        std::fs::write(&file, text).unwrap();
+        for i in 0..10 {
+            env.run(&[
+                "taste",
+                "add",
+                domain,
+                &format!("rule {i} {}", "x".repeat(150)),
+            ]);
+        }
+    }
+    let out = env.hook("video-mega");
+    let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let context = json["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(context.contains("taste: captions") && context.contains("taste: launch-video"));
+    assert!(context.len() <= 1500 + 1, "{}", context.len());
+}
