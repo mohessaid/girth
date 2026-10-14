@@ -1,5 +1,16 @@
 # Girth
 
+[![CI](https://github.com/mohessaid/girth/actions/workflows/ci.yml/badge.svg)](https://github.com/mohessaid/girth/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mohessaid/girth/graph/badge.svg)](https://codecov.io/gh/mohessaid/girth)
+[![CodeQL](https://github.com/mohessaid/girth/actions/workflows/codeql.yml/badge.svg)](https://github.com/mohessaid/girth/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mohessaid/girth/badge)](https://scorecard.dev/viewer/?uri=github.com/mohessaid/girth)
+[![Release](https://img.shields.io/github/v/release/mohessaid/girth?sort=semver)](https://github.com/mohessaid/girth/releases)
+[![License: MIT](https://img.shields.io/github/license/mohessaid/girth)](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-orange?logo=rust)](Cargo.toml)
+[![Mutation score](https://img.shields.io/badge/mutation-99.2%25-brightgreen)](docs/mutation-notes.md)
+[![Evals](https://img.shields.io/badge/evals-3%2F3%20passing-brightgreen)](docs/eval-log.md)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#install)
+
 **Just-in-time, project-scoped agent skills.** Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
 
 Status: pre-release (M1). Design: `docs/superpowers/specs/`.
@@ -55,7 +66,10 @@ Skill roots resolve in this order:
 make check    # fmt, clippy, tests (unit, property, CLI, launcher), coverage ≥ 90%, plugin validate
 make mutate   # cargo-mutants
 make evals    # claude plugin eval on a staged dist copy (spends model credits, capped)
+cargo deny check   # advisories, licenses, sources
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [CHANGELOG](CHANGELOG.md). Report security issues privately ([SECURITY.md](SECURITY.md)).
 
 Girth is built with Girth: see `examples/dogfood/RESULTS.md`.
 

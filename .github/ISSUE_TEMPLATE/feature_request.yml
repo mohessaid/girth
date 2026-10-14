@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest an improvement to girth.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Ideally with numbers, e.g. tokens or dollars wasted today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution

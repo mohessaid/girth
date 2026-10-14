@@ -1,0 +1,25 @@
+name: Bug report
+description: Something in girth or the girth skill behaves wrongly.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Commands you ran (e.g. `girth search "..." --json`) and their output.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: girth version and platform
+      placeholder: "girth 0.1.0, macOS arm64, Claude Code 2.1.x"
+    validations:
+      required: true
