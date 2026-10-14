@@ -1,5 +1,52 @@
 # Girth
 
-Just-in-time, project-scoped agent skills. Instead of installing dozens of large skills, Girth distils only the slice your project needs into a small `girth-<domain>` skill, the moment you need it.
+**Just-in-time, project-scoped agent skills.** Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
 
-Status: pre-release (M1). See `docs/superpowers/specs/` for the design.
+Status: pre-release (M1). Design: `docs/superpowers/specs/`.
+
+## Measured so far (2026-10-14, one machine)
+
+| | Before | With Girth |
+|---|---|---|
+| Always-on skill cost (39 user skills vs crafted) | 17,022 B ≈ 4.3K tok | 448 B ≈ 112 tok (**38× less**) |
+| Per-session new prompt tokens, HyperFrames task | 35.7K | 22.0K (**−38%**) |
+| Task cost, same task and model | $0.181 | $0.149 (**−17%**) |
+| HyperFrames check on the output | 1 warning | 0 warnings |
+
+These are single runs. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (3 cases, 9 runs, all 1.00).
+
+## How it works
+
+1. During a task, the model (or you: "use girth for …") names a need.
+2. `girth search` ranks the skills already on disk and the project's crafted-skill cache. It points at the exact files and headings to read.
+3. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
+4. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
+
+## CLI
+
+```bash
+cargo build --release
+target/release/girth measure                      # what your skills cost in context
+target/release/girth search "caption timing" --json
+target/release/girth validate .claude/skills/girth-captions
+```
+
+Skill roots resolve in this order:
+1. `--roots`
+2. `GIRTH_SKILL_ROOTS`
+3. `.girth/config.json` (`{"roots": [...], "output": "..."}`)
+4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`
+
+## Development
+
+```bash
+make check    # fmt, clippy, tests (unit, property, CLI, launcher), coverage ≥ 90%, plugin validate
+make mutate   # cargo-mutants
+make evals    # claude plugin eval on a staged dist copy (spends model credits, capped)
+```
+
+Girth is built with Girth: see `examples/dogfood/RESULTS.md`.
+
+## License
+
+MIT
