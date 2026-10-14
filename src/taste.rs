@@ -187,7 +187,7 @@ pub fn view(personal: &[TasteRecord], project: &[TasteRecord], domain: &str) -> 
         .collect();
     // Newest first; the sort is stable, so equal timestamps keep file order reversed below.
     made.reverse();
-    made.sort_by(|a, b| b.0.cmp(&a.0));
+    made.sort_by_key(|m| std::cmp::Reverse(m.0));
     let mut recent: Vec<(String, Vec<String>)> = Vec::new();
     for (_, choices) in made {
         for (key, value) in choices {
@@ -259,6 +259,10 @@ pub fn resolve_domains(skill: &str, records: &[TasteRecord]) -> Vec<String> {
 
 /// The text the model sees: rules, recent choices, and how to record this deliverable.
 pub fn render(view: &TasteView, launcher: &str) -> String {
+    render_with(view, launcher, false)
+}
+
+fn render_with(view: &TasteView, launcher: &str, more: bool) -> String {
     use std::fmt::Write;
     let domain = &view.domain;
     if view.is_empty() {
@@ -284,11 +288,32 @@ pub fn render(view: &TasteView, launcher: &str) -> String {
             let _ = writeln!(out, "  {key}: {}", values.join(", "));
         }
     }
+    if more {
+        let _ = writeln!(out, "(more: {launcher} taste show {domain})");
+    }
     let _ = writeln!(
         out,
         "record this one when done: {launcher} made {domain} key=value ..."
     );
     out
+}
+
+/// `render`, trimmed from the end to fit `max` bytes; rules and the record line are kept first.
+pub fn render_capped(view: &TasteView, launcher: &str, max: usize) -> String {
+    let full = render(view, launcher);
+    if full.len() <= max {
+        return full;
+    }
+    let mut trimmed = view.clone();
+    loop {
+        let text = render_with(&trimmed, launcher, true);
+        if text.len() <= max || (trimmed.recent.is_empty() && trimmed.rules.is_empty()) {
+            return text;
+        }
+        if trimmed.recent.pop().is_none() {
+            trimmed.rules.pop();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -621,6 +646,26 @@ mod tests {
         assert!(text.contains("recently made"));
         let only_rules = view(&[rule(1, "d", "r", Op::Add)], &[], "d");
         assert!(!render(&only_rules, "girth").contains("recently made"));
+    }
+
+    #[test]
+    fn render_capped_keeps_the_record_line_and_points_to_the_rest() {
+        let personal: Vec<_> = (0..12)
+            .map(|i| rule(i, "d", &format!("rule {i} {}", "x".repeat(200)), Op::Add))
+            .chain([made(20, "d", &[("palette", "neon")])])
+            .collect();
+        let v = view(&personal, &[], "d");
+        let text = render_capped(&v, "girth", 1500);
+        assert!(text.len() <= 1500, "{}", text.len());
+        assert!(text.contains("rule 0 "));
+        assert!(text.ends_with(
+            "(more: girth taste show d)\nrecord this one when done: girth made d key=value ...\n"
+        ), "{text}");
+        let small = view(&[rule(1, "d", "r", Op::Add)], &[], "d");
+        assert_eq!(
+            render_capped(&small, "girth", 1500),
+            render(&small, "girth")
+        );
     }
 
     fn arb_record() -> impl Strategy<Value = TasteRecord> {
