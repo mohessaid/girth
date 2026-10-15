@@ -26,7 +26,9 @@ Distil only the slice your project needs from the skills you already have — 38
 
 Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
 
-Status: pre-release (M1). Design: `docs/superpowers/specs/`.
+<p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
+
+Status: v0.4, early and measured. Design: `docs/superpowers/specs/`.
 
 ## Measured so far (one machine)
 
@@ -53,22 +55,36 @@ These are single runs. See `examples/hyperframes/RESULTS.md` for the full number
 
 ## Install
 
-In Claude Code (2.1.275 or later):
+**As a Claude Code plugin (recommended).** In Claude Code (2.1.275 or later):
 
 ```
-/plugin install girth --marketplace mohessaid/girth
+/plugin marketplace add mohessaid/girth
+/plugin install girth@girth
 ```
 
-Or, with the skills CLI: `npx skills add mohessaid/girth`.
+**As a plain skill, for any agent the [skills CLI](https://skills.sh) supports:**
 
-You don't need Rust. The first time the skill runs, it downloads the prebuilt `girth` binary for your platform from [Releases](https://github.com/mohessaid/girth/releases) and verifies it against `SHA256SUMS` before running it. Builds exist for Linux x86_64 and ARM64 (static musl) and macOS (Intel and Apple Silicon). To use your own build, set `GIRTH_BIN`.
+```bash
+npx skills add mohessaid/girth
+```
+
+| | Plugin | Skills CLI |
+|---|---|---|
+| Craft, reuse, `show`, `fetch`, `taste`, `made` | ✓ | ✓ |
+| Usage ledger (`girth stats` knows which skills you actually use) | ✓ | crafts only |
+| Taste delivered automatically when a domain skill loads | ✓ | ask *"girth taste &lt;domain&gt;"* |
+
+The plugin registers a `PostToolUse` hook on skill loads (about 1 ms). A skills-CLI install doesn't register it, so that part is plugin-only.
+
+You don't need Rust. The first time the skill runs, it downloads (one time, about 2 MB, with a timeout) the prebuilt `girth` binary for your platform from [Releases](https://github.com/mohessaid/girth/releases) and verifies it against `SHA256SUMS` before running it. Builds exist for Linux x86_64 and ARM64 (static musl) and macOS (Intel and Apple Silicon). To use your own build, set `GIRTH_BIN`.
 
 ## How it works
 
 1. During a task, the model (or you: "use girth for …") names a need.
-2. `girth search` ranks the skills already on disk and the project's crafted-skill cache. It points at the exact files and headings to read.
-3. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
-4. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
+2. `girth search` ranks the skills already on disk and the project's crafted-skill cache, and `girth show` prints only the sections that matter. Nothing outside the project is read file by file.
+3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
+4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
+5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 
 ## Ledger & feedback
 
@@ -83,7 +99,7 @@ For the things you make again and again (launch videos, decks, landing pages), G
 - **House rules** you stated once: *"always end on the logo with the URL"*. They're applied every time, in every project, and a new or extra request never drops them.
 - **What recent deliverables chose**: palette, music, opening and so on. The next one varies them unless a rule or your request pins them, and Girth tells you what's fresh.
 
-Taste arrives on its own. When a skill linked to the domain loads, Girth's hook adds the taste to context (about 1 ms; nothing is added for unrelated skills). Say *"from now on, always…"* to add a rule, or *"girth taste launch-video"* to see what's remembered.
+With the plugin, taste arrives on its own. When a skill linked to the domain loads, Girth's hook adds the taste to context (about 1 ms; nothing is added for unrelated skills). Say *"from now on, always…"* to add a rule, or *"girth taste launch-video"* to see what's remembered.
 
 Personal taste lives in `~/.girth/taste.jsonl` and follows you across projects. Project rules (`--project`) live in `.girth/taste.jsonl` and can be committed for a team; trust them as you trust that repo's `CLAUDE.md`. Taste is local only: `girth share` never reads it.
 

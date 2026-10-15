@@ -193,3 +193,61 @@ fn launcher_exports_its_own_path_for_the_taste_record_line() {
         expected.display().to_string()
     );
 }
+
+/// A fake `curl` first on PATH: records its arguments, then runs `then`.
+fn fake_curl(dir: &Path, then: &str) -> String {
+    let curl = dir.join("curl");
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        &curl,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> \"{}\"\n{then}\n",
+            dir.join("curl.args").display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&curl, std::fs::Permissions::from_mode(0o755)).unwrap();
+    format!("{}:/usr/bin:/bin", dir.display())
+}
+
+#[test]
+fn a_stalled_download_is_bounded_and_announced() {
+    let tmp = TempDir::new().unwrap();
+    let script = install(&tmp.path().join("install"));
+    let path = fake_curl(&tmp.path().join("fakebin"), "exit 28");
+    let out = run(&script, &[("PATH", &path)]);
+    assert_eq!(out.status.code(), Some(127));
+    let args = std::fs::read_to_string(tmp.path().join("fakebin/curl.args")).unwrap();
+    assert!(args.contains("--connect-timeout"), "{args}");
+    assert!(args.contains("--max-time"), "{args}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("girth: downloading v"), "{stderr}");
+}
+
+#[test]
+fn an_interrupted_download_leaves_nothing_behind() {
+    let tmp = TempDir::new().unwrap();
+    let script = install(&tmp.path().join("install"));
+    let path = fake_curl(&tmp.path().join("fakebin"), "sleep 1; exit 1");
+    let mut child = Command::new("sh")
+        .arg(&script)
+        .env_clear()
+        .env("PATH", &path)
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let bin_dir = tmp.path().join("install/skills/girth/bin");
+    let leftovers = || std::fs::read_dir(&bin_dir).map(|d| d.count()).unwrap_or(0);
+    let start = std::time::Instant::now();
+    while leftovers() == 0 && start.elapsed().as_secs() < 5 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(leftovers() > 0, "the download never started");
+    Command::new("kill")
+        .arg("-TERM")
+        .arg(child.id().to_string())
+        .status()
+        .unwrap();
+    child.wait().unwrap();
+    assert_eq!(leftovers(), 0, "temp files left in {}", bin_dir.display());
+}

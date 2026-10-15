@@ -7,7 +7,7 @@
 #   5. download the release binary for this platform (checksum-verified, cached in ../bin)
 #   6. cargo build, in a repo checkout
 set -eu
-GIRTH_VERSION=0.4.0
+GIRTH_VERSION=0.4.1
 here=$(cd "$(dirname "$0")" && pwd)
 # Taste context names this path, so the model records choices with the same launcher.
 GIRTH_LAUNCHER="$here/$(basename "$0")"
@@ -31,9 +31,10 @@ target() {
   esac
 }
 
-fetch() { # url dest
-  if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
-  elif command -v wget >/dev/null 2>&1; then wget -q "$1" -O "$2"
+fetch() { # url dest; bounded, so a stalled network never hangs the session
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 10 --max-time 120 --retry 2 "$1" -o "$2"
+  elif command -v wget >/dev/null 2>&1; then wget -q -T 30 -t 3 "$1" -O "$2"
   else return 1; fi
 }
 
@@ -51,6 +52,8 @@ download() {
   tmp=$(mktemp "$bin_dir/.girth-download.XXXXXX")
   sums="$tmp.sums"
   trap 'rm -f "$tmp" "$sums"' EXIT
+  trap 'exit 130' INT TERM HUP
+  echo "girth: downloading v$GIRTH_VERSION for $t (one time)..." >&2
   fetch "$url/girth-$t" "$tmp" 2>/dev/null || return 1
   fetch "$url/SHA256SUMS" "$sums" 2>/dev/null || return 1
   expected=$(grep " girth-$t\$" "$sums" | cut -d' ' -f1 || true)
@@ -62,7 +65,7 @@ download() {
   chmod 755 "$tmp"
   mv "$tmp" "$bin_dir/girth"
   rm -f "$sums"
-  trap - EXIT
+  trap - EXIT INT TERM HUP
   echo "girth: installed v$GIRTH_VERSION ($t) to $bin_dir/girth" >&2
 }
 

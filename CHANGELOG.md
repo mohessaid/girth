@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-15
+
+### Fixed
+- `npx skills add mohessaid/girth` no longer installs the repo-internal `girth-skill-authoring` skill. It is now marked `metadata.internal`.
+- The launcher's one-time binary download is bounded (10 s connect, 120 s total, 2 retries) and announced on stderr. A stalled network used to hang the session silently, and an interrupt left a temp file in `bin/`.
+- The README's install command was wrong. It is now `/plugin marketplace add mohessaid/girth` then `/plugin install girth@girth`.
+
+### Added
+- The README compares plugin and skills-CLI installs: the usage ledger and automatic taste delivery need the plugin's hook.
+- `examples/demo/demo.sh` and `make demo`: a recorded walkthrough of real `girth` commands on public skills, with no model calls.
+
 ## [0.4.0] - 2026-10-15
 
 ### Added
@@ -66,7 +77,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/mohessaid/girth/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mohessaid/girth/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mohessaid/girth/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mohessaid/girth/compare/v0.1.1...v0.2.0
