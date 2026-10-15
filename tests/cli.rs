@@ -675,3 +675,54 @@ fn stats_meter_without_turns_says_so() {
         .success()
         .stdout("meter: no turns recorded yet\n");
 }
+
+const MCP: &str = "# MCP Server Instructions\n\n## claude.ai Figma\nUse get_design_context.\n\n## pencil\nPencil edits .pen files.\n";
+const DEFERRED: &str = "Deferred tools:\nCronCreate\nmcp__claude_ai_Figma__use_figma\nmcp__claude_ai_Figma__whoami\nmcp__pencil__batch_get\n";
+
+fn lens_kind(home: &std::path::Path, kind: &str, stdin: &str) -> serde_json::Value {
+    let out = home_cmd(home)
+        .env_remove("GIRTH_LENS")
+        .args(["lens", "--kind", kind, "--json", "--project", "/work/app"])
+        .write_stdin(stdin)
+        .assert()
+        .success();
+    serde_json::from_slice(&out.get_output().stdout).unwrap()
+}
+
+#[test]
+fn lens_mcp_and_tools_collapse_unused_servers_and_record_them() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    // pencil was used in this project.
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(r#"{"project":"/work/app","model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"agent":false,"aborted":false,"mcp":["pencil"]}"#)
+        .assert()
+        .success();
+    let mcp = lens_kind(&home, "mcp", MCP);
+    assert_eq!(mcp["described"], serde_json::json!(["pencil"]));
+    assert_eq!(mcp["collapsed"], serde_json::json!(["claude_ai_Figma"]));
+    assert_eq!(
+        mcp["deferred"]["claude_ai_Figma"],
+        "## claude.ai Figma\nUse get_design_context.\n\n"
+    );
+    assert!(mcp["text"].as_str().unwrap().ends_with(
+        "## Other connected servers (their instructions arrive on first use): claude.ai Figma\n"
+    ));
+    let tools = lens_kind(&home, "tools", DEFERRED);
+    assert_eq!(
+        tools["text"],
+        "Deferred tools:\nCronCreate\nmcp__claude_ai_Figma__* (2 tools; ToolSearch finds them)\nmcp__pencil__batch_get\n"
+    );
+    assert_eq!(tools["bytes_before"], DEFERRED.len());
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    // One seen event for the servers, under the mcp: prefix, recorded once.
+    assert_eq!(ledger.matches(r#""kind":"seen""#).count(), 1, "{ledger}");
+    assert!(ledger.contains("mcp:claude_ai_Figma") && ledger.contains("mcp:pencil"));
+    // Skills kind is untouched by server evidence and stays the default.
+    home_cmd(&home)
+        .args(["lens", "--kind", "nope"])
+        .write_stdin("")
+        .assert()
+        .failure();
+}

@@ -79,33 +79,39 @@ pub fn parse(text: &str) -> Vec<Item> {
 /// Prefix of server names in `seen` events; skills have none.
 pub const SERVER_PREFIX: &str = "mcp:";
 
-/// For one namespace (servers when `servers`, else skills): the names in the
-/// first `seen` event holding any of them (the baseline), and when each name
-/// was first seen. Namespaces get separate baselines, so servers recorded for
-/// the first time later never make every skill look new, or the reverse.
-pub(crate) fn first_seen(
-    records: &[Record],
-    servers: bool,
-) -> (Option<HashSet<&str>>, HashMap<&str, u64>) {
+/// Names first seen within this long of a namespace's first sighting belong to
+/// its baseline: one session can report skills and servers in several texts.
+pub const BASELINE_WINDOW_SECS: u64 = 24 * 3600;
+
+/// For one namespace (servers when `servers`, else skills): when the first
+/// `seen` event holding any of its names happened (the baseline), and when each
+/// name was first seen. Namespaces get separate baselines, so servers recorded
+/// for the first time later never make every skill look new, or the reverse.
+pub(crate) fn first_seen(records: &[Record], servers: bool) -> (Option<u64>, HashMap<&str, u64>) {
     let mut baseline = None;
     let mut first = HashMap::new();
     for record in records {
         if let Event::Seen { names } = &record.event {
-            let ours: Vec<&str> = names
+            for name in names
                 .iter()
-                .map(String::as_str)
                 .filter(|n| n.starts_with(SERVER_PREFIX) == servers)
-                .collect();
-            if ours.is_empty() {
-                continue;
-            }
-            baseline.get_or_insert_with(|| ours.iter().copied().collect());
-            for name in ours {
-                first.entry(name).or_insert(record.ts);
+            {
+                baseline.get_or_insert(record.ts);
+                first.entry(name.as_str()).or_insert(record.ts);
             }
         }
     }
     (baseline, first)
+}
+
+/// Whether `name` arrived after its namespace's baseline window and recently.
+pub(crate) fn is_new(baseline: Option<u64>, first: Option<&u64>, now: u64) -> bool {
+    let Some(start) = baseline else {
+        // No baseline yet: this run is the baseline.
+        return false;
+    };
+    let arrived = first.copied().unwrap_or(now);
+    arrived > start + BASELINE_WINDOW_SECS && now.saturating_sub(arrived) < NEW_SECS
 }
 
 /// Names in `names` that no `seen` event has recorded yet.
@@ -166,14 +172,6 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
             }
         }
     }
-    let is_new = |name: &str| match (&baseline, first.get(name)) {
-        // No baseline yet: this run is the baseline.
-        (None, _) => false,
-        (Some(_), None) => true,
-        (Some(baseline), Some(ts)) => {
-            !baseline.contains(name) && inputs.now.saturating_sub(*ts) < NEW_SECS
-        }
-    };
     let keep = |name: &str| {
         let b = base(name);
         b == "girth"
@@ -181,7 +179,7 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
             || inputs.keep.iter().any(|k| k == name || k == b)
             || used_here.contains(b)
             || used_recently.contains(b)
-            || is_new(name)
+            || is_new(baseline, first.get(name), inputs.now)
             || inputs
                 .project_dir
                 .join(".claude/skills")

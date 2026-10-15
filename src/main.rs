@@ -55,7 +55,10 @@ enum Command {
         /// The project dir (default: cwd).
         #[arg(long)]
         project: Option<PathBuf>,
-        /// Print JSON: text, described, collapsed, bytes_before, bytes_after.
+        /// What the text is: the skill listing, MCP server instructions, or the deferred-tools list.
+        #[arg(long, value_enum, default_value_t = LensKind::Skills)]
+        kind: LensKind,
+        /// Print JSON: text, described, collapsed, deferred, bytes_before, bytes_after.
         #[arg(long)]
         json: bool,
     },
@@ -167,6 +170,13 @@ enum RecordWhat {
         #[arg(long)]
         skill: Option<String>,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum LensKind {
+    Skills,
+    Mcp,
+    Tools,
 }
 
 #[derive(Subcommand)]
@@ -498,7 +508,14 @@ fn emit(out: &str) {
     }
 }
 
-fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut String) -> ExitCode {
+fn run_lens(
+    project: Option<PathBuf>,
+    kind: LensKind,
+    json: bool,
+    ctx: &Context,
+    out: &mut String,
+) -> ExitCode {
+    use girth::mcp_lens::{self, McpRewrite};
     use std::io::Read;
     let mut text = String::new();
     let _ = std::io::stdin().read_to_string(&mut text);
@@ -508,31 +525,46 @@ fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut Strin
     let off = ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
     let records = ledger::read(&home);
     let rewrite = if off || !enabled {
-        girth::lens::Rewrite {
+        McpRewrite {
             text: text.clone(),
-            described: Vec::new(),
-            collapsed: Vec::new(),
+            ..Default::default()
         }
     } else {
-        let names: Vec<String> = girth::lens::parse(&text)
-            .into_iter()
-            .filter_map(|i| match i {
-                girth::lens::Item::Entry { name, .. } => Some(name),
-                girth::lens::Item::Raw(_) => None,
-            })
-            .collect();
+        let names: Vec<String> = match kind {
+            LensKind::Skills => girth::lens::parse(&text)
+                .into_iter()
+                .filter_map(|i| match i {
+                    girth::lens::Item::Entry { name, .. } => Some(name),
+                    girth::lens::Item::Raw(_) => None,
+                })
+                .collect(),
+            LensKind::Mcp | LensKind::Tools => mcp_lens::server_ids(&text)
+                .into_iter()
+                .map(|id| format!("{}{id}", girth::lens::SERVER_PREFIX))
+                .collect(),
+        };
         let unseen = girth::lens::unseen(&records, &names);
         let project = project_dir.display().to_string();
-        let rewrite = girth::lens::rewrite(
-            &text,
-            &girth::lens::Inputs {
-                records: &records,
-                project: &project,
-                project_dir: &project_dir,
-                keep: &keep,
-                now: ledger::now(),
-            },
-        );
+        let inputs = girth::lens::Inputs {
+            records: &records,
+            project: &project,
+            project_dir: &project_dir,
+            keep: &keep,
+            now: ledger::now(),
+        };
+        let rewrite = match kind {
+            LensKind::Skills => {
+                let r = girth::lens::rewrite(&text, &inputs);
+                McpRewrite {
+                    text: r.text,
+                    described: r.described,
+                    collapsed: r.collapsed,
+                    ..Default::default()
+                }
+            }
+            LensKind::Mcp => mcp_lens::rewrite_instructions(&text, &inputs),
+            LensKind::Tools => mcp_lens::rewrite_tools(&text, &inputs),
+        };
         if !unseen.is_empty() {
             // Never disturb the session: a failed append is dropped.
             let _ = ledger::append(&home, Event::Seen { names: unseen });
@@ -544,6 +576,7 @@ fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut Strin
             "text": rewrite.text,
             "described": rewrite.described,
             "collapsed": rewrite.collapsed,
+            "deferred": rewrite.deferred,
             "bytes_before": text.len(),
             "bytes_after": rewrite.text.len(),
         });
@@ -615,7 +648,11 @@ fn main() -> ExitCode {
     let mut warnings = Vec::new();
     let mut out = String::new();
     let code = match cli.command {
-        Command::Lens { project, json } => run_lens(project, json, &ctx, &mut out),
+        Command::Lens {
+            project,
+            kind,
+            json,
+        } => run_lens(project, kind, json, &ctx, &mut out),
         Command::Measure { roots, json } => {
             let roots = resolve_roots(&roots, &ctx, &mut warnings);
             warn(&warnings);
