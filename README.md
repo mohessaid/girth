@@ -44,15 +44,16 @@ Independent research points the same way: in [SkillsBench](https://arxiv.org/abs
 
 Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
 
-**Lens: the same task with and without a per-project skill listing** (2026-10-15, the author's real setup of 74 skills, claude-sonnet-5-5, 3 runs per arm):
+**Lens: the same task with and without Lens** (2026-10-15, the author's real setup of 74 skills and 6 MCP servers, claude-sonnet-5-5, 3 runs per arm):
 
-| | Lens off | Lens on |
-|---|---|---|
-| Skill listing sent with every request | 30,027 B | 7,869 B (**−74%**) |
-| Cost per run (mean) | $0.166 | $0.135 (**−19%**) |
-| Fresh prompt tokens (input + cache write) | 32.0K | 24.7K (**−23%**) |
-| Matching skill still invoked (it was collapsed by Lens) | 3/3 | 3/3 |
-| Metadata checks passed | 18/18 | 18/18 |
+| | Lens off | Skills Lens (v0.5) | Full Lens (v0.6) |
+|---|---|---|---|
+| Cost per run (mean) | $0.166 | $0.135 (−19%) | **$0.096 (−42%)** |
+| Fresh prompt tokens (input + cache write) | 32.0K | 24.7K | **15.9K (−50%)** |
+| Matching skill still invoked (collapsed by Lens) | 3/3 | 3/3 | 3/3 |
+| Metadata checks passed | 18/18 | 18/18 | 18/18 |
+
+With v0.6, tasks that need a collapsed MCP server still work, 6 of 6 across two servers: the server's instructions arrive on first use and Claude follows them.
 
 See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose a needed skill.
 
