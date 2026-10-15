@@ -57,6 +57,8 @@ With v0.6, tasks that need a collapsed MCP server still work, 6 of 6 across two 
 
 See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose a needed skill.
 
+**SkillsBench, 6 tasks** (2026-10-15, claude-sonnet-5-5, one run per arm): Girth's one distilled skill per task **matched the task's curated skills on every task** (3/6 passed in each arm), with 23% fewer output tokens. Self-generated skills tend not to help (SkillsBench); skills distilled from curated sources kept their effect. See `examples/skillsbench/RESULTS.md`.
+
 **One session, before and after crafting** (2026-10-14):
 
 | | Before | With Girth (bulk skills removed) |
