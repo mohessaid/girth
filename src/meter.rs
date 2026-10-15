@@ -11,6 +11,8 @@ pub const BYTES_PER_TOKEN: u64 = 4;
 #[derive(Debug, Default, Serialize, PartialEq)]
 pub struct Summary {
     pub turns: u64,
+    /// Requests across those turns (a turn without a count is one request).
+    pub requests: u64,
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
@@ -21,7 +23,7 @@ pub struct Summary {
     pub unpriced_turns: u64,
     /// Turns where Lens had trimmed the listing.
     pub lens_turns: u64,
-    /// At least this many listing tokens were not sent (one request per turn).
+    /// At least this many listing tokens were not sent (every request carries the listing).
     pub lens_tokens_saved: u64,
     /// The saving priced at cache-read rates: the lowest it could be.
     pub lens_cost_saved: f64,
@@ -36,6 +38,8 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     });
     for t in turns {
         s.turns += 1;
+        let requests = t.requests.unwrap_or(1).max(1);
+        s.requests += requests;
         s.input += t.input;
         s.output += t.output;
         s.cache_read += t.cache_read;
@@ -47,7 +51,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         }
         if let (Some(before), Some(after)) = (t.lens_before, t.lens_after) {
             s.lens_turns += 1;
-            let saved = before.saturating_sub(after) / BYTES_PER_TOKEN;
+            let saved = before.saturating_sub(after) / BYTES_PER_TOKEN * requests;
             s.lens_tokens_saved += saved;
             if let Some(r) = rates {
                 s.lens_cost_saved += saved as f64 * r.cache_read / 1e6;
@@ -106,6 +110,7 @@ mod tests {
                 aborted: false,
                 lens_before: lens.map(|l| l.0),
                 lens_after: lens.map(|l| l.1),
+                requests: None,
             }),
         }
     }
@@ -147,6 +152,17 @@ mod tests {
 
         let b = summarise(&records, Some("/b"));
         assert_eq!((b.turns, b.lens_turns, b.unpriced_turns), (1, 0, 0));
+    }
+
+    #[test]
+    fn lens_savings_count_every_request_in_a_turn() {
+        let mut record = turn("/a", "claude-opus-5-5", 1, Some((30_000, 2_000)));
+        if let Event::Turn(t) = &mut record.event {
+            t.requests = Some(4);
+        }
+        let s = summarise(&[record], None);
+        assert_eq!(s.lens_tokens_saved, 4 * 28_000 / BYTES_PER_TOKEN);
+        assert_eq!(s.requests, 4);
     }
 
     #[test]

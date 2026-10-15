@@ -94,6 +94,9 @@ pub struct Turn {
     pub lens_before: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lens_after: Option<u64>,
+    /// Requests the turn sent to the model; each one carried the listing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests: Option<u64>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -272,6 +275,7 @@ mod tests {
             aborted: false,
             lens_before: Some(29_300),
             lens_after: Some(3_100),
+            requests: Some(4),
         });
         append(tmp.path(), seen.clone()).unwrap();
         append(tmp.path(), turn.clone()).unwrap();

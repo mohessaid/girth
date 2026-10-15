@@ -444,7 +444,10 @@ SKIP only when another provider is used.
 
     #[test]
     fn hints_are_short_word_bounded_and_drop_use_when() {
-        assert_eq!(hint("- a: Use when a video needs sound.\n"), Some("a video needs sound.".into()));
+        assert_eq!(
+            hint("- a: Use when a video needs sound.\n"),
+            Some("a video needs sound.".into())
+        );
         assert_eq!(hint("- a\n"), None);
         assert_eq!(hint("- a: \n"), None);
         let long = "- a: SEO and AEO best practices for metadata, Open Graph, sitemaps, robots.txt, hreflang.\nmore\n";

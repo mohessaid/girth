@@ -73,7 +73,15 @@ test('turn.complete records usage, with the Lens byte counts on main-loop turns'
   })
   on('prompt.attachment', ($, e) => ({ text: e.text }))
   on('turn.complete', () => ({ text: '' }))
+  on('turn.step', async function* ($, e) {
+    return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
   await $.prompt.attachment({ type: 'skill_listing', text: LISTING, origin: 'engine' })
+  for (const index of [0, 1]) {
+    const stream = $.turn.step({ turnId: 't1', index, model: 'claude-test', messageCount: 1 })
+    let step = await stream.next()
+    while (step.done !== true) step = await stream.next()
+  }
   await $.turn.complete({ turnId: 't1', answer: 'hi', durationMs: 5, isAborted: false, usage: USAGE })
   await $.turn.complete({ turnId: 't2', answer: 'hi', durationMs: 5, isAborted: false, agentId: 'sub-1', usage: USAGE })
   await $.turn.complete({ turnId: 't3', answer: '', durationMs: 1, isAborted: true, usage: null })
@@ -91,6 +99,7 @@ test('turn.complete records usage, with the Lens byte counts on main-loop turns'
     aborted: false,
     lens_before: LISTING.length,
     lens_after: REWRITTEN.length,
+    requests: 2,
   })
   const sub = JSON.parse(meters[1].stdin!)
   expect(sub.agent).toBe(true)

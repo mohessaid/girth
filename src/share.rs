@@ -282,7 +282,7 @@ mod tests {
                 rec(Event::Turn(crate::ledger::Turn {
                     project: project.clone(), model: heading.clone(), input: 1, output: 1,
                     cache_read: 0, cache_write: 0, agent: false, aborted: false,
-                    lens_before: None, lens_after: None,
+                    lens_before: None, lens_after: None, requests: None,
                 })),
             ];
             let json = serde_json::to_string(&payload(&records)).unwrap();

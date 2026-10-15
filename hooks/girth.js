@@ -10,6 +10,8 @@ const TIMEOUT_MS = 5000
 const rewrites = new Map()
 // Byte counts of the listing rewrite now in effect, for the meter.
 let lens = null
+// Requests per turn: every request re-sends the listing.
+const requests = new Map()
 
 function launcher($) {
   return $.plugin.root + '/skills/girth/scripts/girth'
@@ -42,6 +44,11 @@ export function register(on) {
     return next({ ...e, text: rewrite.text })
   }).catch(async ($, e, next) => next(e))
 
+  on('turn.step', async function* ($, e, next) {
+    requests.set(e.turnId, (requests.get(e.turnId) ?? 0) + 1)
+    return yield* next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     const usage = e.usage
@@ -60,6 +67,9 @@ export function register(on) {
       turn.lens_before = lens.before
       turn.lens_after = lens.after
     }
+    const sent = requests.get(e.turnId)
+    requests.delete(e.turnId)
+    if (sent) turn.requests = sent
     await $.process.run([launcher($), 'meter', 'record'], {
       stdin: JSON.stringify(turn),
       timeoutMs: TIMEOUT_MS,
