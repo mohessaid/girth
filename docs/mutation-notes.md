@@ -34,3 +34,10 @@ v0.5 (2026-10-15):
   - `described` is reported when nothing collapses (instructions and tools);
   - the 24-hour baseline window: its length and its exact edge.
 - **Equivalent (2 mutants):** the `lens::hint` guard noted above.
+
+## v0.7 (cache keeper and doctor), the mod
+- **Doctor (hand-mutation pass, 9 mutants):** 8 caught. Equivalent: dropping `breaks.delete(e.turnId)`. Turn ids are unique, so only memory is kept.
+- **Keeper (9 mutants):** 7 caught.
+  - Fixed: the `isAnswered` guard was a real bug. An aborted fork still spends tokens, so a ping is now recorded whenever usage comes back.
+  - Not observable in `claude plugin test`: `turn.start` → `keep.stop()`. A timer's `cancel()` runs client-side and emits no event. It is covered by the live run (`examples/cache/RESULTS.md`): a turn inside the interval cancels the pending ping.
+- **Rust (`keeper`, `price`, `ledger`):** 107 mutants, 6 unviable, **100 of 101 caught (99%)**. The survivor (another project's turn passing the project filter) is now covered by a test.

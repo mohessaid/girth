@@ -95,6 +95,11 @@ enum Command {
         #[command(subcommand)]
         what: MeterWhat,
     },
+    /// Keep the prompt cache warm through idle gaps (used by the plugin's mod).
+    Keeper {
+        #[command(subcommand)]
+        what: KeeperWhat,
+    },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
         skill: String,
@@ -187,7 +192,14 @@ enum LensKind {
 
 #[derive(Subcommand)]
 enum MeterWhat {
-    /// Append one turn's usage, read as JSON from stdin. Bad input is ignored.
+    /// Append one turn's usage, read as JSON from stdin, and print the keeper's
+    /// plan and any cache-break line as JSON. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum KeeperWhat {
+    /// Append one ping's usage, read as JSON from stdin. Bad input is ignored.
     Record,
 }
 
@@ -613,8 +625,16 @@ fn run_stats(
     let home = girth_home(ctx);
     let records = ledger::read(&home);
     let summary = girth::meter::summarise(&records, project.as_deref());
+    let keeper = girth::keeper::summarise(&records, project.as_deref());
+    let keeper_text = girth::keeper::render(&keeper);
     if meter && !json {
-        let text = girth::meter::render(&summary);
+        let mut text = girth::meter::render(&summary);
+        if !keeper_text.is_empty() {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(&keeper_text);
+        }
         if text.is_empty() {
             let _ = writeln!(*out, "meter: no turns recorded yet");
         } else {
@@ -640,6 +660,9 @@ fn run_stats(
         if summary.turns > 0 {
             value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
         }
+        if keeper.breaks > 0 || keeper.pings > 0 {
+            value["keeper"] = serde_json::to_value(&keeper).expect("keeper serialises");
+        }
         let _ = writeln!(
             out,
             "{}",
@@ -653,6 +676,9 @@ fn run_stats(
         let meter = girth::meter::render(&summary);
         if !meter.is_empty() {
             let _ = writeln!(*out, "{meter}");
+        }
+        if !keeper_text.is_empty() {
+            let _ = writeln!(*out, "{keeper_text}");
         }
     }
     ExitCode::SUCCESS
@@ -842,8 +868,45 @@ fn main() -> ExitCode {
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
             if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
+                let context = serde_json::from_str::<serde_json::Value>(&input)
+                    .ok()
+                    .and_then(|v| v.get("context").and_then(|c| c.as_u64()))
+                    .unwrap_or(0);
+                let home = girth_home(&ctx);
+                let settings = girth::keeper::settings(std::path::Path::new(&turn.project), &home);
+                let off = turn.agent || ctx.env.get("GIRTH_KEEPER").is_some_and(|v| v == "off");
+                let interval = ctx
+                    .env
+                    .get("GIRTH_KEEPER_INTERVAL_MS")
+                    .and_then(|v| v.parse().ok());
+                #[derive(serde::Serialize)]
+                struct Report {
+                    keeper: girth::keeper::Plan,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    line: Option<String>,
+                }
+                let report = Report {
+                    keeper: girth::keeper::plan(&settings, off, interval, context),
+                    line: girth::keeper::doctor_line(&turn),
+                };
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string(&report).expect("report serialises")
+                );
                 // Never disturb the session: a failed append is dropped.
-                let _ = ledger::append(&girth_home(&ctx), Event::Turn(turn));
+                let _ = ledger::append(&home, Event::Turn(turn));
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Keeper {
+            what: KeeperWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(ping) = serde_json::from_str::<ledger::Ping>(&input) {
+                let _ = ledger::append(&girth_home(&ctx), Event::Ping(ping));
             }
             ExitCode::SUCCESS
         }

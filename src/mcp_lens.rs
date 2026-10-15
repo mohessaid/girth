@@ -245,6 +245,7 @@ If the user's request might be served by one of these servers, call ToolSearch.
                 lens_after: None,
                 requests: None,
                 mcp: mcp.iter().map(|s| s.to_string()).collect(),
+                breaks: vec![],
             }),
         )
     }

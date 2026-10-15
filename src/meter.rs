@@ -112,6 +112,7 @@ mod tests {
                 lens_after: lens.map(|l| l.1),
                 requests: None,
                 mcp: vec![],
+                breaks: vec![],
             }),
         }
     }

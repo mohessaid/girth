@@ -614,12 +614,16 @@ fn meter_record_appends_a_turn_and_stats_reports_it() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");
     let turn = r#"{"project":"/work/a","model":"claude-opus-5-5","input":2,"output":7,"cache_read":8605,"cache_write":26631,"agent":false,"aborted":false,"lens_before":30027,"lens_after":2896}"#;
+    // Below the keeper's minimum context (no `context` given): no pings.
     home_cmd(&home)
         .args(["meter", "record"])
         .write_stdin(turn)
         .assert()
         .success()
-        .stdout("");
+        .stdout(format!(
+            "{{\"keeper\":{{\"pings\":0,\"interval_ms\":{}}}}}\n",
+            55 * 60 * 1000
+        ));
     let other = turn
         .replace("/work/a", "/work/b")
         .replace(r#","lens_before":30027,"lens_after":2896"#, "");
@@ -664,6 +668,108 @@ fn meter_record_appends_a_turn_and_stats_reports_it() {
     let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(json["meter"]["turns"], 2);
     assert_eq!(json["meter"]["lens_tokens_saved"], 6782);
+}
+
+#[test]
+fn meter_record_plans_the_keeper_and_names_cache_breaks() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let project = tmp.path().join("p");
+    std::fs::create_dir_all(&project).unwrap();
+    let p = project.to_str().unwrap();
+    let turn = format!(
+        r#"{{"project":"{p}","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":450000,"agent":false,"aborted":false,"context":450002,"breaks":[{{"lost":460000,"rewritten":450000,"idle_s":11520}}]}}"#
+    );
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn.clone())
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["pings"], 3);
+    assert_eq!(json["keeper"]["interval_ms"], 55 * 60 * 1000);
+    assert_eq!(
+        json["line"],
+        "girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
+    );
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert!(ledger.contains(r#""breaks":[{"lost":460000"#), "{ledger}");
+    assert!(!ledger.contains("context"), "{ledger}");
+    // Off by env, by config, and for a subagent's turn; the test interval override.
+    let off = home_cmd(&home)
+        .env("GIRTH_KEEPER", "off")
+        .args(["meter", "record"])
+        .write_stdin(turn.clone())
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&off.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["pings"], 0);
+    let agent = turn.replace(r#""agent":false"#, r#""agent":true"#);
+    let out = home_cmd(&home)
+        .env("GIRTH_KEEPER_INTERVAL_MS", "50")
+        .args(["meter", "record"])
+        .write_stdin(agent)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        (
+            json["keeper"]["pings"].as_u64(),
+            json["keeper"]["interval_ms"].as_u64()
+        ),
+        (Some(0), Some(50))
+    );
+    std::fs::create_dir_all(project.join(".girth")).unwrap();
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"keeper": {"enabled": false}}"#,
+    )
+    .unwrap();
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["pings"], 0);
+}
+
+#[test]
+fn keeper_record_appends_pings_and_stats_report_them() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let ping = r#"{"project":"/w","model":"claude-opus-5-5","input":3,"output":1,"read":200000,"write":0,"expected":200100}"#;
+    home_cmd(&home)
+        .args(["keeper", "record"])
+        .write_stdin(ping)
+        .assert()
+        .success()
+        .stdout("");
+    home_cmd(&home)
+        .args(["keeper", "record"])
+        .write_stdin("not json")
+        .assert()
+        .success()
+        .stdout("");
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":200000,"cache_write":10,"agent":false,"aborted":false}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--project", "/w"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("meter: keeper: 1 pings (≈ $0.04); 1 returns found the cache warm (up to ≈ $1.56 not re-written)"),
+        "{text}"
+    );
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["pings"], 1);
+    assert_eq!(json["keeper"]["warm_returns"], 1);
 }
 
 #[test]

@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-15
+
+### Added
+- **Keeper:** while a conversation sits idle, Girth pings it (a one-character fork) every 55 minutes, at most 3 times. Claude Code's prompt cache lives one hour, and a return after that writes the whole conversation again at twice the input price.
+  - On the author's machine, 62% of all cache writes were such returns. Simulated on that history, the keeper saves about $470 of rewrites for about $56 of pings (`examples/cache/analyze-breaks.py`).
+  - A ping that finds the cache already gone stops the pings. Pings only happen for conversations of 20,000 tokens or more.
+  - **Controls:** `keeper.enabled`, `keeper.max_pings` and `keeper.min_context` in `config.json`; `GIRTH_KEEPER=off`.
+- **Doctor:** a turn that re-wrote at least 20,000 cached tokens gets one line under the answer, saying whether the cache had expired (with the idle time) or the prompt had changed. `girth stats --meter` totals rewrites, pings and warm returns.
+- **Ledger:** `ping` events and `breaks` on turns, numbers only. `share` ignores both.
+- **New commands:** `girth keeper record`; `girth meter record` now prints the keeper plan and the doctor line as JSON for the mod.
+
+### Fixed
+- Meter priced cache writes at the 5-minute rate; Claude Code writes the 1-hour cache, at twice the input rate. Estimates now reproduce Claude Code's own cost figure (they were about 25% low).
+
+### Changed
+- The planned loop breaker was dropped on evidence. In 32,787 real tool calls, an identical failing call reached a third attempt twice (`examples/cache/analyze-loops.py`).
+
 ## [0.6.0] - 2026-10-15
 
 ### Added
@@ -109,7 +126,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mohessaid/girth/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mohessaid/girth/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mohessaid/girth/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mohessaid/girth/compare/v0.4.0...v0.4.1
