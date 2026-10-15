@@ -237,11 +237,7 @@ fn an_interrupted_download_leaves_nothing_behind() {
         .spawn()
         .unwrap();
     let bin_dir = tmp.path().join("install/skills/girth/bin");
-    let leftovers = || {
-        std::fs::read_dir(&bin_dir)
-            .map(|d| d.count())
-            .unwrap_or(0)
-    };
+    let leftovers = || std::fs::read_dir(&bin_dir).map(|d| d.count()).unwrap_or(0);
     let start = std::time::Instant::now();
     while leftovers() == 0 && start.elapsed().as_secs() < 5 {
         std::thread::sleep(std::time::Duration::from_millis(20));
