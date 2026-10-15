@@ -122,7 +122,16 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - an estimated cost;
 - how much Lens kept out of the prompt.
 
-The estimate prices cache writes at the 5-minute rate and leaves out background requests, such as session titles. In the A/B it came out about 25% below Claude Code's own figure. Meter data is never shared.
+The estimate prices cache writes at the 1-hour rate Claude Code uses, which reproduces Claude Code's own cost figure for the main conversation. It leaves out background requests, such as session titles. Meter data is never shared.
+
+**Keeper** stops you paying twice for the same conversation.
+- **The problem:** Claude Code caches your conversation for an hour. Come back later and the whole thing is written to the cache again, at twice the input price. On the author's machine, **62% of all cache writes** were these returns (`examples/cache/analyze-breaks.py` measures yours, locally).
+- **What Girth does:** while a conversation sits idle, Girth sends a one-character ping (a fork of the conversation) every 55 minutes, at most 3 times (about 3¾ hours of cover). A ping reads the cache instead of writing it, at about 1/40 of the cost of a rewrite at API prices. If a ping finds the cache already gone, the pings stop.
+  - On the author's history, this would have saved about $470 of rewrites for about $56 of pings.
+  - On a subscription the saving is in plan usage rather than dollars. Girth can't verify that plans weigh cache reads and writes the way the API prices them.
+- **Settings:** pings only happen for conversations of 20,000 tokens or more. Change that with `{"keeper": {"max_pings": 3, "min_context": 20000}}`. Turn it off with `{"keeper": {"enabled": false}}`, or `GIRTH_KEEPER=off` for one session.
+
+**Doctor:** when a turn had to write the cache again, Girth says why under the answer, for example: `girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)`. `girth stats --meter` totals these rewrites and the keeper's pings.
 
 ## Ledger & feedback
 

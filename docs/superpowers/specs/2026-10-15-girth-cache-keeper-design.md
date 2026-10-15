@@ -33,6 +33,8 @@
 
 Pass condition: warm's resume reads the context from the cache, and control's writes it again. **v0.7 ships only if the probe passes.**
 
+**Result (2026-10-15): passed.** Warm read 83,641 and wrote 1,840; control wrote 74,319. The return cost 81% less (`examples/cache/RESULTS.md`).
+
 ## 3. Keeper (the mod and `girth keeper`)
 - **After each main-conversation `turn.complete`,** the mod reads the keeper plan `{pings, interval_ms}` from the JSON that `girth meter record` already prints, so there is no extra process per turn. It then arms one timer (`$.clock.after`) per ping, each at `interval_ms` after the previous activity.
   - `turn.start` cancels the timers.

@@ -381,3 +381,112 @@ test('the doctor line is left out when there is none, and bad meter output chang
   stdout = JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line: 'girth: x' })
   expect((await $.turn.complete(done)).text).toBe('other mod\ngirth: x')
 })
+
+import { keeper, ping } from '../girth.js'
+
+const FORK_USAGE = { input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 200_000, cache_creation_input_tokens: 0 }
+
+test('a ping forks the conversation, records its usage, and says whether the cache was warm', async () => {
+  const recorded: any[] = []
+  const prompts: any[] = []
+  const deps = {
+    fork: async (o: any) => { prompts.push(o); return { isAnswered: true, text: '.', usage: FORK_USAGE } },
+    record: async (p: any) => { recorded.push(p) },
+  }
+  expect(await ping(deps, 200_100)).toBe(true)
+  expect(prompts[0].prompt).toMatch(/one character/)
+  expect(recorded).toEqual([{ input: 3, output: 1, read: 200_000, write: 0, expected: 200_100 }])
+  // Read under half of what was cached: the cache was already gone.
+  expect(await ping(deps, 400_001)).toBe(false)
+  expect(recorded.length).toBe(2)
+  // Exactly half still counts as warm.
+  expect(await ping(deps, 400_000)).toBe(true)
+  // An aborted fork still spent tokens: recorded, and judged by what it read.
+  const aborted = { isAnswered: false, reason: 'aborted', usage: { ...FORK_USAGE, cache_read_input_tokens: 0 } }
+  expect(await ping({ ...deps, fork: async () => aborted }, 10)).toBe(false)
+  expect(recorded.length).toBe(4)
+  // No usage, or an error: nothing recorded, not warm.
+  expect(await ping({ ...deps, fork: async () => ({ isAnswered: false, reason: 'nothing-to-fork' }) }, 1)).toBe(false)
+  expect(await ping({ ...deps, fork: async () => { throw new Error('refused') } }, 1)).toBe(false)
+  expect(recorded.length).toBe(4)
+})
+
+function fakeClock() {
+  const timers: { ms: number; fn: () => Promise<void>; cancelled: boolean }[] = []
+  return {
+    timers,
+    after: (ms: number, fn: () => Promise<void>) => {
+      const t = { ms, fn, cancelled: false }
+      timers.push(t)
+      return { cancel: () => { t.cancelled = true } }
+    },
+  }
+}
+
+test('the keeper pings one at a time, stops after the plan or a miss, and stop() cancels', async () => {
+  const clock = fakeClock()
+  let read = 200_000
+  const recorded: any[] = []
+  const k = keeper({
+    after: clock.after,
+    fork: async () => ({ isAnswered: true, text: '.', usage: { ...FORK_USAGE, cache_read_input_tokens: read } }),
+    record: async (p: any) => { recorded.push(p) },
+  })
+  k.start({ pings: 2, interval_ms: 3_300_000 }, 200_000)
+  expect(clock.timers.map((t) => t.ms)).toEqual([3_300_000])
+  await clock.timers[0].fn()
+  expect(clock.timers.length).toBe(2)
+  await clock.timers[1].fn()
+  // Two pings planned, two sent: no third timer.
+  expect(clock.timers.length).toBe(2)
+  expect(recorded.length).toBe(2)
+  // A miss ends the idle period's pings.
+  k.start({ pings: 3, interval_ms: 10 }, 200_000)
+  read = 1_000
+  await clock.timers[2].fn()
+  expect(clock.timers.length).toBe(3)
+  // Starting again, or stopping, cancels the pending timer.
+  read = 200_000
+  k.start({ pings: 3, interval_ms: 10 }, 200_000)
+  k.start({ pings: 3, interval_ms: 10 }, 200_000)
+  expect(clock.timers[3].cancelled).toBe(true)
+  k.stop()
+  expect(clock.timers[4].cancelled).toBe(true)
+  // A zero plan arms nothing.
+  k.start({ pings: 0, interval_ms: 10 }, 200_000)
+  expect(clock.timers.length).toBe(5)
+})
+
+// The harness can't observe a timer's cancel() (it runs client-side); the
+// keeper test above covers stop(), and turn.start calls it.
+test('main turns arm the keeper with the meter plan', async ($, on) => {
+  const armed: number[] = []
+  let pings = 3
+  on('clock.now', () => ({ value: 0 }))
+  on('clock.after', ($, e) => {
+    armed.push(e.ms)
+    return { value: {} }
+  })
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings, interval_ms: 3_300_000 } }), stderr: '' } }))
+  on('turn.complete', () => ({ text: '' }))
+  on('turn.start', ($, e) => e)
+  on('turn.step', async function* ($, e) {
+    return { turnId: e.turnId, index: 0, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: step('claude-opus-5-5', 2, 100_000, 20_000) }
+  })
+  await drive($, { turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(armed).toEqual([3_300_000])
+  // A subagent's turn doesn't arm.
+  await $.turn.start({ turnId: 's', agentId: 'sub-1', prompt: 'x' })
+  await $.turn.complete({ turnId: 's', answer: 'a', durationMs: 1, isAborted: false, agentId: 'sub-1', usage: USAGE })
+  expect(armed.length).toBe(1)
+  // A new main turn re-arms after it completes.
+  await $.turn.start({ turnId: 't2', prompt: 'x' })
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(armed).toEqual([3_300_000, 3_300_000])
+  // A zero plan arms nothing.
+  pings = 0
+  await $.turn.complete({ turnId: 't3', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(armed.length).toBe(2)
+})

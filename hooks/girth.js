@@ -6,6 +6,8 @@
 // - X-ray: what the last request was made of.
 // - Doctor: a request that wrote the prompt cache again (after an idle gap or
 //   a changed prompt) is named under the answer.
+// - Keeper: while the conversation sits idle, a ping (a fork of it) reads the
+//   cache before its hour runs out, so coming back doesn't write it all again.
 // The girth binary makes every decision, and every hook fails open: on any
 // error Claude Code carries on unchanged.
 
@@ -38,9 +40,62 @@ let model = ''
 const last = new Map()
 const breaks = new Map()
 let context = 0
+// Keeper: what the next ping should read (the last main request's read + write).
+let expected = 0
+let keep = null
 // A break re-wrote at least this much (and 20% of what was cached), and the
 // prompt didn't shrink below 80% of it (compaction or /clear).
 const BREAK_MIN = 5000
+
+const PING_PROMPT = 'Reply with one character: .'
+
+/** One ping: fork the conversation, record the usage; true when the cache was warm. */
+export async function ping(deps, expected) {
+  let r
+  try {
+    r = await deps.fork({ prompt: PING_PROMPT })
+  } catch {
+    return false
+  }
+  const u = r?.usage
+  if (!u) return false
+  const read = u.cache_read_input_tokens ?? 0
+  await deps.record({
+    input: u.input_tokens ?? 0,
+    output: u.output_tokens ?? 0,
+    read,
+    write: u.cache_creation_input_tokens ?? 0,
+    expected,
+  })
+  return read >= expected / 2
+}
+
+/** Pings one at a time per the plan; a miss or stop() ends them. */
+export function keeper(deps) {
+  let timer = null
+  return {
+    stop() {
+      timer?.cancel()
+      timer = null
+    },
+    start(plan, expected) {
+      this.stop()
+      let left = plan.pings
+      const next = () => {
+        if (left <= 0) {
+          timer = null
+          return
+        }
+        left -= 1
+        timer = deps.after(plan.interval_ms, async () => {
+          if (await ping(deps, expected)) next()
+          else timer = null
+        })
+      }
+      next()
+    },
+  }
+}
 
 function launcher($) {
   return $.plugin.root + '/skills/girth/scripts/girth'
@@ -133,6 +188,11 @@ export function register(on) {
     return next(e)
   }).catch(async ($, e, next) => next(e))
 
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) keep?.stop()
+    return next(e)
+  }).catch(async ($, e, next) => next(e))
+
   on('turn.step', async function* ($, e, next) {
     requests.set(e.turnId, (requests.get(e.turnId) ?? 0) + 1)
     if (e.agentId !== undefined) return yield* next(e)
@@ -156,6 +216,7 @@ export function register(on) {
         }
         last.set(u.model, { at: await $.clock.now(), read, write })
         context = total
+        expected = read + write
       }
     } catch {
       // Observing only: the request's result goes on unchanged.
@@ -208,6 +269,19 @@ export function register(on) {
       report = JSON.parse(run.stdout)
     } catch {
       return result
+    }
+    if (e.agentId === undefined && report.keeper?.pings > 0 && expected > 0) {
+      const cwd = turn.project
+      keep ??= keeper({
+        after: (ms, fn) => $.clock.after(ms, fn),
+        fork: (o) => $.model.fork(o),
+        record: (p) =>
+          $.process.run([launcher($), 'keeper', 'record'], {
+            stdin: JSON.stringify({ project: cwd, model: usage.model, ...p }),
+            timeoutMs: TIMEOUT_MS,
+          }),
+      })
+      keep.start(report.keeper, expected)
     }
     if (typeof report.line === 'string' && e.agentId === undefined) {
       const text = result?.text ? result.text + '\n' + report.line : report.line

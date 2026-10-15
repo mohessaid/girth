@@ -1,5 +1,5 @@
 {
-  "description": "Girth: record skill use in the local ledger (~/.girth/ledger.jsonl); with Claude Code 2.1.287+, the girth.js mod adds Lens (a per-project skill listing) and Meter (per-turn token usage). Never blocks or fails the session.",
+  "description": "Girth: record skill use in the local ledger (~/.girth/ledger.jsonl); with Claude Code 2.1.287+, the girth.js mod adds Lens (per-project skill, MCP and tool listings), Meter (per-turn token usage), the cache doctor and the keeper (keeps the prompt cache warm while idle). Never blocks or fails the session.",
   "hooks": {
     "PostToolUse": [
       {
