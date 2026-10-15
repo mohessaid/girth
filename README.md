@@ -103,13 +103,16 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 
-## Lens & Meter
+## Lens, X-ray & Meter
 
-**Lens** trims the skill list Claude reads on every request.
+**Lens** trims what Claude Code adds to every request: the skill list, MCP server instructions and the deferred-tools list.
 - **Kept in full:** the skills this project uses, skills you used anywhere in the last 30 days, skills installed in the last 14 days, your crafted `girth-*` skills, the project's own skills, and anything you pin.
 - **Shortened:** every other skill collapses into one line, as its name plus a short hint, so it can still be found and invoked. Nothing is uninstalled and no settings change.
-- **Settings:** pin skills with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session.
+- **MCP servers** this project doesn't use (going by your tool calls) collapse to one line each. Their tools stay findable through ToolSearch. The first time Claude calls a collapsed server's tool, Girth hands it that server's instructions before the call runs, so nothing the server asks for is lost.
+- **Settings:** pin skills (or server ids such as `claude_ai_Figma`) with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session. `GIRTH_LENS_KINDS=skills` limits it to the skill list.
 - **Limit:** on machines where an organization manages Claude Code, a plugin you install yourself can't rewrite the list, so Lens stays off there.
+
+**X-ray:** run `/girth-xray` to see what your last request was made of, part by part, with each part's share, what Lens removed and what it costs. Tool parameter schemas aren't visible to plugins, so they aren't counted.
 
 **Meter** records each turn's real token usage in your local ledger (numbers and a model id only). Run `/girth-meter` or `girth stats --meter` to see:
 - your usage for the project;
