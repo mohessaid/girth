@@ -602,3 +602,76 @@ fn lens_can_be_turned_off_and_pins_names() {
     // alpha and beta pinned: only gamma would collapse, so nothing changes.
     lens(&home, &project, &[]).success().stdout(LISTING);
 }
+
+fn home_cmd(home: &std::path::Path) -> Command {
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", home);
+    cmd
+}
+
+#[test]
+fn meter_record_appends_a_turn_and_stats_reports_it() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = r#"{"project":"/work/a","model":"claude-opus-5-5","input":2,"output":7,"cache_read":8605,"cache_write":26631,"agent":false,"aborted":false,"lens_before":30027,"lens_after":2896}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success()
+        .stdout("");
+    let other = turn
+        .replace("/work/a", "/work/b")
+        .replace(r#","lens_before":30027,"lens_after":2896"#, "");
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(other)
+        .assert()
+        .success();
+    // Bad input is ignored quietly: the hook must never disturb a session.
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin("not json")
+        .assert()
+        .success()
+        .stdout("");
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 2, "{ledger}");
+
+    let out = home_cmd(&home).args(["stats"]).assert().success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("meter: 2 turns · input 4 · output 14"),
+        "{text}"
+    );
+    assert!(
+        text.contains("meter: Lens trimmed the skill listing in 1 turns: ≥ 6,782 tokens not sent"),
+        "{text}"
+    );
+
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--project", "/work/b"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(text.starts_with("meter: 1 turns · input 2"), "{text}");
+    assert!(
+        !text.contains("Lens") && !text.contains("Girth ledger"),
+        "{text}"
+    );
+
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["meter"]["turns"], 2);
+    assert_eq!(json["meter"]["lens_tokens_saved"], 6782);
+}
+
+#[test]
+fn stats_meter_without_turns_says_so() {
+    let tmp = TempDir::new().unwrap();
+    home_cmd(&tmp.path().join("home"))
+        .args(["stats", "--meter"])
+        .assert()
+        .success()
+        .stdout("meter: no turns recorded yet\n");
+}

@@ -69,11 +69,22 @@ enum Command {
         #[arg(value_enum)]
         action: ShareAction,
     },
-    /// Summarise the local ledger: crafted skills, uses, removals, ratings.
+    /// Summarise the local ledger: crafted skills, uses, removals, ratings, token usage.
     Stats {
         /// Print JSON.
         #[arg(long)]
         json: bool,
+        /// Print only the meter lines (token usage and Lens savings).
+        #[arg(long)]
+        meter: bool,
+        /// Limit the meter to one project dir.
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Token usage per turn (used by the plugin's mod).
+    Meter {
+        #[command(subcommand)]
+        what: MeterWhat,
     },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
@@ -156,6 +167,12 @@ enum RecordWhat {
         #[arg(long)]
         skill: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum MeterWhat {
+    /// Append one turn's usage, read as JSON from stdin. Bad input is ignored.
+    Record,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -537,6 +554,61 @@ fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut Strin
     ExitCode::SUCCESS
 }
 
+fn run_stats(
+    json: bool,
+    meter: bool,
+    project: Option<String>,
+    ctx: &Context,
+    out: &mut String,
+) -> ExitCode {
+    let home = girth_home(ctx);
+    let records = ledger::read(&home);
+    let summary = girth::meter::summarise(&records, project.as_deref());
+    if meter && !json {
+        let text = girth::meter::render(&summary);
+        if text.is_empty() {
+            let _ = writeln!(*out, "meter: no turns recorded yet");
+        } else {
+            let _ = writeln!(*out, "{text}");
+        }
+        return ExitCode::SUCCESS;
+    }
+    let stats = girth::stats::compute(&records, ledger::sharing(&home));
+    let (personal, project) = taste_tiers(&home, &ctx.cwd);
+    let domains = taste::domains(&personal, &project);
+    let taste_counts = (!domains.is_empty()).then(|| {
+        (
+            domains.len(),
+            domains.iter().map(|d| d.rules).sum::<usize>(),
+            domains.iter().map(|d| d.made).sum::<usize>(),
+        )
+    });
+    if json {
+        let mut value = serde_json::to_value(&stats).expect("stats serialise");
+        if let Some((d, r, m)) = taste_counts {
+            value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
+        }
+        if summary.turns > 0 {
+            value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
+        }
+        let _ = writeln!(
+            out,
+            "{}",
+            serde_json::to_string_pretty(&value).expect("stats serialise")
+        );
+    } else {
+        let _ = writeln!(*out, "{}", girth::stats::render(&stats));
+        if let Some((d, r, m)) = taste_counts {
+            let _ = writeln!(*out, "taste: {d} domains, {r} rules, {m} made");
+        }
+        let meter = girth::meter::render(&summary);
+        if !meter.is_empty() {
+            let _ = writeln!(*out, "{meter}");
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let ctx = Context::from_process();
@@ -693,36 +765,23 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::Stats { json } => {
-            let home = girth_home(&ctx);
-            let stats = girth::stats::compute(&ledger::read(&home), ledger::sharing(&home));
-            let (personal, project) = taste_tiers(&home, &ctx.cwd);
-            let domains = taste::domains(&personal, &project);
-            let taste_counts = (!domains.is_empty()).then(|| {
-                (
-                    domains.len(),
-                    domains.iter().map(|d| d.rules).sum::<usize>(),
-                    domains.iter().map(|d| d.made).sum::<usize>(),
-                )
-            });
-            if json {
-                let mut value = serde_json::to_value(&stats).expect("stats serialise");
-                if let Some((d, r, m)) = taste_counts {
-                    value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
-                }
-                let _ = writeln!(
-                    out,
-                    "{}",
-                    serde_json::to_string_pretty(&value).expect("stats serialise")
-                );
-            } else {
-                let _ = writeln!(out, "{}", girth::stats::render(&stats));
-                if let Some((d, r, m)) = taste_counts {
-                    let _ = writeln!(out, "taste: {d} domains, {r} rules, {m} made");
-                }
+        Command::Meter {
+            what: MeterWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
+                // Never disturb the session: a failed append is dropped.
+                let _ = ledger::append(&girth_home(&ctx), Event::Turn(turn));
             }
             ExitCode::SUCCESS
         }
+        Command::Stats {
+            json,
+            meter,
+            project,
+        } => run_stats(json, meter, project, &ctx, &mut out),
         Command::Feedback {
             skill,
             rating,

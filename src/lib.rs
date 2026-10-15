@@ -6,6 +6,8 @@ pub mod frontmatter;
 pub mod ledger;
 pub mod lens;
 pub mod measure;
+pub mod meter;
+pub mod price;
 pub mod record;
 pub mod search;
 pub mod sections;
