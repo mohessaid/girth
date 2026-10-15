@@ -58,3 +58,17 @@ Ranked by how much each lowers cost at equal quality, how defensible it is, and 
 6. **Later, the next layer up:** routing models per step (`turn.step`), and Radar.
 
 **Recommendation:** build 1 and 2 together as v0.5, as a mod inside the existing plugin. The mod stays thin JS; the decisions come from the Rust binary (`girth lens --json`), computed once per session.
+
+## 6. Probe: what the skill listing actually costs (measured 2026-10-15)
+An observe-only mod hooked `prompt.attachment`, `prompt.section` and `turn.step` in a real headless session (Claude Code 2.1.300, the author's real configuration, prompt "say hi in two words").
+
+- **Size:** the `skill_listing` attachment held **74 skills in 29.3 KB, about 7.3K tokens**. It was the largest single attachment; the next were the MCP instructions (13.9 KB) and the deferred-tools delta (7.1 KB).
+- **Truncation:** the last entries are names only, so Claude Code already drops descriptions once the listing runs past its budget. Those skills are listed but undescribed, which makes them unlikely to trigger.
+- **Share of the prompt:** the request's input was about 35.2K tokens (8,605 read from cache plus 26,631 written to it), so the listing is about 21% of a minimal prompt.
+- **Money at Opus 5.5 prices** (cache write $5/Mtok, cache read $0.40/Mtok):
+  - about $0.037 per session to write the listing to the cache;
+  - about $0.003 per turn to read it back;
+  - each subagent and each cache expiry pays the write again.
+
+  The direct dollar saving is modest per turn. The larger effects are focus (SkillsBench: 4+ skills degrade results) and triggering: undescribed or crowded skills misfire or never fire.
+- **Constraint found:** `claude plugin validate` reports that `prompt.attachment` and `prompt.section` hooks do **not run for plugins a person installs** on machines where an organization manages Claude Code. Lens works for individuals, not managed enterprise seats, unless the org lists it.
