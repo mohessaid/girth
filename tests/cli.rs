@@ -514,3 +514,164 @@ fn show_prints_overview_or_only_the_requested_sections() {
         .code(1)
         .stderr(predicate::str::contains("no SKILL.md"));
 }
+
+const LISTING: &str = "The following skills are available for use with the Skill tool:\n\n\
+- girth:girth: Use when a task needs know-how.\n\
+- alpha: Use when alpha.\n\
+- beta: Use when beta.\n\
+- plug:gamma: Use when gamma.\n";
+
+fn lens(
+    home: &std::path::Path,
+    project: &std::path::Path,
+    args: &[&str],
+) -> assert_cmd::assert::Assert {
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", home)
+        .env_remove("GIRTH_LENS")
+        .arg("lens")
+        .arg("--project")
+        .arg(project)
+        .args(args)
+        .write_stdin(LISTING)
+        .assert()
+}
+
+#[test]
+fn lens_collapses_unused_skills_and_records_the_baseline_once() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(&project).unwrap();
+    let out = lens(&home, &project, &[]).success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("- girth:girth: Use when a task needs know-how.\n"),
+        "{text}"
+    );
+    assert!(text.ends_with("- Also installed (short hints; ask `girth search \"<need>\"` which fits): alpha (alpha.); beta (beta.); plug:gamma (gamma.)\n"), "{text}");
+    assert!(!text.contains("Use when beta"), "{text}");
+    lens(&home, &project, &[]).success().stdout(text);
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 1, "{ledger}");
+    assert!(ledger.contains(r#""kind":"seen""#) && ledger.contains("plug:gamma"));
+}
+
+#[test]
+fn lens_json_reports_names_and_bytes() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(&project).unwrap();
+    let out = lens(&home, &project, &["--json"]).success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["described"], serde_json::json!(["girth:girth"]));
+    assert_eq!(
+        json["collapsed"],
+        serde_json::json!(["alpha", "beta", "plug:gamma"])
+    );
+    assert_eq!(json["bytes_before"], LISTING.len());
+    assert_eq!(json["bytes_after"], json["text"].as_str().unwrap().len());
+}
+
+#[test]
+fn lens_can_be_turned_off_and_pins_names() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(project.join(".girth")).unwrap();
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", &home)
+        .env("GIRTH_LENS", "off")
+        .args(["lens", "--project"])
+        .arg(&project)
+        .write_stdin(LISTING)
+        .assert()
+        .success()
+        .stdout(LISTING);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"lens": {"enabled": false}}"#,
+    )
+    .unwrap();
+    lens(&home, &project, &[]).success().stdout(LISTING);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"lens": {"keep": ["alpha"]}}"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("config.json"), r#"{"lens": {"keep": ["beta"]}}"#).unwrap();
+    // alpha and beta pinned: only gamma would collapse, so nothing changes.
+    lens(&home, &project, &[]).success().stdout(LISTING);
+}
+
+fn home_cmd(home: &std::path::Path) -> Command {
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", home);
+    cmd
+}
+
+#[test]
+fn meter_record_appends_a_turn_and_stats_reports_it() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = r#"{"project":"/work/a","model":"claude-opus-5-5","input":2,"output":7,"cache_read":8605,"cache_write":26631,"agent":false,"aborted":false,"lens_before":30027,"lens_after":2896}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success()
+        .stdout("");
+    let other = turn
+        .replace("/work/a", "/work/b")
+        .replace(r#","lens_before":30027,"lens_after":2896"#, "");
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(other)
+        .assert()
+        .success();
+    // Bad input is ignored quietly: the hook must never disturb a session.
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin("not json")
+        .assert()
+        .success()
+        .stdout("");
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 2, "{ledger}");
+
+    let out = home_cmd(&home).args(["stats"]).assert().success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("meter: 2 turns · input 4 · output 14"),
+        "{text}"
+    );
+    assert!(
+        text.contains("meter: Lens trimmed the skill listing in 1 turns: ≥ 6,782 tokens not sent"),
+        "{text}"
+    );
+
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--project", "/work/b"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(text.starts_with("meter: 1 turns · input 2"), "{text}");
+    assert!(
+        !text.contains("Lens") && !text.contains("Girth ledger"),
+        "{text}"
+    );
+
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["meter"]["turns"], 2);
+    assert_eq!(json["meter"]["lens_tokens_saved"], 6782);
+}
+
+#[test]
+fn stats_meter_without_turns_says_so() {
+    let tmp = TempDir::new().unwrap();
+    home_cmd(&tmp.path().join("home"))
+        .args(["stats", "--meter"])
+        .assert()
+        .success()
+        .stdout("meter: no turns recorded yet\n");
+}

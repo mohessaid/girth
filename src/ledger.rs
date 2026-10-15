@@ -69,6 +69,34 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         note: Option<String>,
     },
+    /// Skill names Lens saw in a listing for the first time; the first one is the baseline.
+    Seen {
+        names: Vec<String>,
+    },
+    /// One turn's token usage, as Claude Code reported it.
+    Turn(Turn),
+}
+
+/// Token usage for one turn. Numbers and a model id only; never text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Turn {
+    pub project: String,
+    pub model: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// A subagent's turn rather than the main loop's.
+    pub agent: bool,
+    pub aborted: bool,
+    /// Listing bytes before and after Lens rewrote it, when it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lens_before: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lens_after: Option<u64>,
+    /// Requests the turn sent to the model; each one carried the listing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests: Option<u64>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -228,6 +256,42 @@ mod tests {
         let text = std::fs::read_to_string(home.join(LEDGER_FILE)).unwrap();
         assert!(text.lines().next().unwrap().contains(r#""kind":"use""#));
         assert!(text.ends_with('\n'));
+    }
+
+    #[test]
+    fn seen_and_turn_events_round_trip() {
+        let tmp = TempDir::new().unwrap();
+        let seen = Event::Seen {
+            names: vec!["a".into(), "plug:b".into()],
+        };
+        let turn = Event::Turn(Turn {
+            project: "/p".into(),
+            model: "claude-opus-5-5".into(),
+            input: 2,
+            output: 7,
+            cache_read: 8605,
+            cache_write: 26631,
+            agent: false,
+            aborted: false,
+            lens_before: Some(29_300),
+            lens_after: Some(3_100),
+            requests: Some(4),
+        });
+        append(tmp.path(), seen.clone()).unwrap();
+        append(tmp.path(), turn.clone()).unwrap();
+        let events: Vec<Event> = read(tmp.path()).into_iter().map(|r| r.event).collect();
+        assert_eq!(events, [seen, turn]);
+        let text = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(text.contains(r#""kind":"seen""#) && text.contains(r#""kind":"turn""#));
+        // A turn line without lens fields still parses.
+        std::fs::write(
+            tmp.path().join(LEDGER_FILE),
+            r#"{"v":1,"ts":1,"kind":"turn","project":"/p","model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"agent":true,"aborted":false}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(&read(tmp.path())[0].event, Event::Turn(t) if t.lens_before.is_none() && t.agent)
+        );
     }
 
     #[test]

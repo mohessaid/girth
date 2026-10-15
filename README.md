@@ -28,7 +28,7 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 <p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
 
-Status: v0.4, early and measured. Design: `docs/superpowers/specs/`.
+Status: v0.5, early and measured. Design: `docs/superpowers/specs/`.
 
 Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
 
@@ -43,6 +43,18 @@ Independent research points the same way: in [SkillsBench](https://arxiv.org/abs
 | **Girth (crafts once, then reuses)** | $0.22 | **$0.09–0.10** | **$0.599 (−34%)** |
 
 Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
+
+**Lens: the same task with and without a per-project skill listing** (2026-10-15, the author's real setup of 74 skills, claude-sonnet-5-5, 3 runs per arm):
+
+| | Lens off | Lens on |
+|---|---|---|
+| Skill listing sent with every request | 30,027 B | 7,869 B (**−74%**) |
+| Cost per run (mean) | $0.166 | $0.135 (**−19%**) |
+| Fresh prompt tokens (input + cache write) | 32.0K | 24.7K (**−23%**) |
+| Matching skill still invoked (it was collapsed by Lens) | 3/3 | 3/3 |
+| Metadata checks passed | 18/18 | 18/18 |
+
+See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose a needed skill.
 
 **One session, before and after crafting** (2026-10-14):
 
@@ -75,8 +87,11 @@ npx skills add mohessaid/girth
 | Craft, reuse, `show`, `fetch`, `taste`, `made` | ✓ | ✓ |
 | Usage ledger (`girth stats` knows which skills you actually use) | ✓ | crafts only |
 | Taste delivered automatically when a domain skill loads | ✓ | ask *"girth taste &lt;domain&gt;"* |
+| Lens and Meter (Claude Code 2.1.287 or later) | ✓ | — |
 
-The plugin registers a `PostToolUse` hook on skill loads (about 1 ms). A skills-CLI install doesn't register it, so that part is plugin-only.
+The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Claude Code 2.1.287 or later, a small mod (`hooks/girth.js`) for Lens and Meter. A skills-CLI install registers neither, so those parts are plugin-only.
+
+**Updating.** Claude Code auto-updates only its official marketplaces. To keep Girth current, open `/plugin` → **Marketplaces** → `girth` → **Enable auto-update**, or run `claude plugin update girth@girth`. A session that's already open keeps the version it loaded until you run `/reload-plugins`. Your ledger and taste live in `~/.girth`, shared by every session and version.
 
 You don't need Rust. The first time the skill runs, it downloads (one time, about 2 MB, with a timeout) the prebuilt `girth` binary for your platform from [Releases](https://github.com/mohessaid/girth/releases) and verifies it against `SHA256SUMS` before running it. Builds exist for Linux x86_64 and ARM64 (static musl) and macOS (Intel and Apple Silicon). To use your own build, set `GIRTH_BIN`.
 
@@ -87,6 +102,21 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
+
+## Lens & Meter
+
+**Lens** trims the skill list Claude reads on every request.
+- **Kept in full:** the skills this project uses, skills you used anywhere in the last 30 days, skills installed in the last 14 days, your crafted `girth-*` skills, the project's own skills, and anything you pin.
+- **Shortened:** every other skill collapses into one line, as its name plus a short hint, so it can still be found and invoked. Nothing is uninstalled and no settings change.
+- **Settings:** pin skills with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session.
+- **Limit:** on machines where an organization manages Claude Code, a plugin you install yourself can't rewrite the list, so Lens stays off there.
+
+**Meter** records each turn's real token usage in your local ledger (numbers and a model id only). Run `/girth-meter` or `girth stats --meter` to see:
+- your usage for the project;
+- an estimated cost;
+- how much Lens kept out of the prompt.
+
+The estimate prices cache writes at the 5-minute rate and leaves out background requests, such as session titles. In the A/B it came out about 25% below Claude Code's own figure. Meter data is never shared.
 
 ## Ledger & feedback
 
@@ -118,18 +148,20 @@ target/release/girth taste add launch-video "End on the logo with the URL."
 target/release/girth made launch-video palette=paper-ink music=lo-fi
 target/release/girth taste show launch-video                    # rules + recent choices
 target/release/girth fetch obra/superpowers/skills              # shallow, untrusted, never executed
+target/release/girth lens --project . < listing.txt             # what Lens would send for a skill listing
+target/release/girth stats --meter --project .                  # token usage and Lens savings
 ```
 
 Skill roots resolve in this order:
 1. `--roots`
 2. `GIRTH_SKILL_ROOTS` (colon-separated, POSIX style)
 3. `.girth/config.json` (`{"roots": [...], "output": "..."}`)
-4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`
+4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`, and the `skills` folders of installed Claude Code plugins
 
 ## Development
 
 ```bash
-make check    # fmt, clippy, tests (unit, property, CLI, launcher), coverage ≥ 90%, plugin validate
+make check    # fmt, clippy, tests (unit, property, CLI, launcher), coverage ≥ 90%, plugin validate, mod tests
 make mutate   # cargo-mutants
 make evals    # claude plugin eval on a staged dist copy (spends model credits, capped)
 cargo deny check   # advisories, licenses, sources

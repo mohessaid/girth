@@ -49,6 +49,16 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Rewrite a Claude Code skill listing (stdin) for this project: keep the
+    /// descriptions it needs, collapse the rest into one line of names.
+    Lens {
+        /// The project dir (default: cwd).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Print JSON: text, described, collapsed, bytes_before, bytes_after.
+        #[arg(long)]
+        json: bool,
+    },
     /// Record an event in the local ledger (used by the plugin hook).
     Record {
         #[command(subcommand)]
@@ -59,11 +69,22 @@ enum Command {
         #[arg(value_enum)]
         action: ShareAction,
     },
-    /// Summarise the local ledger: crafted skills, uses, removals, ratings.
+    /// Summarise the local ledger: crafted skills, uses, removals, ratings, token usage.
     Stats {
         /// Print JSON.
         #[arg(long)]
         json: bool,
+        /// Print only the meter lines (token usage and Lens savings).
+        #[arg(long)]
+        meter: bool,
+        /// Limit the meter to one project dir.
+        #[arg(long)]
+        project: Option<String>,
+    },
+    /// Token usage per turn (used by the plugin's mod).
+    Meter {
+        #[command(subcommand)]
+        what: MeterWhat,
     },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
@@ -146,6 +167,12 @@ enum RecordWhat {
         #[arg(long)]
         skill: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum MeterWhat {
+    /// Append one turn's usage, read as JSON from stdin. Bad input is ignored.
+    Record,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -471,12 +498,124 @@ fn emit(out: &str) {
     }
 }
 
+fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut String) -> ExitCode {
+    use std::io::Read;
+    let mut text = String::new();
+    let _ = std::io::stdin().read_to_string(&mut text);
+    let project_dir = project.unwrap_or_else(|| ctx.cwd.clone());
+    let home = girth_home(ctx);
+    let (enabled, keep) = girth::lens::settings(&project_dir, &home);
+    let off = ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
+    let records = ledger::read(&home);
+    let rewrite = if off || !enabled {
+        girth::lens::Rewrite {
+            text: text.clone(),
+            described: Vec::new(),
+            collapsed: Vec::new(),
+        }
+    } else {
+        let names: Vec<String> = girth::lens::parse(&text)
+            .into_iter()
+            .filter_map(|i| match i {
+                girth::lens::Item::Entry { name, .. } => Some(name),
+                girth::lens::Item::Raw(_) => None,
+            })
+            .collect();
+        let unseen = girth::lens::unseen(&records, &names);
+        let project = project_dir.display().to_string();
+        let rewrite = girth::lens::rewrite(
+            &text,
+            &girth::lens::Inputs {
+                records: &records,
+                project: &project,
+                project_dir: &project_dir,
+                keep: &keep,
+                now: ledger::now(),
+            },
+        );
+        if !unseen.is_empty() {
+            // Never disturb the session: a failed append is dropped.
+            let _ = ledger::append(&home, Event::Seen { names: unseen });
+        }
+        rewrite
+    };
+    if json {
+        let payload = serde_json::json!({
+            "text": rewrite.text,
+            "described": rewrite.described,
+            "collapsed": rewrite.collapsed,
+            "bytes_before": text.len(),
+            "bytes_after": rewrite.text.len(),
+        });
+        let _ = writeln!(out, "{payload}");
+    } else {
+        out.push_str(&rewrite.text);
+    }
+    ExitCode::SUCCESS
+}
+
+fn run_stats(
+    json: bool,
+    meter: bool,
+    project: Option<String>,
+    ctx: &Context,
+    out: &mut String,
+) -> ExitCode {
+    let home = girth_home(ctx);
+    let records = ledger::read(&home);
+    let summary = girth::meter::summarise(&records, project.as_deref());
+    if meter && !json {
+        let text = girth::meter::render(&summary);
+        if text.is_empty() {
+            let _ = writeln!(*out, "meter: no turns recorded yet");
+        } else {
+            let _ = writeln!(*out, "{text}");
+        }
+        return ExitCode::SUCCESS;
+    }
+    let stats = girth::stats::compute(&records, ledger::sharing(&home));
+    let (personal, project) = taste_tiers(&home, &ctx.cwd);
+    let domains = taste::domains(&personal, &project);
+    let taste_counts = (!domains.is_empty()).then(|| {
+        (
+            domains.len(),
+            domains.iter().map(|d| d.rules).sum::<usize>(),
+            domains.iter().map(|d| d.made).sum::<usize>(),
+        )
+    });
+    if json {
+        let mut value = serde_json::to_value(&stats).expect("stats serialise");
+        if let Some((d, r, m)) = taste_counts {
+            value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
+        }
+        if summary.turns > 0 {
+            value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
+        }
+        let _ = writeln!(
+            out,
+            "{}",
+            serde_json::to_string_pretty(&value).expect("stats serialise")
+        );
+    } else {
+        let _ = writeln!(*out, "{}", girth::stats::render(&stats));
+        if let Some((d, r, m)) = taste_counts {
+            let _ = writeln!(*out, "taste: {d} domains, {r} rules, {m} made");
+        }
+        let meter = girth::meter::render(&summary);
+        if !meter.is_empty() {
+            let _ = writeln!(*out, "{meter}");
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let ctx = Context::from_process();
     let mut warnings = Vec::new();
     let mut out = String::new();
     let code = match cli.command {
+        Command::Lens { project, json } => run_lens(project, json, &ctx, &mut out),
         Command::Measure { roots, json } => {
             let roots = resolve_roots(&roots, &ctx, &mut warnings);
             warn(&warnings);
@@ -626,36 +765,23 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::Stats { json } => {
-            let home = girth_home(&ctx);
-            let stats = girth::stats::compute(&ledger::read(&home), ledger::sharing(&home));
-            let (personal, project) = taste_tiers(&home, &ctx.cwd);
-            let domains = taste::domains(&personal, &project);
-            let taste_counts = (!domains.is_empty()).then(|| {
-                (
-                    domains.len(),
-                    domains.iter().map(|d| d.rules).sum::<usize>(),
-                    domains.iter().map(|d| d.made).sum::<usize>(),
-                )
-            });
-            if json {
-                let mut value = serde_json::to_value(&stats).expect("stats serialise");
-                if let Some((d, r, m)) = taste_counts {
-                    value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
-                }
-                let _ = writeln!(
-                    out,
-                    "{}",
-                    serde_json::to_string_pretty(&value).expect("stats serialise")
-                );
-            } else {
-                let _ = writeln!(out, "{}", girth::stats::render(&stats));
-                if let Some((d, r, m)) = taste_counts {
-                    let _ = writeln!(out, "taste: {d} domains, {r} rules, {m} made");
-                }
+        Command::Meter {
+            what: MeterWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
+                // Never disturb the session: a failed append is dropped.
+                let _ = ledger::append(&girth_home(&ctx), Event::Turn(turn));
             }
             ExitCode::SUCCESS
         }
+        Command::Stats {
+            json,
+            meter,
+            project,
+        } => run_stats(json, meter, project, &ctx, &mut out),
         Command::Feedback {
             skill,
             rating,

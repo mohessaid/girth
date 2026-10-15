@@ -62,3 +62,12 @@ What `taste-launch` checks:
   - The with-only graders show Girth firing unprompted on the specialised task in **3 of 3** runs, and **0 of 3** on the generic one.
   - Ablation (`--ablation with-without`) gives Δ = 0 on output quality for these fixtures. The source skills sit inside the fixture project, so a capable model without Girth reads them directly. Girth's measured value on capable models is cost at equal quality (`examples/compounding/RESULTS.md`), not a quality lift. Hiding sources from the baseline only would manufacture a Δ, so it isn't done.
 - Regression caught and fixed: after `girth show` landed, `tone-copy` fell to 1 of 3. The model read the unlabelled heading list as the whole skill. The overview is now labelled, and `tone-copy` is back to 3 of 3.
+
+## 2026-10-15: v0.5 (Lens, Meter)
+
+`make evals` after the SKILL.md change: **7 of 7 cases at 1.00 (21 runs), $1.45.**
+- The one-line SKILL.md addition about "Also installed" skills changed nothing measurable.
+- Lens's behavioural proof is a headless A/B, not a plugin-eval case, because mod loading under `claude plugin eval` is unconfirmed.
+  - The A/B ran with the author's real 74-skill setup; a plugin-eval sandbox has neither a real listing nor a ledger.
+  - **Results:** −19% cost, with the collapsed matching skill still invoked in 3 of 3 runs (`examples/lens/RESULTS.md`).
+- **Tooling note:** run `make dist` with the normal toolchain first, then `PATH=/usr/bin:/bin:$PATH make -o dist -o build evals`. A system Cargo earlier on the PATH can't build edition 2024.

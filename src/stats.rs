@@ -100,7 +100,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
                     .collect();
             }
             Event::Use { skill, .. } => *uses_by_skill.entry(skill.as_str()).or_default() += 1,
-            Event::Feedback { .. } => {}
+            Event::Feedback { .. } | Event::Seen { .. } | Event::Turn(_) => {}
         }
     }
     for record in records {
@@ -128,7 +128,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
                     }
                 }
             }
-            Event::Craft { .. } => {}
+            Event::Craft { .. } | Event::Seen { .. } | Event::Turn(_) => {}
         }
     }
     crafted.sort_by(|a, b| b.uses.cmp(&a.uses).then_with(|| a.skill.cmp(&b.skill)));
