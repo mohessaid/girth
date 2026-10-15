@@ -44,17 +44,20 @@ Independent research points the same way: in [SkillsBench](https://arxiv.org/abs
 
 Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
 
-**Lens: the same task with and without a per-project skill listing** (2026-10-15, the author's real setup of 74 skills, claude-sonnet-5-5, 3 runs per arm):
+**Lens: the same task with and without Lens** (2026-10-15, the author's real setup of 74 skills and 6 MCP servers, claude-sonnet-5-5, 3 runs per arm):
 
-| | Lens off | Lens on |
-|---|---|---|
-| Skill listing sent with every request | 30,027 B | 7,869 B (**−74%**) |
-| Cost per run (mean) | $0.166 | $0.135 (**−19%**) |
-| Fresh prompt tokens (input + cache write) | 32.0K | 24.7K (**−23%**) |
-| Matching skill still invoked (it was collapsed by Lens) | 3/3 | 3/3 |
-| Metadata checks passed | 18/18 | 18/18 |
+| | Lens off | Skills Lens (v0.5) | Full Lens (v0.6) |
+|---|---|---|---|
+| Cost per run (mean) | $0.166 | $0.135 (−19%) | **$0.096 (−42%)** |
+| Fresh prompt tokens (input + cache write) | 32.0K | 24.7K | **15.9K (−50%)** |
+| Matching skill still invoked (collapsed by Lens) | 3/3 | 3/3 | 3/3 |
+| Metadata checks passed | 18/18 | 18/18 | 18/18 |
+
+With v0.6, tasks that need a collapsed MCP server still work, 6 of 6 across two servers: the server's instructions arrive on first use and Claude follows them.
 
 See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose a needed skill.
+
+**SkillsBench, 6 tasks** (2026-10-15, claude-sonnet-5-5, one run per arm): Girth's one distilled skill per task **matched the task's curated skills on every task** (3/6 passed in each arm), with 23% fewer output tokens. Self-generated skills tend not to help (SkillsBench); skills distilled from curated sources kept their effect. See `examples/skillsbench/RESULTS.md`.
 
 **One session, before and after crafting** (2026-10-14):
 
@@ -87,7 +90,7 @@ npx skills add mohessaid/girth
 | Craft, reuse, `show`, `fetch`, `taste`, `made` | ✓ | ✓ |
 | Usage ledger (`girth stats` knows which skills you actually use) | ✓ | crafts only |
 | Taste delivered automatically when a domain skill loads | ✓ | ask *"girth taste &lt;domain&gt;"* |
-| Lens and Meter (Claude Code 2.1.287 or later) | ✓ | — |
+| Lens and Meter (Claude Code 2.1.287 or later; MCP Lens and X-ray tested on 2.1.300) | ✓ | — |
 
 The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Claude Code 2.1.287 or later, a small mod (`hooks/girth.js`) for Lens and Meter. A skills-CLI install registers neither, so those parts are plugin-only.
 
@@ -103,13 +106,16 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 
-## Lens & Meter
+## Lens, X-ray & Meter
 
-**Lens** trims the skill list Claude reads on every request.
+**Lens** trims what Claude Code adds to every request: the skill list, MCP server instructions and the deferred-tools list.
 - **Kept in full:** the skills this project uses, skills you used anywhere in the last 30 days, skills installed in the last 14 days, your crafted `girth-*` skills, the project's own skills, and anything you pin.
 - **Shortened:** every other skill collapses into one line, as its name plus a short hint, so it can still be found and invoked. Nothing is uninstalled and no settings change.
-- **Settings:** pin skills with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session.
+- **MCP servers** this project doesn't use (going by your tool calls) collapse to one line each. Their tools stay findable through ToolSearch. The first time Claude calls a collapsed server's tool, Girth hands it that server's instructions before the call runs, so nothing the server asks for is lost.
+- **Settings:** pin skills (or server ids such as `claude_ai_Figma`) with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session. `GIRTH_LENS_KINDS=skills` limits it to the skill list.
 - **Limit:** on machines where an organization manages Claude Code, a plugin you install yourself can't rewrite the list, so Lens stays off there.
+
+**X-ray:** run `/girth-xray` to see what your last request was made of, part by part, with each part's share, what Lens removed and what it costs. Tool parameter schemas aren't visible to plugins, so they aren't counted.
 
 **Meter** records each turn's real token usage in your local ledger (numbers and a model id only). Run `/girth-meter` or `girth stats --meter` to see:
 - your usage for the project;

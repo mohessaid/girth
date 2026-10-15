@@ -31,3 +31,27 @@ Lens now keeps a **short hint** for each collapsed skill: the first ≤ 60 chara
 ## Caveats
 - One task and 3 runs per arm on one machine. The direction is clear; the size will vary with the setup.
 - The 6-marker check is coarse: it shows the deliverable is complete, not that it's better.
+
+# v0.6: Lens for MCP and tools (2026-10-15)
+
+**Same setup and task** as above. The arms are `skills` (v0.5: the skill listing only) and `on` (v0.6: the skill listing, MCP server instructions and the deferred-tools list), 3 runs each.
+
+| run | cost $ | input+cache write | cache read | metadata checks | skills invoked | Lens bytes before→after |
+|---|---|---|---|---|---|---|
+| skills-1 | 0.137 | 24,289 | 66,775 | 6/6 | seo-aeo-best-practices | 30,027→7,869 |
+| skills-2 | 0.135 | 24,658 | 65,963 | 6/6 | seo-aeo-best-practices | 30,027→7,869 |
+| skills-3 | 0.136 | 25,332 | 64,208 | 6/6 | seo-aeo-best-practices | 30,027→7,869 |
+| on-1 | 0.095 | 15,750 | 50,717 | 6/6 | seo-aeo-best-practices | 38,260→9,815 |
+| on-2 | 0.095 | 15,324 | 50,634 | 6/6 | seo-aeo-best-practices | 34,218→9,852 |
+| on-3 | 0.099 | 16,604 | 51,411 | 6/6 | seo-aeo-best-practices | 34,087→9,799 |
+
+- **v0.6 vs v0.5:** −29% cost (mean $0.096 vs $0.136) and −36% fresh prompt tokens, at equal quality.
+- **v0.6 vs Lens off** (mean $0.166 in the runs above): **−42% cost.**
+- The "before" bytes vary between runs because the MCP and tools deltas depend on which servers had connected when the request was sent.
+
+## Hidden servers (3 runs each, Lens on)
+- **Instructions held back, Atlassian (`task-jit.md`, read-only):** 3 of 3 passed.
+  - In every run the first Atlassian call received the held-back instructions, Claude then followed them (`getAccessibleAtlassianResources` before anything else, as the server asks), and the read succeeded.
+  - This is the case where silently dropping the instructions would have broken the flow.
+  - The account details in the answers stay in local logs and are not reproduced here.
+- **Tools collapsed, Excalidraw (`task-tools.md`, read-only):** 3 of 3 passed. Claude found the collapsed tools through ToolSearch and `read_me` succeeded.

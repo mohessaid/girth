@@ -30,7 +30,7 @@ test('the skill listing is rewritten by girth lens, once per listing', async ($,
   expect(first.text).toBe(REWRITTEN)
   expect(second.text).toBe(REWRITTEN)
   expect(runs.length).toBe(1)
-  expect(runs[0].argv.slice(1)).toEqual(['lens', '--project', '/work/app', '--json'])
+  expect(runs[0].argv.slice(1)).toEqual(['lens', '--kind', 'skills', '--project', '/work/app', '--json'])
   expect(runs[0].argv[0]).toMatch(/\/skills\/girth\/scripts\/girth$/)
   expect(runs[0].stdin).toBe(LISTING)
 })
@@ -140,7 +140,7 @@ test('session start registers /girth-meter and warms the binary up with a long t
   on('fs.exists', () => ({ value: false }))
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  expect(names).toEqual(['girth-meter'])
+  expect(names).toEqual(['girth-meter', 'girth-xray'])
   // A fresh install downloads the binary once; do it here, not inside Lens's 5 s budget.
   expect(runs.length).toBe(1)
   expect(runs[0].argv.slice(1)).toEqual(['--version'])
@@ -170,5 +170,134 @@ test('a failed warm-up still registers the command', async ($, on) => {
   on('fs.exists', () => ({ value: false }))
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  expect(names).toEqual(['girth-meter'])
+  expect(names).toEqual(['girth-meter', 'girth-xray'])
+})
+
+const MCP = '# MCP\n\n## claude.ai Figma\nUse get_design_context.\n'
+const MCP_REWRITTEN = '# MCP\n\n## Other connected servers (their instructions arrive on first use): claude.ai Figma\n'
+
+function mcpOut() {
+  return JSON.stringify({
+    text: MCP_REWRITTEN,
+    bytes_before: MCP.length,
+    bytes_after: MCP_REWRITTEN.length,
+    described: [],
+    collapsed: ['claude_ai_Figma'],
+    deferred: { claude_ai_Figma: '## claude.ai Figma\nUse get_design_context.\n' },
+  })
+}
+
+test('MCP instructions are rewritten with --kind mcp, and held-back instructions arrive once on first use', async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: mcpOut(), stderr: '' } }
+  })
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  on('tool.call', () => ({ result: 'figma ok' }))
+  const out = await $.prompt.attachment({ type: 'mcp_instructions_delta', text: MCP, origin: 'engine' })
+  expect(out.text).toBe(MCP_REWRITTEN)
+  expect(runs[0].argv.slice(1, 3)).toEqual(['lens', '--kind'])
+  expect(runs[0].argv[3]).toBe('mcp')
+  const first = await $.tool.call({ tool: 'mcp__claude_ai_Figma__use_figma' })
+  expect(first.deny).toMatch(/^claude_ai_Figma instructions \(Girth held them back until first use/)
+  expect(first.deny).toContain('Use get_design_context.')
+  const second = await $.tool.call({ tool: 'mcp__claude_ai_Figma__use_figma' })
+  expect(second).toEqual({ result: 'figma ok' })
+  const other = await $.tool.call({ tool: 'mcp__pencil__batch_get' })
+  expect(other).toEqual({ result: 'figma ok' })
+  const builtin = await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(builtin).toEqual({ result: 'figma ok' })
+})
+
+test('the deferred-tools list is rewritten with --kind tools', async ($, on) => {
+  const kinds: string[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    kinds.push(e.argv[3])
+    return { value: { exitCode: 0, stdout: JSON.stringify({ text: 'short', bytes_before: 9, bytes_after: 5 }), stderr: '' } }
+  })
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  const out = await $.prompt.attachment({ type: 'deferred_tools_delta', text: 'long list', origin: 'engine' })
+  expect(out.text).toBe('short')
+  expect(kinds).toEqual(['tools'])
+})
+
+test('turns record the MCP servers they called and Lens bytes summed across kinds', async ($, on) => {
+  const records: any[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    const out = e.argv[3] === 'mcp' ? mcpOut() : lensOut()
+    return { value: { exitCode: 0, stdout: out, stderr: '' } }
+  })
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.prompt.attachment({ type: 'skill_listing', text: LISTING, origin: 'engine' })
+  await $.prompt.attachment({ type: 'mcp_instructions_delta', text: MCP, origin: 'engine' })
+  await $.tool.call({ tool: 'mcp__pencil__batch_get' })
+  await $.tool.call({ tool: 'mcp__claude_ai_Figma__whoami' })
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(records[0].mcp).toEqual(['claude_ai_Figma', 'pencil'])
+  expect(records[0].lens_before).toBe(LISTING.length + MCP.length)
+  expect(records[0].lens_after).toBe(REWRITTEN.length + MCP_REWRITTEN.length)
+  // Servers are counted per turn.
+  expect(records[1].mcp).toBeUndefined()
+})
+
+test('/girth-xray sends the parts of the last request, with Lens sizes and the model', async ($, on) => {
+  let snapshot: any = null
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'xray') {
+      snapshot = JSON.parse(e.init!.stdin!)
+      return { value: { exitCode: 0, stdout: 'x-ray: table\n', stderr: '' } }
+    }
+    return { value: { exitCode: 0, stdout: e.argv[1] === 'lens' ? lensOut() : '', stderr: '' } }
+  })
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  on('prompt.section', ($, e) => ({ text: 'section body' }))
+  on('tool.describe', ($, e) => ({ description: 'Runs shell commands' }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.prompt.attachment({ type: 'skill_listing', text: LISTING, origin: 'engine' })
+  await $.prompt.attachment({ type: 'todo_reminder', text: 'remember this', origin: 'engine' })
+  await $.prompt.section({ name: 'memory', text: 'x' })
+  await $.tool.describe({ tool: 'Bash', description: 'Runs shell commands', provider: { kind: 'builtin' } })
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const out = await $.command.run({ command: 'girth-xray', args: '' })
+  expect(out.text).toBe('x-ray: table')
+  expect(snapshot.model).toBe('claude-opus-5-5')
+  expect(snapshot.parts).toEqual([
+    { kind: 'attachment', name: 'skill_listing', bytes: REWRITTEN.length, before: LISTING.length },
+    { kind: 'attachment', name: 'todo_reminder', bytes: 13 },
+    { kind: 'section', name: 'memory', bytes: 12 },
+    { kind: 'tool', name: 'Bash', bytes: 19 },
+  ])
+})
+
+test('a listing Lens leaves unchanged claims no savings in the meter or the x-ray', async ($, on) => {
+  const records: any[] = []
+  let snapshot: any = null
+  let lensCalls = 0
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    if (e.argv[1] === 'xray') snapshot = JSON.parse(e.init!.stdin!)
+    if (e.argv[1] !== 'lens') return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    lensCalls += 1
+    // First listing is trimmed; the next one (a new listing) comes back as it was.
+    const text = lensCalls === 1 ? REWRITTEN : e.init!.stdin!
+    return { value: { exitCode: 0, stdout: JSON.stringify({ text, bytes_before: e.init!.stdin!.length, bytes_after: text.length }), stderr: '' } }
+  })
+  on('prompt.attachment', ($, e) => ({ text: e.text }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.prompt.attachment({ type: 'skill_listing', text: LISTING, origin: 'engine' })
+  await $.prompt.attachment({ type: 'skill_listing', text: 'Skills:\n- girth:girth: G.\n', origin: 'engine' })
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.command.run({ command: 'girth-xray', args: '' })
+  expect(records[0].lens_before).toBeUndefined()
+  expect(snapshot.parts[0].before).toBeUndefined()
 })

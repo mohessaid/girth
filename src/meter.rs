@@ -111,6 +111,7 @@ mod tests {
                 lens_before: lens.map(|l| l.0),
                 lens_after: lens.map(|l| l.1),
                 requests: None,
+                mcp: vec![],
             }),
         }
     }

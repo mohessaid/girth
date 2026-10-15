@@ -76,14 +76,27 @@ pub fn parse(text: &str) -> Vec<Item> {
     items
 }
 
-/// The names in the first `seen` event (the baseline), and when each name was first seen.
-fn first_seen(records: &[Record]) -> (Option<HashSet<&str>>, HashMap<&str, u64>) {
+/// Prefix of server names in `seen` events; skills have none.
+pub const SERVER_PREFIX: &str = "mcp:";
+
+/// Names first seen within this long of a namespace's first sighting belong to
+/// its baseline: one session can report skills and servers in several texts.
+pub const BASELINE_WINDOW_SECS: u64 = 24 * 3600;
+
+/// For one namespace (servers when `servers`, else skills): when the first
+/// `seen` event holding any of its names happened (the baseline), and when each
+/// name was first seen. Namespaces get separate baselines, so servers recorded
+/// for the first time later never make every skill look new, or the reverse.
+pub(crate) fn first_seen(records: &[Record], servers: bool) -> (Option<u64>, HashMap<&str, u64>) {
     let mut baseline = None;
     let mut first = HashMap::new();
     for record in records {
         if let Event::Seen { names } = &record.event {
-            baseline.get_or_insert_with(|| names.iter().map(String::as_str).collect());
-            for name in names {
+            for name in names
+                .iter()
+                .filter(|n| n.starts_with(SERVER_PREFIX) == servers)
+            {
+                baseline.get_or_insert(record.ts);
                 first.entry(name.as_str()).or_insert(record.ts);
             }
         }
@@ -91,12 +104,23 @@ fn first_seen(records: &[Record]) -> (Option<HashSet<&str>>, HashMap<&str, u64>)
     (baseline, first)
 }
 
+/// Whether `name` arrived after its namespace's baseline window and recently.
+pub(crate) fn is_new(baseline: Option<u64>, first: Option<&u64>, now: u64) -> bool {
+    let Some(start) = baseline else {
+        // No baseline yet: this run is the baseline.
+        return false;
+    };
+    let arrived = first.copied().unwrap_or(now);
+    arrived > start + BASELINE_WINDOW_SECS && now.saturating_sub(arrived) < NEW_SECS
+}
+
 /// Names in `names` that no `seen` event has recorded yet.
 pub fn unseen(records: &[Record], names: &[String]) -> Vec<String> {
-    let (_, first) = first_seen(records);
+    let (_, skills) = first_seen(records, false);
+    let (_, servers) = first_seen(records, true);
     names
         .iter()
-        .filter(|n| !first.contains_key(n.as_str()))
+        .filter(|n| !skills.contains_key(n.as_str()) && !servers.contains_key(n.as_str()))
         .cloned()
         .collect()
 }
@@ -135,7 +159,7 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
         collapsed: Vec::new(),
     };
     let items = parse(text);
-    let (baseline, first) = first_seen(inputs.records);
+    let (baseline, first) = first_seen(inputs.records, false);
     let mut used_here = HashSet::new();
     let mut used_recently = HashSet::new();
     for record in inputs.records {
@@ -148,14 +172,6 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
             }
         }
     }
-    let is_new = |name: &str| match (&baseline, first.get(name)) {
-        // No baseline yet: this run is the baseline.
-        (None, _) => false,
-        (Some(_), None) => true,
-        (Some(baseline), Some(ts)) => {
-            !baseline.contains(name) && inputs.now.saturating_sub(*ts) < NEW_SECS
-        }
-    };
     let keep = |name: &str| {
         let b = base(name);
         b == "girth"
@@ -163,7 +179,7 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
             || inputs.keep.iter().any(|k| k == name || k == b)
             || used_here.contains(b)
             || used_recently.contains(b)
-            || is_new(name)
+            || is_new(baseline, first.get(name), inputs.now)
             || inputs
                 .project_dir
                 .join(".claude/skills")
@@ -475,6 +491,40 @@ SKIP only when another provider is used.
         assert!(
             !out.described.contains(&"claude-api".to_string()),
             "{out:?}"
+        );
+    }
+
+    #[test]
+    fn the_baseline_window_is_a_full_day() {
+        let start = NOW - 60 * DAY;
+        let new = |arrived: u64| is_new(Some(start), Some(&arrived), arrived + 60);
+        // Within the day after the baseline (even 23 h later): still baseline.
+        assert!(!new(start + 23 * 3600));
+        // Exactly at the window's end: baseline; one second later: new.
+        assert!(!new(start + BASELINE_WINDOW_SECS));
+        assert!(new(start + BASELINE_WINDOW_SECS + 1));
+    }
+
+    #[test]
+    fn server_names_in_seen_events_do_not_touch_the_skill_baseline() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let all: Vec<String> = names(&parse(LISTING))
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let all: Vec<&str> = all.iter().map(String::as_str).collect();
+        // Servers were recorded first; the skills baseline is still the first skills event.
+        // The skills' first sighting is recent: if the server event counted as the
+        // baseline, every skill would look new and keep its description.
+        let records = vec![
+            seen(NOW - 90 * DAY, &["mcp:claude_ai_Figma"]),
+            seen(NOW - 3 * DAY, &all),
+        ];
+        let out = rewrite(LISTING, &inputs(&records, &[], tmp.path()));
+        assert_eq!(out.described, ["girth:girth", "girth-captions"]);
+        assert_eq!(
+            unseen(&records, &["mcp:claude_ai_Figma".to_string()]),
+            Vec::<String>::new()
         );
     }
 

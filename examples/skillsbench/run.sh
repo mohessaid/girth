@@ -6,6 +6,7 @@
 #   girth    only the girth-<domain> skill crafted from them (crafted/<task>)
 #
 #   examples/skillsbench/run.sh <skillsbench checkout> <outdir> [arms...]
+# TASKS="a\nb" runs a subset (one task per line) instead of tasks.txt.
 #
 # Credentials: export ANTHROPIC_API_KEY. (BenchFlow can instead copy your
 # Claude Code login into each container; that is your call, not this script's.)
@@ -38,4 +39,6 @@ while read -r task; do
       --jobs-dir "$out/$arm/$task" > "$out/$arm-$task.log" 2>&1 || true)
     echo "$arm $task: $(tail -n 4 "$out/$arm-$task.log" | grep -m1 'Score' || echo 'see log')"
   done
-done < "$here/tasks.txt"
+done <<EOF
+${TASKS:-$(cat "$here/tasks.txt")}
+EOF

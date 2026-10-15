@@ -5,6 +5,7 @@ pub mod fetch;
 pub mod frontmatter;
 pub mod ledger;
 pub mod lens;
+pub mod mcp_lens;
 pub mod measure;
 pub mod meter;
 pub mod price;
@@ -19,3 +20,4 @@ pub mod taste;
 #[cfg(test)]
 pub(crate) mod testutil;
 pub mod validate;
+pub mod xray;

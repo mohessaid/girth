@@ -55,7 +55,10 @@ enum Command {
         /// The project dir (default: cwd).
         #[arg(long)]
         project: Option<PathBuf>,
-        /// Print JSON: text, described, collapsed, bytes_before, bytes_after.
+        /// What the text is: the skill listing, MCP server instructions, or the deferred-tools list.
+        #[arg(long, value_enum, default_value_t = LensKind::Skills)]
+        kind: LensKind,
+        /// Print JSON: text, described, collapsed, deferred, bytes_before, bytes_after.
         #[arg(long)]
         json: bool,
     },
@@ -80,6 +83,12 @@ enum Command {
         /// Limit the meter to one project dir.
         #[arg(long)]
         project: Option<String>,
+    },
+    /// What one request was made of: reads the mod's snapshot JSON from stdin.
+    Xray {
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Token usage per turn (used by the plugin's mod).
     Meter {
@@ -167,6 +176,13 @@ enum RecordWhat {
         #[arg(long)]
         skill: Option<String>,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum LensKind {
+    Skills,
+    Mcp,
+    Tools,
 }
 
 #[derive(Subcommand)]
@@ -498,41 +514,73 @@ fn emit(out: &str) {
     }
 }
 
-fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut String) -> ExitCode {
+fn run_lens(
+    project: Option<PathBuf>,
+    kind: LensKind,
+    json: bool,
+    ctx: &Context,
+    out: &mut String,
+) -> ExitCode {
+    use girth::mcp_lens::{self, McpRewrite};
     use std::io::Read;
     let mut text = String::new();
     let _ = std::io::stdin().read_to_string(&mut text);
     let project_dir = project.unwrap_or_else(|| ctx.cwd.clone());
     let home = girth_home(ctx);
     let (enabled, keep) = girth::lens::settings(&project_dir, &home);
-    let off = ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
+    let kind_name = match kind {
+        LensKind::Skills => "skills",
+        LensKind::Mcp => "mcp",
+        LensKind::Tools => "tools",
+    };
+    // GIRTH_LENS_KINDS (comma-separated) limits which texts Lens rewrites.
+    let kind_off = ctx
+        .env
+        .get("GIRTH_LENS_KINDS")
+        .is_some_and(|v| !v.split(',').any(|k| k.trim() == kind_name));
+    let off = kind_off || ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
     let records = ledger::read(&home);
     let rewrite = if off || !enabled {
-        girth::lens::Rewrite {
+        McpRewrite {
             text: text.clone(),
-            described: Vec::new(),
-            collapsed: Vec::new(),
+            ..Default::default()
         }
     } else {
-        let names: Vec<String> = girth::lens::parse(&text)
-            .into_iter()
-            .filter_map(|i| match i {
-                girth::lens::Item::Entry { name, .. } => Some(name),
-                girth::lens::Item::Raw(_) => None,
-            })
-            .collect();
+        let names: Vec<String> = match kind {
+            LensKind::Skills => girth::lens::parse(&text)
+                .into_iter()
+                .filter_map(|i| match i {
+                    girth::lens::Item::Entry { name, .. } => Some(name),
+                    girth::lens::Item::Raw(_) => None,
+                })
+                .collect(),
+            LensKind::Mcp | LensKind::Tools => mcp_lens::server_ids(&text)
+                .into_iter()
+                .map(|id| format!("{}{id}", girth::lens::SERVER_PREFIX))
+                .collect(),
+        };
         let unseen = girth::lens::unseen(&records, &names);
         let project = project_dir.display().to_string();
-        let rewrite = girth::lens::rewrite(
-            &text,
-            &girth::lens::Inputs {
-                records: &records,
-                project: &project,
-                project_dir: &project_dir,
-                keep: &keep,
-                now: ledger::now(),
-            },
-        );
+        let inputs = girth::lens::Inputs {
+            records: &records,
+            project: &project,
+            project_dir: &project_dir,
+            keep: &keep,
+            now: ledger::now(),
+        };
+        let rewrite = match kind {
+            LensKind::Skills => {
+                let r = girth::lens::rewrite(&text, &inputs);
+                McpRewrite {
+                    text: r.text,
+                    described: r.described,
+                    collapsed: r.collapsed,
+                    ..Default::default()
+                }
+            }
+            LensKind::Mcp => mcp_lens::rewrite_instructions(&text, &inputs),
+            LensKind::Tools => mcp_lens::rewrite_tools(&text, &inputs),
+        };
         if !unseen.is_empty() {
             // Never disturb the session: a failed append is dropped.
             let _ = ledger::append(&home, Event::Seen { names: unseen });
@@ -544,6 +592,7 @@ fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut Strin
             "text": rewrite.text,
             "described": rewrite.described,
             "collapsed": rewrite.collapsed,
+            "deferred": rewrite.deferred,
             "bytes_before": text.len(),
             "bytes_after": rewrite.text.len(),
         });
@@ -615,7 +664,11 @@ fn main() -> ExitCode {
     let mut warnings = Vec::new();
     let mut out = String::new();
     let code = match cli.command {
-        Command::Lens { project, json } => run_lens(project, json, &ctx, &mut out),
+        Command::Lens {
+            project,
+            kind,
+            json,
+        } => run_lens(project, kind, json, &ctx, &mut out),
         Command::Measure { roots, json } => {
             let roots = resolve_roots(&roots, &ctx, &mut warnings);
             warn(&warnings);
@@ -764,6 +817,23 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
             }
+        }
+        Command::Xray { json } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            let snapshot: girth::xray::Snapshot = serde_json::from_str(&input).unwrap_or_default();
+            let report = girth::xray::report(&snapshot);
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("report serialises")
+                );
+            } else {
+                let _ = writeln!(out, "{}", girth::xray::render(&report));
+            }
+            ExitCode::SUCCESS
         }
         Command::Meter {
             what: MeterWhat::Record,
