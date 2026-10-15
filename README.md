@@ -28,7 +28,7 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 <p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
 
-Status: v0.4 (early, measured, used daily by its author). Design: `docs/superpowers/specs/`.
+Status: v0.4, early and measured. Design: `docs/superpowers/specs/`.
 
 ## Measured so far (one machine)
 
