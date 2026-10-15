@@ -126,6 +126,15 @@ test('/girth-meter prints the meter for this project', async ($, on) => {
   expect(runs[0].argv.slice(1)).toEqual(['stats', '--meter', '--project', '/work/app'])
 })
 
+test('the commands answer even when the binary cannot run', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ deny: 'timed out' }))
+  const meter = await $.command.run({ command: 'girth-meter', args: '' })
+  const xray = await $.command.run({ command: 'girth-xray', args: '' })
+  expect(meter.text).toBe('girth: the meter is unavailable right now')
+  expect(xray.text).toBe('girth: the x-ray is unavailable right now')
+})
+
 test('session start registers /girth-meter and warms the binary up with a long timeout', async ($, on) => {
   const names: string[] = []
   const runs: { argv: string[]; timeoutMs?: number }[] = []
