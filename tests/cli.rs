@@ -445,3 +445,72 @@ fn share_preview_prints_payload_json_and_says_nothing_is_uploaded() {
     assert_eq!(json["girth"], env!("CARGO_PKG_VERSION"));
     assert!(json["sections"].as_array().unwrap().is_empty());
 }
+
+#[test]
+fn fetch_prints_the_local_path_and_rejects_bad_specs() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let fake = tmp.path().join("fake-git");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\nfor last; do :; done\nmkdir -p \"$last/skills/x\" && echo hi > \"$last/skills/x/SKILL.md\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let home = tmp.path().join("home");
+    girth()
+        .env("GIRTH_HOME", &home)
+        .env("GIRTH_GIT", &fake)
+        .args(["fetch", "acme/skills/skills/x"])
+        .assert()
+        .success()
+        .stdout(format!(
+            "fetched: {}\n",
+            home.join("fetch/acme__skills/skills/x").display()
+        ));
+    girth()
+        .env("GIRTH_HOME", &home)
+        .args(["fetch", "https://evil.example/x"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("expected owner/repo"));
+    girth()
+        .env("GIRTH_HOME", &home)
+        .env("GIRTH_GIT", "/bin/false")
+        .args(["fetch", "acme/skills"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("git clone failed"));
+}
+
+#[test]
+fn show_prints_overview_or_only_the_requested_sections() {
+    let tmp = TempDir::new().unwrap();
+    let dir = write_skill(
+        tmp.path(),
+        "video-mega",
+        "name: video-mega\ndescription: All video.",
+        "## Caption timing\nHold 1.2 s.\n## Audio mixing\nDuck 12 dB.\n",
+    );
+    girth()
+        .arg("show")
+        .arg(&dir)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "SKILL.md: Caption timing · Audio mixing",
+        ));
+    girth()
+        .arg("show")
+        .arg(&dir)
+        .args(["--heading", "Caption timing"])
+        .assert()
+        .success()
+        .stdout("=== SKILL.md ===\n## Caption timing\nHold 1.2 s.\n");
+    girth()
+        .arg("show")
+        .arg(tmp.path())
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("no SKILL.md"));
+}

@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
+### Added
+- `girth fetch owner/repo[/path]` shallow-clones a public GitHub skill repo into an untrusted scratch dir (`~/.girth/fetch/`).
+  - Only plain `owner/repo` specs are accepted, so no URL, ssh, file transport or flag can reach git.
+  - Git hooks are disabled, submodules are skipped, and only the https protocol is allowed.
+- `girth show <skill-dir> [--heading H]…` prints a skill's frontmatter and table of contents, or only the named sections (with their subsections). Crafting now reads sources through it, so it needs no reads outside the project and never loads whole files.
+- Remote fallback (`references/remote.md`): when no installed skill covers a need, Girth finds candidates with `npx skills find`, fetches at most two and distils from them.
+- M2 evals: `auto-captions` (Girth fires unprompted on a specialised task: 3 of 3), `no-fire-generic` (it stays silent on a generic task: 0 of 3 fired) and `extend-captions` (a second need extends the existing skill).
+- `examples/compounding/`: the 5-session compounding benchmark. Girth's persistent cache cost $0.599 over five HyperFrames sessions, against $0.909 for bulk-installed skills (−34%) and $1.061 for per-session distillation (−44%). Sessions 2–5 cost about half of a bulk session, and every session passed the HyperFrames check.
+
+### Fixed
+- The `girth show` overview is labelled "headings only", so it can't be mistaken for the whole skill.
+
 ## [0.3.0] - 2026-10-14
 
 ### Added
@@ -52,7 +66,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mohessaid/girth/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mohessaid/girth/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mohessaid/girth/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/mohessaid/girth/compare/v0.1.0...v0.1.1

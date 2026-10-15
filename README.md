@@ -28,7 +28,19 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 Status: pre-release (M1). Design: `docs/superpowers/specs/`.
 
-## Measured so far (2026-10-14, one machine)
+## Measured so far (one machine)
+
+**Five sessions in one domain** (2026-10-15, HyperFrames, claude-sonnet-5-5, the tasks never mention Girth):
+
+| Arm | Session 1 | Sessions 2–5 (each) | 5-session total |
+|---|---|---|---|
+| Every skill installed (today's default) | $0.18 | $0.16–0.21 | $0.909 |
+| Fresh distillation every session | $0.25 | $0.18–0.22 | $1.061 |
+| **Girth (crafts once, then reuses)** | $0.22 | **$0.09–0.10** | **$0.599 (−34%)** |
+
+Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
+
+**One session, before and after crafting** (2026-10-14):
 
 | | Before | With Girth (bulk skills removed) |
 |---|---|---|
@@ -37,7 +49,7 @@ Status: pre-release (M1). Design: `docs/superpowers/specs/`.
 | Task cost, same task and model | $0.181 | $0.149 (**−17%**) |
 | HyperFrames check on the output | 1 warning | 0 warnings |
 
-These are single runs. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (3 cases, 9 runs, all 1.00).
+These are single runs. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 
@@ -87,6 +99,7 @@ target/release/girth share preview                              # exactly what w
 target/release/girth taste add launch-video "End on the logo with the URL."
 target/release/girth made launch-video palette=paper-ink music=lo-fi
 target/release/girth taste show launch-video                    # rules + recent choices
+target/release/girth fetch obra/superpowers/skills              # shallow, untrusted, never executed
 ```
 
 Skill roots resolve in this order:

@@ -86,6 +86,19 @@ enum Command {
         #[arg(required = true)]
         choices: Vec<String>,
     },
+    /// Print a skill's frontmatter and contents, or only the sections you name.
+    Show {
+        /// The skill dir (as printed by `search`).
+        dir: PathBuf,
+        /// A heading to print with its subsections; repeatable.
+        #[arg(long = "heading")]
+        headings: Vec<String>,
+    },
+    /// Shallow-clone a public GitHub skill repo (owner/repo[/path]) into an untrusted scratch dir.
+    Fetch {
+        /// owner/repo or owner/repo/sub/path.
+        spec: String,
+    },
     /// Check crafted skills against the Girth contract.
     Validate {
         /// Don't record a craft event in the ledger.
@@ -544,6 +557,39 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Command::Taste { action } => run_taste(action, &ctx, &mut out),
+        Command::Show { dir, headings } => match girth::show::show(&dir, &headings) {
+            Ok(text) => {
+                out.push_str(&text);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("girth: {e}");
+                ExitCode::from(1)
+            }
+        },
+        Command::Fetch { spec } => match girth::fetch::parse_spec(&spec) {
+            Err(e) => {
+                eprintln!("girth: {e}");
+                ExitCode::from(2)
+            }
+            Ok(spec) => {
+                let git = ctx
+                    .env
+                    .get(girth::fetch::GIT_ENV)
+                    .filter(|g| !g.is_empty())
+                    .map_or("git", String::as_str);
+                match girth::fetch::fetch(&spec, &girth_home(&ctx), git) {
+                    Ok(path) => {
+                        let _ = writeln!(out, "fetched: {}", path.display());
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("girth: {e}");
+                        ExitCode::from(1)
+                    }
+                }
+            }
+        },
         Command::Made { domain, choices } => run_made(&domain, &choices, &ctx, &mut out),
         Command::Share { action } => {
             let home = girth_home(&ctx);
