@@ -75,6 +75,32 @@ pub enum Event {
     },
     /// One turn's token usage, as Claude Code reported it.
     Turn(Turn),
+    /// A keeper ping: a fork that read the cached conversation to keep it warm.
+    Ping(Ping),
+}
+
+/// One keeper ping's usage. Numbers and a model id only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ping {
+    pub project: String,
+    pub model: String,
+    pub input: u64,
+    pub output: u64,
+    pub read: u64,
+    pub write: u64,
+    /// What the ping should have read from the cache (the last request's read + write).
+    pub expected: u64,
+}
+
+/// A request that wrote again what the previous request had cached.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Break {
+    /// Cached tokens the request did not read back.
+    pub lost: u64,
+    /// Of those, tokens it wrote again: `min(lost, write)`.
+    pub rewritten: u64,
+    /// Seconds since the previous request.
+    pub idle_s: u64,
 }
 
 /// Token usage for one turn. Numbers and a model id only; never text.
@@ -100,6 +126,9 @@ pub struct Turn {
     /// MCP server ids (`mcp__<id>__…`) whose tools the turn called. Ids only.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp: Vec<String>,
+    /// Requests in the turn that re-wrote cache the previous request had written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breaks: Vec<Break>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -280,6 +309,7 @@ mod tests {
             lens_after: Some(3_100),
             requests: Some(4),
             mcp: vec!["claude_ai_Figma".into()],
+            breaks: vec![],
         });
         append(tmp.path(), seen.clone()).unwrap();
         append(tmp.path(), turn.clone()).unwrap();
@@ -296,6 +326,55 @@ mod tests {
         assert!(
             matches!(&read(tmp.path())[0].event, Event::Turn(t) if t.lens_before.is_none() && t.agent)
         );
+    }
+
+    #[test]
+    fn pings_and_cache_breaks_round_trip() {
+        let tmp = TempDir::new().unwrap();
+        let ping = Event::Ping(Ping {
+            project: "/p".into(),
+            model: "claude-opus-5-5".into(),
+            input: 3,
+            output: 1,
+            read: 450_000,
+            write: 0,
+            expected: 450_100,
+        });
+        let turn = Event::Turn(Turn {
+            breaks: vec![Break {
+                lost: 300_000,
+                rewritten: 290_000,
+                idle_s: 11_520,
+            }],
+            ..turn_fixture()
+        });
+        append(tmp.path(), ping.clone()).unwrap();
+        append(tmp.path(), turn.clone()).unwrap();
+        let events: Vec<Event> = read(tmp.path()).into_iter().map(|r| r.event).collect();
+        assert_eq!(events, [ping, turn]);
+        let text = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(text.contains(r#""kind":"ping""#) && text.contains(r#""breaks":[{"#));
+        // No breaks: the field is left out, and old lines without it parse.
+        let quiet = serde_json::to_string(&Event::Turn(turn_fixture())).unwrap();
+        assert!(!quiet.contains("breaks"), "{quiet}");
+    }
+
+    fn turn_fixture() -> Turn {
+        Turn {
+            project: "/p".into(),
+            model: "claude-opus-5-5".into(),
+            input: 2,
+            output: 7,
+            cache_read: 8605,
+            cache_write: 26631,
+            agent: false,
+            aborted: false,
+            lens_before: None,
+            lens_after: None,
+            requests: None,
+            mcp: vec![],
+            breaks: vec![],
+        }
     }
 
     #[test]
