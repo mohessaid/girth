@@ -64,3 +64,22 @@ Opus main thread, by component:
 - **`agent.spawn`:** a mod can choose a subagent's model, with `next({ ...e, model })`.
 - **`turn.step`:** a mod can change a request's model or effort.
 - **`prompt.submit` with `$.ui.ask`:** a mod can ask before a prompt is sent. `ask` rejects in `claude -p`.
+
+## 5. Revised after the spike: compact while idle, not on return
+`examples/compact/SPIKE.md` showed that a mod cannot compact from `prompt.submit` (the host refuses) and cannot compact in headless sessions. It **can** compact an interactive conversation from a timer between turns.
+
+That gives a better design: at 55 minutes idle, while the 1-hour cache is still warm, compact if the context is large. `examples/compact/analyze-idle-compaction.py`, on the same transcripts (Opus rates, 60K base, 5K summary; periods that never returned pay the compaction for nothing):
+
+| Context | Idle periods (returned) | Compactions | Return writes saved | Later reads saved | Net |
+|---|---|---|---|---|---|
+| ≥ 100K | 262 (243) | $52 | $727 | $1,234 | **$1,910** |
+| ≥ 150K | 240 (222) | $49 | $717 | $1,219 | $1,887 |
+| ≥ 250K | 201 (187) | $44 | $687 | $1,128 | $1,771 |
+| ≥ 400K | 156 (148) | $36 | $634 | $1,009 | $1,607 |
+
+- **About 40% of total spend,** and 4.6× the keeper's $416.
+- **It overlaps with the keeper.** For a large context, compaction replaces the pings: no pings are needed once the context is small.
+- **Open before building:**
+  - the opt-in shape (it changes what the model knows while the user is away);
+  - an outcome A/B (does work after an idle compaction go as well as without it?);
+  - interactive only.
