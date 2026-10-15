@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Added
+- **Lens:** a per-project skill listing, delivered by a small mod (`hooks/girth.js`, Claude Code 2.1.287+) that rewrites the `skill_listing` Claude reads on every request.
+  - **Kept in full:** skills this project uses, skills used anywhere in the last 30 days, skills new in the last 14 days, crafted `girth-*` skills, project skills and pins.
+  - **Shortened:** everything else collapses to its name plus a ≤ 60-character hint. No name is ever lost, and nothing is uninstalled.
+  - **Measured on the author's 74-skill setup:** the listing went from 30,027 B to 7,869 B (−74%), and cost per run fell 19% at equal quality. A collapsed matching skill was still invoked in 3 of 3 runs (`examples/lens/`).
+  - **Controls:** `lens.keep` and `lens.enabled` in `.girth/config.json` or `~/.girth/config.json`; `GIRTH_LENS=off`.
+- **Meter:** per-turn token usage (numbers and a model id only) is written to the local ledger as `turn` events, with the request count and the Lens byte counts.
+  - `girth stats` shows totals, an estimated cost (`src/price.rs`) and Lens savings. `girth stats --meter [--project DIR]` shows the meter alone, and `/girth-meter` shows it inside Claude Code.
+  - `share` never reads `turn` or `seen` events.
+- **New commands:** `girth lens [--project DIR] [--json]` (reads a listing from stdin) and `girth meter record`.
+- **Search reach:** the default skill roots now include the `skills` folders of installed Claude Code plugins, so `girth search` reaches plugin skills.
+- **SkillsBench proof harness** (`examples/skillsbench/`): three arms in local Docker (no skills, curated, Girth-distilled). The Girth arm is crafted and every crafted skill validates; the agent runs wait on a credential choice.
+- **Tests:** mod tests (`claude plugin test`) are part of `make check`.
+
+### Fixed
+- `make dist` no longer copies the mod's tests into the dist plugin.
+
 ## [0.4.1] - 2026-10-15
 
 ### Fixed
@@ -77,7 +96,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mohessaid/girth/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mohessaid/girth/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mohessaid/girth/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mohessaid/girth/compare/v0.2.0...v0.3.0

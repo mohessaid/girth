@@ -12,3 +12,10 @@ Equivalent or untestable survivors:
 - `src/skill.rs` `discover_skills`: `!real.is_dir() || seen_paths.contains(&real)` → `&&`. A non-directory never yields a skill (`load_skill` needs `<dir>/SKILL.md`), and a duplicate real path is still dropped by the name-dedupe set. The observable behaviour is identical.
 - `src/main.rs` `emit`: `kind() != BrokenPipe` → `==`. This only changes whether a stderr message is printed when writing to stdout fails for a reason *other than* a broken pipe (e.g. a full disk). That isn't reproducible in a portable test.
 - `src/main.rs` `record_use`: the match guard `!stdin().is_terminal()` → `true`. The guard only matters when stdin is a real TTY (a person typing `girth record use` with no `--skill`); tests always pipe stdin.
+
+v0.5 (2026-10-15):
+- **The mod (`hooks/girth.js`, mutated by hand: cargo-mutants doesn't cover JS).** Four mutants:
+  - Dropping the memo: **caught**.
+  - Recording Lens bytes on subagent turns: **caught**.
+  - Dropping the exit-code check: survived at first, then **caught** after a test was added in which the binary fails but prints valid JSON.
+  - Dropping the `.catch` handlers: **equivalent.** Claude Code already skips a hook that throws (before or after `next`) and carries on unchanged, so `.catch(… next(e))` restates the engine's default. It stays, so the fail-open intent is visible and `claude plugin validate` reports gating hooks as handled.
