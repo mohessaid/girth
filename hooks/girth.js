@@ -4,6 +4,7 @@
 // every hook fails open: on any error Claude Code carries on unchanged.
 
 const TIMEOUT_MS = 5000
+const WARMUP_TIMEOUT_MS = 60000
 
 // Listing text -> the rewrite, so a session always sends the same listing and
 // the prompt cache stays warm.
@@ -23,6 +24,15 @@ export function register(on) {
       name: 'girth-meter',
       description: 'Show token usage and Lens savings for this project',
     })
+    // A fresh install downloads the binary once. Do it here, with room to
+    // finish, instead of inside Lens's 5 s budget on the first request.
+    if (!(await $.fs.exists($.plugin.root + '/skills/girth/bin/girth'))) {
+      try {
+        await $.process.run([launcher($), '--version'], { timeoutMs: WARMUP_TIMEOUT_MS })
+      } catch {
+        // Offline or slow: Lens and Meter stay off until a later session.
+      }
+    }
     return next(e)
   }).catch(async ($, e, next) => next(e))
 

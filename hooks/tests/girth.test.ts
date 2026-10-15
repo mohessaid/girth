@@ -126,12 +126,48 @@ test('/girth-meter prints the meter for this project', async ($, on) => {
   expect(runs[0].argv.slice(1)).toEqual(['stats', '--meter', '--project', '/work/app'])
 })
 
-test('session start registers /girth-meter', async ($, on) => {
+test('session start registers /girth-meter and warms the binary up with a long timeout', async ($, on) => {
+  const names: string[] = []
+  const runs: { argv: string[]; timeoutMs?: number }[] = []
+  on('command.register', ($, e) => {
+    names.push(e.name)
+    return { value: undefined }
+  })
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, timeoutMs: e.init?.timeoutMs })
+    return { value: { exitCode: 0, stdout: 'girth 0.5.0\n', stderr: '' } }
+  })
+  on('fs.exists', () => ({ value: false }))
+  on('session.start', () => ({ cwd: '/work' }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(names).toEqual(['girth-meter'])
+  // A fresh install downloads the binary once; do it here, not inside Lens's 5 s budget.
+  expect(runs.length).toBe(1)
+  expect(runs[0].argv.slice(1)).toEqual(['--version'])
+  expect(runs[0].timeoutMs).toBe(60000)
+})
+
+test('no warm-up once the binary is there', async ($, on) => {
+  let runs = 0
+  on('command.register', () => ({ value: undefined }))
+  on('process.run', () => {
+    runs += 1
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('fs.exists', ($, e) => ({ value: e.path.endsWith('/skills/girth/bin/girth') }))
+  on('session.start', () => ({ cwd: '/work' }))
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(runs).toBe(0)
+})
+
+test('a failed warm-up still registers the command', async ($, on) => {
   const names: string[] = []
   on('command.register', ($, e) => {
     names.push(e.name)
     return { value: undefined }
   })
+  on('process.run', () => ({ deny: 'offline' }))
+  on('fs.exists', () => ({ value: false }))
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   expect(names).toEqual(['girth-meter'])
