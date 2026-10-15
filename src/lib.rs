@@ -20,3 +20,4 @@ pub mod taste;
 #[cfg(test)]
 pub(crate) mod testutil;
 pub mod validate;
+pub mod xray;

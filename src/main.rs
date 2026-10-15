@@ -84,6 +84,12 @@ enum Command {
         #[arg(long)]
         project: Option<String>,
     },
+    /// What one request was made of: reads the mod's snapshot JSON from stdin.
+    Xray {
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Token usage per turn (used by the plugin's mod).
     Meter {
         #[command(subcommand)]
@@ -801,6 +807,23 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
             }
+        }
+        Command::Xray { json } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            let snapshot: girth::xray::Snapshot = serde_json::from_str(&input).unwrap_or_default();
+            let report = girth::xray::report(&snapshot);
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("report serialises")
+                );
+            } else {
+                let _ = writeln!(out, "{}", girth::xray::render(&report));
+            }
+            ExitCode::SUCCESS
         }
         Command::Meter {
             what: MeterWhat::Record,

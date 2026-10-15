@@ -726,3 +726,34 @@ fn lens_mcp_and_tools_collapse_unused_servers_and_record_them() {
         .assert()
         .failure();
 }
+
+#[test]
+fn xray_renders_a_snapshot_and_handles_empty_or_bad_input() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let snapshot = r#"{"model":"claude-opus-5-5","parts":[{"kind":"attachment","name":"skill_listing","bytes":7869,"before":30027},{"kind":"section","name":"memory","bytes":2166}]}"#;
+    home_cmd(&home)
+        .arg("xray")
+        .write_stdin(snapshot)
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with(
+            "x-ray: 10,035 B ≈ 2,508 tokens added to each request (claude-opus-5-5)\n",
+        ));
+    let out = home_cmd(&home)
+        .args(["xray", "--json"])
+        .write_stdin(snapshot)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["lens_removed_bytes"], 22_158);
+    assert_eq!(json["parts"][0]["name"], "skill_listing");
+    for input in ["", "not json"] {
+        home_cmd(&home)
+            .arg("xray")
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout("x-ray: nothing captured yet (send a message first)\n");
+    }
+}
