@@ -26,6 +26,8 @@ Distil only the slice your project needs from the skills you already have — 38
 
 Instead of installing dozens of large skills and paying for all of them every turn, Girth distils only the slice your project needs into a small `girth-<domain>` skill, at the moment you need it. Later sessions reuse it from the project's cache.
 
+<p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
+
 Status: v0.4 (early, measured, used daily by its author). Design: `docs/superpowers/specs/`.
 
 ## Measured so far (one machine)

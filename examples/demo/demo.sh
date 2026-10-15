@@ -25,7 +25,7 @@ run 'girth fetch heygen-com/hyperframes >/dev/null'
 ln -s .girth/fetch/heygen-com__hyperframes/skills hf
 run 'girth measure --roots hf | tail -1'
 say "You need one thing from it. Find the slice, not the skill:"
-run 'girth search "word-by-word caption highlighting" --roots hf | sed -n 2,7p | cut -c1-48'
+run 'girth search "word-by-word caption highlighting" --roots hf | sed -n 2,7p | cut -c1-72'
 run 'girth show hf/hyperframes-studio --heading "2. One caption track" | head -12'
 say "The model distils that slice into a project skill, once (this one is from a real session):"
 cp -r "$repo/examples/hyperframes/crafted-girth-hyperframes" .claude/skills/girth-hyperframes
