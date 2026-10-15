@@ -40,3 +40,4 @@ v0.5 (2026-10-15):
 - **Keeper (9 mutants):** 7 caught.
   - Fixed: the `isAnswered` guard was a real bug. An aborted fork still spends tokens, so a ping is now recorded whenever usage comes back.
   - Not observable in `claude plugin test`: `turn.start` → `keep.stop()`. A timer's `cancel()` runs client-side and emits no event. It is covered by the live run (`examples/cache/RESULTS.md`): a turn inside the interval cancels the pending ping.
+- **Rust (`keeper`, `price`, `ledger`):** 107 mutants, 6 unviable, **100 of 101 caught (99%)**. The survivor (another project's turn passing the project filter) is now covered by a test.

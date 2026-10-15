@@ -80,3 +80,11 @@ What `taste-launch` checks:
   - **Cost A/B:** −29% against v0.5 and −42% against Lens off, at equal quality (`examples/lens/RESULTS.md`).
   - **Hidden servers:** 6 of 6 (Atlassian with held-back instructions, Excalidraw with collapsed tools).
   - **`/girth-xray`:** a two-turn `claude -p` session on the dist plugin (isolated `GIRTH_HOME`) printed the request composition, with the skill listing at 7,918 B (Lens: was 30,054 B) and 26,222 B removed per request in total.
+
+## 2026-10-15: v0.7 (cache keeper and doctor)
+
+`make evals` on the release tree: **7 of 7 cases at 1.00 (21 runs), $1.44.**
+- No SKILL.md change. The keeper's 55-minute timers never fire inside an eval run.
+- The keeper and doctor are proved live (`examples/cache/RESULTS.md`):
+  - the 66-minute probe: the return cost 81% less;
+  - an isolated end-to-end run: pings, cancellation, a real break recorded.
