@@ -54,3 +54,11 @@ What `taste-launch` checks:
 - The hook injected the taste, and the model applied the house rule.
 - The first run refused to execute the `made` line, because it appeared only in hook output. The crafted-skill template gained a `## Record` section for this reason.
 - With that section, the model recorded `mood=hopeful` and explicitly varied away from the last recorded `melancholy`.
+
+## 2026-10-15: M2 (self-trigger, fetch, show)
+
+`make evals` on the release tree: **7 of 7 cases at 1.00 (21 runs), $1.66.**
+- New: `auto-captions`, `no-fire-generic`, `extend-captions`.
+  - The with-only graders show Girth firing unprompted on the specialised task in **3 of 3** runs, and **0 of 3** on the generic one.
+  - Ablation (`--ablation with-without`) gives Δ = 0 on output quality for these fixtures. The source skills sit inside the fixture project, so a capable model without Girth reads them directly. Girth's measured value on capable models is cost at equal quality (`examples/compounding/RESULTS.md`), not a quality lift. Hiding sources from the baseline only would manufacture a Δ, so it isn't done.
+- Regression caught and fixed: after `girth show` landed, `tone-copy` fell to 1 of 3. The model read the unlabelled heading list as the whole skill. The overview is now labelled, and `tone-copy` is back to 3 of 3.
