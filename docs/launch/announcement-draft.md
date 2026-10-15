@@ -14,7 +14,7 @@ Measured over 5 sessions in one domain:
 - every skill installed: $0.91
 - Girth: $0.60 (**−34%**), with every output passing the same check.
 
-Open source, Rust, one binary, no telemetry unless you opt in.
+Open source, Rust, one binary. Nothing leaves your machine; any future sharing is opt-in.
 `/plugin marketplace add mohessaid/girth`
 github.com/mohessaid/girth
 
@@ -32,7 +32,7 @@ That costs twice:
 
 ### What Girth does
 
-Girth is a skill plus a small Rust CLI for Claude Code, and for any agent the skills CLI supports.
+Girth is a skill plus a small Rust CLI, built for Claude Code first and installable as a plain skill elsewhere.
 
 - **Just-in-time skills.** When a task needs specialised know-how, Girth searches the skills already on disk, prints only the sections that matter, and the model distils them into `.claude/skills/girth-<domain>`: rules kept verbatim, tone never compressed, under 3 KB. Next time it's a cache hit.
 - **Taste memory.** House rules you stated once ("always end on the logo with the URL") are applied every time, in every project. What your last deliverables chose is remembered too, so the next one varies unless you pin it.
