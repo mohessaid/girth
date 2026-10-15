@@ -44,7 +44,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.output += t.output;
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
-        let rates = price::rates(&t.model);
+        let rates = price::rates(&t.model).map(|r| if t.agent { r.five_minute() } else { r });
         match rates {
             Some(r) => s.cost += price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
             None => s.unpriced_turns += 1,
@@ -154,6 +154,17 @@ mod tests {
 
         let b = summarise(&records, Some("/b"));
         assert_eq!((b.turns, b.lens_turns, b.unpriced_turns), (1, 0, 0));
+    }
+
+    #[test]
+    fn a_subagent_turn_pays_the_five_minute_write_rate() {
+        let mut record = turn("/a", "claude-opus-5-5", 0, None);
+        if let Event::Turn(t) = &mut record.event {
+            t.agent = true;
+            (t.output, t.cache_read, t.cache_write) = (0, 0, 1_000_000);
+        }
+        let s = summarise(&[record], None);
+        assert!((s.cost - 5.0).abs() < 1e-9, "{}", s.cost);
     }
 
     #[test]
