@@ -6,8 +6,20 @@ rows = {}
 for path in glob.glob(os.path.join(out, "*", "*", "*", "summary.json")):
     arm, task = path.split(os.sep)[-4], path.split(os.sep)[-3]
     s = json.load(open(path))
-    rows.setdefault(arm, []).append((task, s.get("passed", 0), s.get("total", 0), s.get("total_input_tokens", 0), s.get("total_output_tokens", 0), s.get("avg_skill_invocations", 0)))
-print("| arm | tasks passed | input tokens | output tokens | skill invocations / task |")
+    # BenchFlow's own counter misses Skill calls made through the ACP agent;
+    # count them from the trajectory instead.
+    skills = []
+    for traj in glob.glob(os.path.join(os.path.dirname(path), "*", "trajectory", "acp_trajectory.jsonl")):
+        for line in open(traj):
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("type") == "tool_call" and ev.get("title") == "Skill":
+                text = json.dumps(ev.get("content", ""))
+                skills.append(text.split("Launching skill: ")[-1].split("\\")[0].split('"')[0] if "Launching skill" in text else "?")
+    rows.setdefault(arm, []).append((task, s.get("passed", 0), s.get("total", 0), s.get("total_input_tokens", 0), s.get("total_output_tokens", 0), len(skills), skills))
+print("| arm | tasks passed | input tokens | output tokens | skill calls / task |")
 print("|---|---|---|---|---|")
 for arm in ("none", "curated", "girth"):
     r = rows.get(arm, [])
@@ -23,5 +35,5 @@ for t in tasks:
     for arm in ("none", "curated", "girth"):
         if arm in rows:
             hit = [x for x in rows[arm] if x[0] == t]
-            cells.append(("pass" if hit[0][1] else "fail") if hit else "—")
+            cells.append((("pass" if hit[0][1] else "fail") + (f" ({', '.join(hit[0][6])})" if hit[0][6] else "")) if hit else "—")
     print(f"| {t} | " + " | ".join(cells) + " |")
