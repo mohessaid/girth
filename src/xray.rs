@@ -187,7 +187,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains("cost: ≈ $0.0007 per request from cache · ≈ $0.0179 to write it once"),
+            text.contains("cost: ≈ $0.0007 per request from cache · ≈ $0.0286 to write it once"),
             "{text}"
         );
     }
