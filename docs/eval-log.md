@@ -71,3 +71,12 @@ What `taste-launch` checks:
   - The A/B ran with the author's real 74-skill setup; a plugin-eval sandbox has neither a real listing nor a ledger.
   - **Results:** −19% cost, with the collapsed matching skill still invoked in 3 of 3 runs (`examples/lens/RESULTS.md`).
 - **Tooling note:** run `make dist` with the normal toolchain first, then `PATH=/usr/bin:/bin:$PATH make -o dist -o build evals`. A system Cargo earlier on the PATH can't build edition 2024.
+
+## 2026-10-15: v0.6 (MCP Lens, X-ray)
+
+`make evals` on the release tree: **7 of 7 cases at 1.00 (21 runs), $1.51.**
+- No SKILL.md change in this release; the suite confirms the skill behaves as before with the new mod loaded.
+- MCP Lens and X-ray are proved by headless runs with the author's real setup, not by plugin-eval cases:
+  - **Cost A/B:** −29% against v0.5 and −42% against Lens off, at equal quality (`examples/lens/RESULTS.md`).
+  - **Hidden servers:** 6 of 6 (Atlassian with held-back instructions, Excalidraw with collapsed tools).
+  - **`/girth-xray`:** a two-turn `claude -p` session on the dist plugin (isolated `GIRTH_HOME`) printed the request composition, with the skill listing at 7,918 B (Lens: was 30,054 B) and 26,222 B removed per request in total.

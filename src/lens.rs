@@ -495,6 +495,17 @@ SKIP only when another provider is used.
     }
 
     #[test]
+    fn the_baseline_window_is_a_full_day() {
+        let start = NOW - 60 * DAY;
+        let new = |arrived: u64| is_new(Some(start), Some(&arrived), arrived + 60);
+        // Within the day after the baseline (even 23 h later): still baseline.
+        assert!(!new(start + 23 * 3600));
+        // Exactly at the window's end: baseline; one second later: new.
+        assert!(!new(start + BASELINE_WINDOW_SECS));
+        assert!(new(start + BASELINE_WINDOW_SECS + 1));
+    }
+
+    #[test]
     fn server_names_in_seen_events_do_not_touch_the_skill_baseline() {
         let tmp = tempfile::TempDir::new().unwrap();
         let all: Vec<String> = names(&parse(LISTING))

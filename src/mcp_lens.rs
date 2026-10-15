@@ -294,6 +294,8 @@ If the user's request might be served by one of these servers, call ToolSearch.
         );
         assert_eq!(tool_server("mcp__pencil__batch_get"), Some("pencil"));
         assert_eq!(tool_server("mcp__nounderscore"), None);
+        // An empty server id is no server.
+        assert_eq!(tool_server("mcp____tool"), None);
         assert_eq!(tool_server("Monitor"), None);
         assert_eq!(
             server_ids(INSTRUCTIONS),
@@ -377,6 +379,14 @@ If the user's request might be served by one of these servers, call ToolSearch.
         let out = rewrite_instructions(INSTRUCTIONS, &inputs(&[baseline()], &everything));
         assert_eq!(out.text, INSTRUCTIONS);
         assert!(out.collapsed.is_empty() && out.deferred.is_empty());
+        // Unchanged text still reports what it described.
+        assert_eq!(out.described, everything);
+        let out = rewrite_tools(TOOLS, &inputs(&[baseline()], &everything));
+        assert_eq!(out.text, TOOLS);
+        assert_eq!(
+            out.described,
+            ["claude_ai_Figma", "pencil", "claude_ai_Atlassian_MCP"]
+        );
     }
 
     #[test]

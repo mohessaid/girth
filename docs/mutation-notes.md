@@ -27,3 +27,10 @@ v0.5 (2026-10-15):
 
   A targeted re-run catches all five.
 - **Equivalent (2 mutants):** `lens::hint`'s word-cut guard (`i > 0` → `true`, and `>` → `>=`). The description is trimmed before it is cut, so a space can never sit at position 0. The guard can't change the result.
+
+## v0.6 (MCP Lens, X-ray)
+- **Rust (`mcp_lens`, `xray`, `lens`, `meter`):** 193 mutants, 3 unviable, **183 of 190 caught (96%)**. Five survivors were real gaps, each now covered by a test that fails under the hand-applied mutant:
+  - an empty server id (`mcp____tool`) is no server;
+  - `described` is reported when nothing collapses (instructions and tools);
+  - the 24-hour baseline window: its length and its exact edge.
+- **Equivalent (2 mutants):** the `lens::hint` guard noted above.

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-15
+
+### Added
+- **Lens for MCP and tools.** The mod also rewrites the MCP server instructions (`mcp_instructions_delta`) and the deferred-tools list (`deferred_tools_delta`).
+  - **Kept in full:** servers this project used, servers used anywhere in the last 30 days, new servers, and pins (`lens.keep` accepts server ids).
+  - **Shortened:** other servers' instructions collapse to one line naming them, and their tools to one line per server (`mcp__<id>__* (<n> tools; ToolSearch finds them)`). No server is disconnected, and no server name is lost.
+  - **Just in time:** the first call to a collapsed server's tool in a session returns that server's held-back instructions. Claude reads them and calls again.
+  - **Measured on the author's setup:** MCP instructions went from 14,258 B to 287 B and the tools list from 7,234 B to 2,797 B. Cost per run fell 29% against v0.5 and 42% against Lens off, at equal quality. Hidden-server tasks passed 6 of 6: Atlassian with held-back instructions, Excalidraw with collapsed tools (`examples/lens/RESULTS.md`).
+  - **Controls:** `GIRTH_LENS_KINDS=skills,mcp,tools` limits Lens to some texts; `girth lens --kind skills|mcp|tools`.
+- **X-ray:** `/girth-xray` (and `girth xray [--json]`) shows what the last request was made of: each attachment, system section and tool description, with bytes, share, tokens and cost, plus what Lens removed.
+- **Meter:** turn records list the MCP servers used (ids only), which feeds the MCP Lens.
+- **SkillsBench result** (`examples/skillsbench/RESULTS.md`): on 6 tasks, Girth-distilled skills (2–4 KB) matched the curated ones (8–82 KB) task for task, with 23% fewer output tokens. Curated skills gave no net lift over no skills on this subset.
+
 ## [0.5.0] - 2026-10-15
 
 ### Added
@@ -96,7 +109,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mohessaid/girth/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mohessaid/girth/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mohessaid/girth/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mohessaid/girth/compare/v0.3.0...v0.4.0
