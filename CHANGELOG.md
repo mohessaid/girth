@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-15
+
+### Fixed
+- `/girth-meter` and `/girth-xray` now say "unavailable right now" when the binary times out or can't run. Before, the command was skipped without a word.
+- Meter priced subagent turns at the 1-hour cache-write rate. Subagents write the 5-minute cache, at 1.25× input, so their estimates were too high.
+
+### Added
+- **Research:** `docs/research/2026-10-15-where-the-money-goes.md`, with `examples/subagents/analyze-subagents.py` and `examples/context/analyze-context.py`. On the author's transcripts, subagents are 6% of spend, and cache reads of a large context are 62%.
+
 ## [0.7.0] - 2026-10-15
 
 ### Added
@@ -126,7 +135,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mohessaid/girth/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mohessaid/girth/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mohessaid/girth/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/mohessaid/girth/compare/v0.4.1...v0.5.0

@@ -122,7 +122,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - an estimated cost;
 - how much Lens kept out of the prompt.
 
-The estimate prices cache writes at the 1-hour rate Claude Code uses, which reproduces Claude Code's own cost figure for the main conversation. It leaves out background requests, such as session titles. Meter data is never shared.
+The estimate prices the main conversation's cache writes at the 1-hour rate Claude Code uses, and subagents' at the 5-minute rate they use. This reproduces Claude Code's own cost figure for the main conversation. It leaves out background requests, such as session titles. Meter data is never shared.
 
 **Keeper** stops you paying twice for the same conversation.
 - **The problem:** Claude Code caches your conversation for an hour. Come back later and the whole thing is written to the cache again, at twice the input price. On the author's machine, **62% of all cache writes** were these returns (`examples/cache/analyze-breaks.py` measures yours, locally).
