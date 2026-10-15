@@ -68,17 +68,20 @@ Opus main thread, by component:
 ## 5. Revised after the spike: compact while idle, not on return
 `examples/compact/SPIKE.md` showed that a mod cannot compact from `prompt.submit` (the host refuses) and cannot compact in headless sessions. It **can** compact an interactive conversation from a timer between turns.
 
-That gives a better design: at 55 minutes idle, while the 1-hour cache is still warm, compact if the context is large. `examples/compact/analyze-idle-compaction.py`, on the same transcripts (Opus rates, 60K base, 5K summary; periods that never returned pay the compaction for nothing):
+That gives a better design: at 55 minutes idle, while the 1-hour cache is still warm, compact if the context is large. `examples/compact/analyze-idle-compaction.py`, on the same transcripts (Opus rates, 60K base, 20K summary output, matching the median 21.6K `postTokens`; periods that never returned pay the compaction for nothing):
 
 | Context | Idle periods (returned) | Compactions | Return writes saved | Later reads saved | Net |
 |---|---|---|---|---|---|
-| ≥ 100K | 262 (243) | $52 | $727 | $1,234 | **$1,910** |
-| ≥ 150K | 240 (222) | $49 | $717 | $1,219 | $1,887 |
-| ≥ 250K | 201 (187) | $44 | $687 | $1,128 | $1,771 |
-| ≥ 400K | 156 (148) | $36 | $634 | $1,009 | $1,607 |
+| ≥ 100K | 262 (243) | $131 | $727 | $1,234 | **$1,831** |
+| ≥ 150K | 240 (222) | $121 | $717 | $1,219 | $1,815 |
+| ≥ 250K | 201 (187) | $104 | $687 | $1,128 | $1,710 |
+| ≥ 400K | 156 (148) | $83 | $634 | $1,009 | $1,560 |
 
-- **About 40% of total spend,** and 4.6× the keeper's $416.
-- **It overlaps with the keeper.** For a large context, compaction replaces the pings: no pings are needed once the context is small.
+- **About 39% of total spend, measured against no keeper.**
+  - The keeper is already running and saves about $416 of the same rewrites, so the extra saving over today is roughly **$1.4K**.
+- **The two collide at 55 minutes:** the keeper pings then, and idle compaction would compact then.
+  - For a large context they are alternatives, not additions: the compaction replaces the ping.
+  - Once the context is small, the keeper's rule (context ≥ 20K) decides as before.
 - **Open before building:**
   - the opt-in shape (it changes what the model knows while the user is away);
   - an outcome A/B (does work after an idle compaction go as well as without it?);

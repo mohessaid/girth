@@ -12,8 +12,11 @@
 - **After the timer compaction,** the model answered "HELIOTROPE 4127 — lens.rs shrinks a project's skill listing…".
   - It kept the codename and the number given three turns earlier, as `instructions` asked, and still knew the file it had read.
 - **The first request after compaction read 0 and wrote 48,159 tokens:** system prompt, tools and summary. That is close to the 60K base the cost model assumed.
-- **The input box ignored one Enter** while the compaction was finishing. A second Enter sent the prompt.
-  - A real user returning mid-compaction may see the same thing. It only happens if they come back within the seconds a compaction takes.
+- **Lost Enter: seen once, not reproduced.**
+  - In the first run, a prompt typed more than a minute after the compaction had finished stayed in the input box through two Enters. The prompt and Enter were sent in one `tmux send-keys` call.
+  - The prompt went through on a later `C-m`, which Claude Code then followed with a second compaction: the spike re-arms its timer after every turn.
+  - **Retest** (a fresh run of the same session; prompt sent with `send-keys -l`, then Enter 1 s later, 90 s after a 58,988 → 8,600 compaction): the prompt went through on the first Enter. The answer "HELIOTROPE 4127 PAPAYA" came 24 s later.
+  - The first failure was probably how tmux delivered the keys, but that is not proven. Watch for it in the dogfood run.
 
 ## What this changes
 - **"Compact on return" can't compact before the return.** Doing it after the first returning turn would still pay the full rewrite once.

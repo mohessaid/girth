@@ -7,7 +7,8 @@ Opus 5.5 rates. For each main-conversation idle period of 55 minutes or more
 with a context of at least the threshold, compare doing nothing with
 compacting at 55 minutes while the cache is still warm:
 
-- compaction: the context read from the cache, plus a 5K-token summary
+- compaction: the context read from the cache, plus a 20K-token summary
+  (the median compaction leaves about 21.6K tokens)
 - after it: the return writes a BASE-token context instead of the full one,
   and every later request until the next idle period or shrink re-reads
   BASE instead of the full context
@@ -23,7 +24,7 @@ INPUT, OUTPUT, READ, WRITE = 4.0, 20.0, 0.20, 8.0
 IDLE = 3300
 TTL = 3600
 BASE = 60_000
-SUMMARY = 5_000
+SUMMARY = 20_000
 
 
 def sessions(root):
@@ -65,7 +66,7 @@ def main():
                 if last < floor or (gap is not None and gap < IDLE):
                     continue
                 n += 1
-                compaction += (last * READ + SUMMARY * OUTPUT + BASE * WRITE * 0) / 1e6
+                compaction += (last * READ + SUMMARY * OUTPUT) / 1e6
                 if gap is None:
                     continue
                 returned += 1
