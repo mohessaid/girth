@@ -1,0 +1,1 @@
+Create index.html: a one-page site for "Crumb", a neighbourhood bakery in Lyon. Give it complete search and social metadata: title, meta description, canonical URL https://crumb.example, Open Graph and Twitter cards, and JSON-LD for a local bakery with address and opening hours. Keep the page itself simple.

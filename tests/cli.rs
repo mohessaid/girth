@@ -548,7 +548,7 @@ fn lens_collapses_unused_skills_and_records_the_baseline_once() {
         text.contains("- girth:girth: Use when a task needs know-how.\n"),
         "{text}"
     );
-    assert!(text.ends_with("- Also installed (names only; ask `girth search \"<need>\"` which fits): alpha, beta, plug:gamma\n"), "{text}");
+    assert!(text.ends_with("- Also installed (short hints; ask `girth search \"<need>\"` which fits): alpha (alpha.); beta (beta.); plug:gamma (gamma.)\n"), "{text}");
     assert!(!text.contains("Use when beta"), "{text}");
     lens(&home, &project, &[]).success().stdout(text);
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();

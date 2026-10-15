@@ -46,7 +46,11 @@ Success criteria are in §9.
   4. The ledger has a `use` of this name in any project within the last 30 days.
   5. The name is **new**: first recorded by Lens fewer than 14 days ago **and** not part of the baseline (the names present at Lens's first run on this machine).
   6. The name is pinned. `lens.keep` (a list of names) in the project's `.girth/config.json` or in `GIRTH_HOME/config.json` (new, optional).
-- **Collapse** every other entry into one final line, keeping every name:
+- **Collapse** every other entry into one final line, keeping every name and a short hint.
+  - **Amended 2026-10-15 after the pilot A/B:** bare names lost a needed skill (`examples/lens/RESULTS.md`).
+  - Each collapsed skill appears as `name (hint)`. The hint is the first ≤ 60 characters of the description, cut at a word boundary, with a leading "Use when" dropped. Skills are separated by `; `.
+  - The prefix became `- Also installed (short hints; ask \`girth search "<need>"\` which fits): `.
+  - The original wording:
 
   `- Also installed (names only; ask \`girth search "<need>"\` which fits): a, b, c`
 

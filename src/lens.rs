@@ -9,9 +9,12 @@ use std::path::Path;
 
 use crate::ledger::{Event, Record};
 
-/// The line that carries the collapsed names. Frozen: SKILL.md refers to it.
+/// The line that carries the collapsed skills. Frozen: SKILL.md refers to it.
 pub const COLLAPSE_PREFIX: &str =
-    "- Also installed (names only; ask `girth search \"<need>\"` which fits): ";
+    "- Also installed (short hints; ask `girth search \"<need>\"` which fits): ";
+/// A collapsed skill keeps at most this many characters of its description:
+/// names alone lose routing (SkillRouter), whole descriptions are the cost.
+pub const HINT_CHARS: usize = 60;
 /// A skill first seen this recently (and not in the baseline) keeps its description.
 pub const NEW_SECS: u64 = 14 * 24 * 3600;
 /// A skill used in any project this recently keeps its description.
@@ -102,6 +105,27 @@ fn base(name: &str) -> &str {
     name.rsplit(':').next().unwrap_or(name)
 }
 
+/// A short hint from an entry's description: its first line without a leading
+/// "Use when", cut at a word boundary within `HINT_CHARS`.
+fn hint(entry: &str) -> Option<String> {
+    let first = entry.lines().next()?;
+    let (_, description) = first.split_once(": ")?;
+    let description = description.trim();
+    let description = description.strip_prefix("Use when ").unwrap_or(description);
+    if description.is_empty() {
+        return None;
+    }
+    if description.chars().count() <= HINT_CHARS {
+        return Some(description.to_string());
+    }
+    let cut: String = description.chars().take(HINT_CHARS).collect();
+    let cut = match cut.rfind(' ') {
+        Some(i) if i > 0 => cut[..i].trim_end().to_string(),
+        _ => cut,
+    };
+    Some(format!("{cut}…"))
+}
+
 /// Rewrite `text` for this project. Returns it unchanged when there is no
 /// listing to parse or fewer than two entries would be collapsed.
 pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
@@ -147,15 +171,19 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
                 .join("SKILL.md")
                 .is_file()
     };
-    let (mut described, mut collapsed) = (Vec::new(), Vec::new());
+    let (mut described, mut collapsed, mut shown) = (Vec::new(), Vec::new(), Vec::new());
     let mut last_entry = None;
     for (i, item) in items.iter().enumerate() {
-        if let Item::Entry { name, .. } = item {
+        if let Item::Entry { name, text } = item {
             last_entry = Some(i);
             if keep(name) {
                 described.push(name.clone());
             } else {
                 collapsed.push(name.clone());
+                shown.push(match hint(text) {
+                    Some(h) => format!("{name} ({h})"),
+                    None => name.clone(),
+                });
             }
         }
     }
@@ -177,7 +205,7 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
         }
         if i == last_entry {
             out.push_str(COLLAPSE_PREFIX);
-            out.push_str(&collapsed.join(", "));
+            out.push_str(&shown.join("; "));
             out.push('\n');
         }
     }
@@ -409,9 +437,23 @@ SKIP only when another provider is used.
                 "The following skills are available for use with the Skill tool:\n\n\
                  - girth:girth: Use when a task needs specialised know-how.\n\
                  - girth-captions: Use when captions.\n\
-                 {COLLAPSE_PREFIX}beat-synced-sfx, claude-api, superpowers:brainstorming, hyperframes, anthropic-skills:pdf, anthropic-skills:xlsx\n"
+                 {COLLAPSE_PREFIX}beat-synced-sfx (a video needs sound effects.); claude-api (Reference for the Claude API.); superpowers:brainstorming (You MUST use this before any creative work.); hyperframes (Mandatory entry point for video.); anthropic-skills:pdf; anthropic-skills:xlsx\n"
             )
         );
+    }
+
+    #[test]
+    fn hints_are_short_word_bounded_and_drop_use_when() {
+        assert_eq!(hint("- a: Use when a video needs sound.\n"), Some("a video needs sound.".into()));
+        assert_eq!(hint("- a\n"), None);
+        assert_eq!(hint("- a: \n"), None);
+        let long = "- a: SEO and AEO best practices for metadata, Open Graph, sitemaps, robots.txt, hreflang.\nmore\n";
+        let h = hint(long).unwrap();
+        assert_eq!(h, "SEO and AEO best practices for metadata, Open Graph,…");
+        assert!(h.chars().count() <= HINT_CHARS + 1);
+        // No word boundary: cut at the limit.
+        let word = format!("- a: {}\n", "x".repeat(100));
+        assert_eq!(hint(&word).unwrap().chars().count(), HINT_CHARS + 1);
     }
 
     #[test]
