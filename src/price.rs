@@ -105,7 +105,12 @@ mod tests {
         let c = cost(rates("claude-haiku-5-5").unwrap(), 2, 4, 11_093, 72_546);
         assert!((c - 0.014_622_33).abs() < 1e-8, "{c}");
         // Every model writes at twice its input rate.
-        for id in ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"] {
+        for id in [
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5",
+            "claude-fable-5-1",
+        ] {
             let r = rates(id).unwrap();
             assert_eq!(r.cache_write, 2.0 * r.input, "{id}");
         }

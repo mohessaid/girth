@@ -3,6 +3,7 @@
 pub mod config;
 pub mod fetch;
 pub mod frontmatter;
+pub mod keeper;
 pub mod ledger;
 pub mod lens;
 pub mod mcp_lens;
