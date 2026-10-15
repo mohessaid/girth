@@ -83,8 +83,11 @@ pub fn resolve_roots(cli: &[String], ctx: &Context, warnings: &mut Vec<String>) 
             .map(str::to_string)
             .collect()
     } else {
-        configured_roots(ctx, warnings)
-            .unwrap_or_else(|| DEFAULT_ROOTS.iter().map(|r| r.to_string()).collect())
+        configured_roots(ctx, warnings).unwrap_or_else(|| {
+            let mut defaults: Vec<String> = DEFAULT_ROOTS.iter().map(|r| r.to_string()).collect();
+            defaults.extend(plugin_skill_dirs(ctx));
+            defaults
+        })
     };
     let mut roots: Vec<PathBuf> = Vec::new();
     for item in raw {
@@ -94,6 +97,34 @@ pub fn resolve_roots(cli: &[String], ctx: &Context, warnings: &mut Vec<String>) 
         }
     }
     roots
+}
+
+/// `skills` dirs of installed Claude Code plugins, from
+/// `<CLAUDE_CONFIG_DIR or ~/.claude>/plugins/installed_plugins.json`.
+/// A missing or unreadable manifest gives none.
+fn plugin_skill_dirs(ctx: &Context) -> Vec<String> {
+    let config_dir = match ctx.var("CLAUDE_CONFIG_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => match &ctx.home {
+            Some(home) => home.join(".claude"),
+            None => return Vec::new(),
+        },
+    };
+    let manifest = std::fs::read_to_string(config_dir.join("plugins/installed_plugins.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let Some(Value::Object(plugins)) = manifest.and_then(|m| m.get("plugins").cloned()) else {
+        return Vec::new();
+    };
+    plugins
+        .values()
+        .filter_map(Value::as_array)
+        .flatten()
+        .filter_map(|install| install.get("installPath")?.as_str())
+        .map(|path| PathBuf::from(path).join("skills"))
+        .filter(|dir| dir.is_dir())
+        .map(|dir| dir.display().to_string())
+        .collect()
 }
 
 fn configured_roots(ctx: &Context, warnings: &mut Vec<String>) -> Option<Vec<String>> {
@@ -210,6 +241,43 @@ mod tests {
                 dir.path().join(".claude/skills"),
             ]
         );
+    }
+
+    #[test]
+    fn defaults_add_installed_plugins_skill_dirs() {
+        let dir = TempDir::new().unwrap();
+        let with_skills = dir.path().join("cache/sp/6.4.1");
+        std::fs::create_dir_all(with_skills.join("skills")).unwrap();
+        let no_skills = dir.path().join("cache/other/1.0");
+        std::fs::create_dir_all(&no_skills).unwrap();
+        let manifest = serde_json::json!({
+            "version": 2,
+            "plugins": {
+                "sp@official": [{"scope": "user", "installPath": with_skills}],
+                "other@official": [{"scope": "user", "installPath": no_skills}],
+                "broken@x": [{"scope": "user"}],
+            }
+        });
+        let plugins = dir.path().join("home/.claude/plugins");
+        std::fs::create_dir_all(&plugins).unwrap();
+        std::fs::write(plugins.join("installed_plugins.json"), manifest.to_string()).unwrap();
+        let roots = resolve_roots(&[], &ctx(&dir, &[]), &mut vec![]);
+        assert_eq!(roots.len(), 4, "{roots:?}");
+        assert_eq!(roots[3], with_skills.join("skills"));
+
+        // CLAUDE_CONFIG_DIR moves the manifest; explicit roots never get plugin dirs.
+        let alt = dir.path().join("alt");
+        std::fs::create_dir_all(alt.join("plugins")).unwrap();
+        std::fs::write(alt.join("plugins/installed_plugins.json"), "{not json").unwrap();
+        let alt_env = alt.display().to_string();
+        let roots = resolve_roots(
+            &[],
+            &ctx(&dir, &[("CLAUDE_CONFIG_DIR", &alt_env)]),
+            &mut vec![],
+        );
+        assert_eq!(roots.len(), 3, "{roots:?}");
+        let roots = resolve_roots(&s(&["only"]), &ctx(&dir, &[]), &mut vec![]);
+        assert_eq!(roots, vec![dir.path().join("only")]);
     }
 
     #[test]
