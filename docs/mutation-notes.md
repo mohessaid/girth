@@ -19,3 +19,11 @@ v0.5 (2026-10-15):
   - Recording Lens bytes on subagent turns: **caught**.
   - Dropping the exit-code check: survived at first, then **caught** after a test was added in which the binary fails but prints valid JSON.
   - Dropping the `.catch` handlers: **equivalent.** Claude Code already skips a hook that throws (before or after `next`) and carries on unchanged, so `.catch(… next(e))` restates the engine's default. It stays, so the fail-open intent is visible and `claude plugin validate` reports gating hooks as handled.
+- **Rust (`lens`, `meter`, `price`, `config`):** 185 mutants, 3 unviable, **175 of 182 caught (96%)** on the first run. Five survivors were real gaps, each now covered by a test:
+  - a blank line after a listing entry;
+  - the 30-day and 14-day window edges;
+  - exactly two collapsed entries;
+  - the "unpriced" note when there are none.
+
+  A targeted re-run catches all five.
+- **Equivalent (2 mutants):** `lens::hint`'s word-cut guard (`i > 0` → `true`, and `>` → `>=`). The description is trimmed before it is cut, so a space can never sit at position 0. The guard can't change the result.

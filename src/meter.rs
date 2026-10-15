@@ -185,6 +185,7 @@ mod tests {
             ),
             "{text}"
         );
+        assert!(!text.contains("unpriced"), "{text}");
         assert!(text.contains("\nmeter: Lens trimmed the skill listing in 1 turns: ≥ 7,000 tokens not sent (≥ $0.0014 at cache-read rates)"), "{text}");
         let plain = render(&summarise(&[turn("/a", "mystery", 5, None)], None));
         assert!(

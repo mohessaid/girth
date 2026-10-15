@@ -504,6 +504,50 @@ SKIP only when another provider is used.
     }
 
     #[test]
+    fn a_blank_line_ends_an_entry_and_survives_a_collapse() {
+        let items = parse("H:\n- a: A.\n\n- b: B.\n");
+        assert_eq!(items[2], Item::Raw("\n".into()));
+        let tmp = tempfile::TempDir::new().unwrap();
+        let text = "H:\n- girth:girth: G.\n- a: A.\n\n- b: B.\n";
+        let out = rewrite(text, &inputs(&[], &[], tmp.path()));
+        assert_eq!(
+            out.text,
+            format!("H:\n- girth:girth: G.\n\n{COLLAPSE_PREFIX}a (A.); b (B.)\n")
+        );
+    }
+
+    #[test]
+    fn windows_are_strict_and_two_collapsed_entries_are_enough() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let text = "H:\n- a: A.\n- b: B.\n- c: C.\n";
+        let records = vec![
+            seen(NOW - 60 * DAY, &["a"]),
+            // Exactly at the window edges: neither recent nor new.
+            used(NOW - RECENT_SECS, "a", "/elsewhere"),
+            seen(NOW - NEW_SECS, &["b", "c"]),
+        ];
+        let out = rewrite(text, &inputs(&records, &[], tmp.path()));
+        assert_eq!(out.collapsed, ["a", "b", "c"]);
+        // One second inside each window keeps the description.
+        let records = vec![
+            seen(NOW - 60 * DAY, &["a"]),
+            used(NOW - RECENT_SECS + 1, "a", "/elsewhere"),
+            seen(NOW - NEW_SECS + 1, &["b"]),
+            seen(NOW - 60 * DAY, &["c"]),
+        ];
+        let out = rewrite(text, &inputs(&records, &[], tmp.path()));
+        assert_eq!(out.described, ["a", "b"]);
+        // Exactly two collapsed entries still rewrite.
+        let records = vec![
+            seen(NOW - 60 * DAY, &["a", "b", "c"]),
+            used(NOW - DAY, "a", "/work/app"),
+        ];
+        let out = rewrite(text, &inputs(&records, &[], tmp.path()));
+        assert_eq!(out.collapsed, ["b", "c"]);
+        assert!(out.text.contains(COLLAPSE_PREFIX));
+    }
+
+    #[test]
     fn text_without_entries_passes_through() {
         let tmp = tempfile::TempDir::new().unwrap();
         for text in ["", "no listing here\n", "header only:\n\n"] {
