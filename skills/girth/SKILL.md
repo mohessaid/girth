@@ -26,7 +26,7 @@ Write the need as one sentence. Pick a lowercase, hyphenated domain slug broad e
 ## 2. Search, cache first
 Run `scripts/girth search "<need>" --json`. Note `output_dir` (where crafted skills live).
 - A `girth-<domain>` hit is a cache hit. If it covers the need, set `last_used` to today, use it, and skip to step 6; if it covers part, extend it (step 4).
-- Skills the listing names only under "Also installed" are still installed: search finds them, and you can invoke them by name.
+- Skills listed only under "Also installed" are still installed; search finds them.
 - Otherwise read the top candidates' `matched_headings` via `scripts/girth show <path> --heading "<heading>"…` (no args lists headings; then request the ones you need), never whole files.
 
 ## 3. Decide
@@ -61,7 +61,7 @@ Distillation rules:
 - Keep **verbatim**: never/always/must rules, gotchas, exact API signatures, required file structures, version-specific behaviour.
 - Keep only what this need (and clearly adjacent needs) touches. Drop examples, motivation and unrelated sub-topics.
 - Never compress guidance about how output should read (tone, voice, copy, narration) into terse rules. Copy it in full. The skill is compressed; the work it produces is not.
-- Keep a rule's scope with the rule ("when narration exists…"), so it isn't applied where it doesn't belong.
+- Keep each rule's scope with it ("when narration exists…").
 - The description says only *when* to use the skill. A workflow summary there makes agents skip the body.
 - Keep the body ≤ 3 KB; put overflow in linked `references/<topic>.md` files.
 - On conflicts, follow the most specific, most recent source and note it in one line.
@@ -71,7 +71,7 @@ Distillation rules:
 Run `scripts/girth validate <output_dir>/girth-<domain>` and fix until it prints `VALID` (this also records it in the ledger).
 
 ## 6. Report and continue
-Say in one line whether you crafted, extended or reused, the sources and the body size; then continue the original task following the crafted skill.
+In one line, say whether you crafted, extended or reused, with sources and body size; then continue the task using the crafted skill.
 
 ## Taste (recurring deliverables)
 Before producing a deliverable, run `scripts/girth taste show <domain>` unless taste context already arrived. Apply every house rule; vary each recent key unless a rule, the request or a source skill's confirmed preference pins it, and say what is fresh. When done, run `scripts/girth made <domain> key=value…`. New requests add to rules; never drop them. See `references/taste.md`.
@@ -80,4 +80,4 @@ Before producing a deliverable, run `scripts/girth taste show <domain>` unless t
 When the original task is done, run `scripts/girth share status`. If it prints `sharing: unset` and you can ask interactively, follow `references/sharing.md`; otherwise skip silently. Never block or delay the task for this.
 
 ## Housekeeping
-Over 8 `girth-*` skills in `output_dir`? Propose merges before adding another.
+Over 8 `girth-*` skills in `output_dir`? Propose merges first.
