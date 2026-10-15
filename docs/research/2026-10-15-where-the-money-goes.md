@@ -44,13 +44,18 @@ Opus main thread, by component:
 | ≥ 250K | 148 | $292 | $1,103 | $1,395 |
 
 - **Context at return** (175 returns ≥ 150K): p25 356K, median 583K, p75 797K tokens.
-- **The keeper's replay saved $416. This is about 3.6 times that.**
-- **It also stacks with the keeper.** On a warm return, the compaction reads from the cache instead of re-writing it.
+- **Lower bound.** The table assumes the compaction call reads its input uncached at $4/Mtok. If that call also writes the cache (likely, since Claude Code's requests carry `cache_control`), the at-return term flips from +$298 to about −$101 (175 × ($0.48 new base + $0.10 summary)).
+  - The total is then about **$1,094**; the later-reads term carries the feature either way.
+- **The 60K base is consistent with the data.** 80 compactions in these transcripts left a median `postTokens` of 21,574 (p25 17,891, p75 26,817; 76 auto, 4 manual), plus about 40K of system prompt and tools.
+- **The keeper's replay saved $416. This is about 2.6–3.6 times that.**
+- **With the keeper, only part of it applies.** A warm return has no rewrite to avoid. The at-return term becomes a small cost (the summary plus the new base), and only the later-reads term remains.
+- **This is the first Girth feature that changes what the model knows.** Lens, Meter and Keeper never did. It must ask first, or be opt-in, and needs an outcome A/B before any default changes.
 
 ## 4. Assumptions that need an A/B before shipping
 - **The session after compaction might take more requests,** for example re-reading files the summary dropped. The model above assumes the same number of requests.
 - **Answer quality after compaction is untested.** Returns after hours are often new subtasks, which favours compaction, but that is a hypothesis, not a measurement.
-- **The 60K post-compaction base is assumed.** The measured median base after a start or compaction is 68K.
+- **The 60K post-compaction base is an estimate:** 21.6K median summary plus about 40K of system prompt and tools.
+- **No subagent rows appear inside the main transcripts** (`isSidechain` usage rows: 0), so the 6.2% subagent share is not an undercount.
 
 ## Mods API facts that make this buildable (code.claude.com/docs/en/plugins/mods/reference)
 - **`session.compact` event:** fires when the conversation is about to be compacted; a hook can return `{ skip: reason }`.

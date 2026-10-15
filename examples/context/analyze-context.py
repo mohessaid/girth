@@ -57,7 +57,9 @@ def main():
                         added["input: " + (b.get("name") or "?")] += len(json.dumps(b.get("input"))) / CHARS_PER_TOKEN
                         count["input: " + (b.get("name") or "?")] += 1
                     elif isinstance(b, dict) and b.get("type") == "thinking":
-                        size = (len(b.get("thinking") or "") + len(b.get("signature") or "")) / CHARS_PER_TOKEN
+                        # The signature is not context; transcripts may also omit the text,
+                        # so this undercounts thinking. Prefer the exact growth split.
+                        size = len(b.get("thinking") or "") / CHARS_PER_TOKEN
                         live.append(["thinking", size, 0])
                         added["thinking"] += size
                         count["thinking"] += 1
