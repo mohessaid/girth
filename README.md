@@ -90,7 +90,7 @@ npx skills add mohessaid/girth
 | Craft, reuse, `show`, `fetch`, `taste`, `made` | ✓ | ✓ |
 | Usage ledger (`girth stats` knows which skills you actually use) | ✓ | crafts only |
 | Taste delivered automatically when a domain skill loads | ✓ | ask *"girth taste &lt;domain&gt;"* |
-| Lens and Meter (Claude Code 2.1.287 or later) | ✓ | — |
+| Lens and Meter (Claude Code 2.1.287 or later; MCP Lens and X-ray tested on 2.1.300) | ✓ | — |
 
 The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Claude Code 2.1.287 or later, a small mod (`hooks/girth.js`) for Lens and Meter. A skills-CLI install registers neither, so those parts are plugin-only.
 
