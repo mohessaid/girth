@@ -2,6 +2,7 @@
 name: girth-skill-authoring
 description: Use when writing or editing a SKILL.md in this repo, Girth's own skill or a crafted girth-* skill, especially its description or trigger wording.
 metadata:
+  internal: true
   girth:
     sources:
       - path-or-repo: ~/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/writing-skills

@@ -133,3 +133,30 @@ fn consent_never_blocks_and_comes_after_the_task_is_served() {
         "consent must say it never blocks the task"
     );
 }
+
+/// `npx skills add mohessaid/girth` installs every SKILL.md it finds in the repo.
+/// Repo-internal skills must be marked `metadata.internal: true` so the skills
+/// CLI hides them; only the shipped skill may be installable.
+#[test]
+fn only_the_shipped_skill_is_installable_by_the_skills_cli() {
+    let internal = |path: &Path| {
+        let text = std::fs::read_to_string(path.join("SKILL.md")).unwrap();
+        let (frontmatter, _) = split_frontmatter(&text);
+        let meta = parse_strict(&frontmatter).unwrap();
+        meta.get("metadata")
+            .and_then(|m| m.get("internal"))
+            .and_then(|v| v.as_bool())
+            == Some(true)
+    };
+    assert!(!internal(skill_dir()), "the shipped skill must stay public");
+    let repo_skills = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.claude/skills"));
+    let mut seen = 0;
+    for entry in std::fs::read_dir(repo_skills).unwrap() {
+        let dir = entry.unwrap().path();
+        if dir.join("SKILL.md").is_file() {
+            seen += 1;
+            assert!(internal(&dir), "{} is not marked internal", dir.display());
+        }
+    }
+    assert!(seen > 0);
+}
