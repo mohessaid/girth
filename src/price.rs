@@ -2,7 +2,8 @@
 //!
 //! Source: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
 //! 2026-10-06). Cache writes are priced at the 1-hour rate (2× input), the
-//! cache Claude Code writes; this reproduces the cost Claude Code reports.
+//! cache the main conversation writes; this reproduces the cost Claude Code
+//! reports. Subagents write the 5-minute cache (1.25× input): see `five_minute`.
 
 /// US dollars per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -56,6 +57,17 @@ pub fn rates(model: &str) -> Option<Rates> {
     ];
     let id = model.split('[').next().unwrap_or(model);
     TABLE.iter().find(|(name, _)| *name == id).map(|(_, r)| *r)
+}
+
+impl Rates {
+    /// The same rates with cache writes at the 5-minute price (1.25× input),
+    /// the cache a subagent's requests write.
+    pub fn five_minute(self) -> Rates {
+        Rates {
+            cache_write: self.input * 1.25,
+            ..self
+        }
+    }
 }
 
 /// Estimated dollars for one usage record.

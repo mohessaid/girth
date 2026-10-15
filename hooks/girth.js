@@ -296,7 +296,7 @@ export function register(on) {
       timeoutMs: TIMEOUT_MS,
     })
     return { text: run.exitCode === 0 ? run.stdout.trimEnd() : 'girth: the meter is unavailable right now' }
-  })
+  }).catch(async () => ({ text: 'girth: the meter is unavailable right now' }))
 
   on('command.run', { command: 'girth-xray' }, async ($, e) => {
     const run = await $.process.run([launcher($), 'xray'], {
@@ -304,5 +304,5 @@ export function register(on) {
       timeoutMs: TIMEOUT_MS,
     })
     return { text: run.exitCode === 0 ? run.stdout.trimEnd() : 'girth: the x-ray is unavailable right now' }
-  })
+  }).catch(async () => ({ text: 'girth: the x-ray is unavailable right now' }))
 }
