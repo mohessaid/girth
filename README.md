@@ -30,6 +30,8 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 Status: v0.4, early and measured. Design: `docs/superpowers/specs/`.
 
+Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
+
 ## Measured so far (one machine)
 
 **Five sessions in one domain** (2026-10-15, HyperFrames, claude-sonnet-5-5, the tasks never mention Girth):

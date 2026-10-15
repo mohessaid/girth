@@ -48,6 +48,8 @@ Girth is a skill plus a small Rust CLI, built for Claude Code first and installa
 
 Session 1 pays to craft. Sessions 2–5 cost about half of a bulk session. The tasks never mention Girth: it triggers itself (3 of 3 on specialised tasks, 0 of 3 on generic ones). Full method: `examples/compounding/RESULTS.md`.
 
+**Independent evidence:** in SkillsBench (arXiv 2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more. Girth makes the focused version from the skills you already trust.
+
 **What it doesn't claim:** better output than a capable model reading the full skills. The claim is the same quality for less.
 
 ### What's next
