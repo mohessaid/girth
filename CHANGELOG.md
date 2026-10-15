@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - `npx skills add mohessaid/girth` no longer installs the repo-internal `girth-skill-authoring` skill. It is now marked `metadata.internal`.
 - The launcher's one-time binary download is bounded (10 s connect, 120 s total, 2 retries) and announced on stderr. A stalled network used to hang the session silently, and an interrupt left a temp file in `bin/`.
-- The README's one-line install (`--marketplace`) needs Claude Code 2.1.292 or later, but the README promises 2.1.275. It now uses the two-step `/plugin marketplace add mohessaid/girth` then `/plugin install girth@girth`, which works on every supported version.
+- The README's install section now shows the two-step `/plugin marketplace add mohessaid/girth` then `/plugin install girth@girth`, which works the same in a session and in the shell. (The earlier one-line `/plugin install girth --marketplace mohessaid/girth` was also valid in a session from 2.1.275; its shell form needs 2.1.292.)
 
 ### Added
 - The README compares plugin and skills-CLI installs: the usage ledger and automatic taste delivery need the plugin's hook.
