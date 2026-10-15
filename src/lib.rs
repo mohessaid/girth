@@ -4,6 +4,7 @@ pub mod config;
 pub mod fetch;
 pub mod frontmatter;
 pub mod ledger;
+pub mod lens;
 pub mod measure;
 pub mod record;
 pub mod search;

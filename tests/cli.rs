@@ -514,3 +514,91 @@ fn show_prints_overview_or_only_the_requested_sections() {
         .code(1)
         .stderr(predicate::str::contains("no SKILL.md"));
 }
+
+const LISTING: &str = "The following skills are available for use with the Skill tool:\n\n\
+- girth:girth: Use when a task needs know-how.\n\
+- alpha: Use when alpha.\n\
+- beta: Use when beta.\n\
+- plug:gamma: Use when gamma.\n";
+
+fn lens(
+    home: &std::path::Path,
+    project: &std::path::Path,
+    args: &[&str],
+) -> assert_cmd::assert::Assert {
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", home)
+        .env_remove("GIRTH_LENS")
+        .arg("lens")
+        .arg("--project")
+        .arg(project)
+        .args(args)
+        .write_stdin(LISTING)
+        .assert()
+}
+
+#[test]
+fn lens_collapses_unused_skills_and_records_the_baseline_once() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(&project).unwrap();
+    let out = lens(&home, &project, &[]).success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("- girth:girth: Use when a task needs know-how.\n"),
+        "{text}"
+    );
+    assert!(text.ends_with("- Also installed (names only; ask `girth search \"<need>\"` which fits): alpha, beta, plug:gamma\n"), "{text}");
+    assert!(!text.contains("Use when beta"), "{text}");
+    lens(&home, &project, &[]).success().stdout(text);
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 1, "{ledger}");
+    assert!(ledger.contains(r#""kind":"seen""#) && ledger.contains("plug:gamma"));
+}
+
+#[test]
+fn lens_json_reports_names_and_bytes() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(&project).unwrap();
+    let out = lens(&home, &project, &["--json"]).success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["described"], serde_json::json!(["girth:girth"]));
+    assert_eq!(
+        json["collapsed"],
+        serde_json::json!(["alpha", "beta", "plug:gamma"])
+    );
+    assert_eq!(json["bytes_before"], LISTING.len());
+    assert_eq!(json["bytes_after"], json["text"].as_str().unwrap().len());
+}
+
+#[test]
+fn lens_can_be_turned_off_and_pins_names() {
+    let tmp = TempDir::new().unwrap();
+    let (home, project) = (tmp.path().join("home"), tmp.path().join("proj"));
+    std::fs::create_dir_all(project.join(".girth")).unwrap();
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", &home)
+        .env("GIRTH_LENS", "off")
+        .args(["lens", "--project"])
+        .arg(&project)
+        .write_stdin(LISTING)
+        .assert()
+        .success()
+        .stdout(LISTING);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"lens": {"enabled": false}}"#,
+    )
+    .unwrap();
+    lens(&home, &project, &[]).success().stdout(LISTING);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"lens": {"keep": ["alpha"]}}"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("config.json"), r#"{"lens": {"keep": ["beta"]}}"#).unwrap();
+    // alpha and beta pinned: only gamma would collapse, so nothing changes.
+    lens(&home, &project, &[]).success().stdout(LISTING);
+}

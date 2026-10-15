@@ -49,6 +49,16 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Rewrite a Claude Code skill listing (stdin) for this project: keep the
+    /// descriptions it needs, collapse the rest into one line of names.
+    Lens {
+        /// The project dir (default: cwd).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Print JSON: text, described, collapsed, bytes_before, bytes_after.
+        #[arg(long)]
+        json: bool,
+    },
     /// Record an event in the local ledger (used by the plugin hook).
     Record {
         #[command(subcommand)]
@@ -471,12 +481,69 @@ fn emit(out: &str) {
     }
 }
 
+fn run_lens(project: Option<PathBuf>, json: bool, ctx: &Context, out: &mut String) -> ExitCode {
+    use std::io::Read;
+    let mut text = String::new();
+    let _ = std::io::stdin().read_to_string(&mut text);
+    let project_dir = project.unwrap_or_else(|| ctx.cwd.clone());
+    let home = girth_home(ctx);
+    let (enabled, keep) = girth::lens::settings(&project_dir, &home);
+    let off = ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
+    let records = ledger::read(&home);
+    let rewrite = if off || !enabled {
+        girth::lens::Rewrite {
+            text: text.clone(),
+            described: Vec::new(),
+            collapsed: Vec::new(),
+        }
+    } else {
+        let names: Vec<String> = girth::lens::parse(&text)
+            .into_iter()
+            .filter_map(|i| match i {
+                girth::lens::Item::Entry { name, .. } => Some(name),
+                girth::lens::Item::Raw(_) => None,
+            })
+            .collect();
+        let unseen = girth::lens::unseen(&records, &names);
+        let project = project_dir.display().to_string();
+        let rewrite = girth::lens::rewrite(
+            &text,
+            &girth::lens::Inputs {
+                records: &records,
+                project: &project,
+                project_dir: &project_dir,
+                keep: &keep,
+                now: ledger::now(),
+            },
+        );
+        if !unseen.is_empty() {
+            // Never disturb the session: a failed append is dropped.
+            let _ = ledger::append(&home, Event::Seen { names: unseen });
+        }
+        rewrite
+    };
+    if json {
+        let payload = serde_json::json!({
+            "text": rewrite.text,
+            "described": rewrite.described,
+            "collapsed": rewrite.collapsed,
+            "bytes_before": text.len(),
+            "bytes_after": rewrite.text.len(),
+        });
+        let _ = writeln!(out, "{payload}");
+    } else {
+        out.push_str(&rewrite.text);
+    }
+    ExitCode::SUCCESS
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let ctx = Context::from_process();
     let mut warnings = Vec::new();
     let mut out = String::new();
     let code = match cli.command {
+        Command::Lens { project, json } => run_lens(project, json, &ctx, &mut out),
         Command::Measure { roots, json } => {
             let roots = resolve_roots(&roots, &ctx, &mut warnings);
             warn(&warnings);
