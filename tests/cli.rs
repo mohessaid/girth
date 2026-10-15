@@ -757,3 +757,24 @@ fn xray_renders_a_snapshot_and_handles_empty_or_bad_input() {
             .stdout("x-ray: nothing captured yet (send a message first)\n");
     }
 }
+
+#[test]
+fn lens_kinds_env_limits_which_texts_are_rewritten() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let mut cmd = home_cmd(&home);
+    cmd.env("GIRTH_LENS_KINDS", "skills")
+        .args(["lens", "--kind", "mcp", "--project", "/work/app"])
+        .write_stdin(MCP)
+        .assert()
+        .success()
+        .stdout(MCP);
+    let mut cmd = home_cmd(&home);
+    let out = cmd
+        .env("GIRTH_LENS_KINDS", "skills,mcp")
+        .args(["lens", "--kind", "mcp", "--project", "/work/app"])
+        .write_stdin(MCP)
+        .assert()
+        .success();
+    assert_ne!(String::from_utf8_lossy(&out.get_output().stdout), MCP);
+}

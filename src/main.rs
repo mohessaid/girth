@@ -528,7 +528,17 @@ fn run_lens(
     let project_dir = project.unwrap_or_else(|| ctx.cwd.clone());
     let home = girth_home(ctx);
     let (enabled, keep) = girth::lens::settings(&project_dir, &home);
-    let off = ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
+    let kind_name = match kind {
+        LensKind::Skills => "skills",
+        LensKind::Mcp => "mcp",
+        LensKind::Tools => "tools",
+    };
+    // GIRTH_LENS_KINDS (comma-separated) limits which texts Lens rewrites.
+    let kind_off = ctx
+        .env
+        .get("GIRTH_LENS_KINDS")
+        .is_some_and(|v| !v.split(',').any(|k| k.trim() == kind_name));
+    let off = kind_off || ctx.env.get("GIRTH_LENS").is_some_and(|v| v == "off");
     let records = ledger::read(&home);
     let rewrite = if off || !enabled {
         McpRewrite {
