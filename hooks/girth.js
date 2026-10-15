@@ -4,6 +4,8 @@
 // - JIT: a collapsed server's instructions arrive on its first tool call.
 // - Meter: each turn's token usage goes to the local ledger.
 // - X-ray: what the last request was made of.
+// - Doctor: a request that wrote the prompt cache again (after an idle gap or
+//   a changed prompt) is named under the answer.
 // The girth binary makes every decision, and every hook fails open: on any
 // error Claude Code carries on unchanged.
 
@@ -31,6 +33,14 @@ const servers = new Set()
 // X-ray: the latest size of each part of a request, and the model.
 const parts = new Map()
 let model = ''
+// Doctor: the last main-loop request per model ({at, read, write}), the cache
+// breaks found per turn, and the size of the last main-loop prompt.
+const last = new Map()
+const breaks = new Map()
+let context = 0
+// A break re-wrote at least this much (and 20% of what was cached), and the
+// prompt didn't shrink below 80% of it (compaction or /clear).
+const BREAK_MIN = 5000
 
 function launcher($) {
   return $.plugin.root + '/skills/girth/scripts/girth'
@@ -125,7 +135,32 @@ export function register(on) {
 
   on('turn.step', async function* ($, e, next) {
     requests.set(e.turnId, (requests.get(e.turnId) ?? 0) + 1)
-    return yield* next(e)
+    if (e.agentId !== undefined) return yield* next(e)
+    const start = await $.clock.now()
+    const result = yield* next(e)
+    try {
+      const u = result?.usage
+      if (u) {
+        const read = u.cache_read_input_tokens ?? 0
+        const write = u.cache_creation_input_tokens ?? 0
+        const total = (u.input_tokens ?? 0) + read + write
+        const prev = last.get(u.model)
+        if (prev) {
+          const expected = prev.read + prev.write
+          const lost = expected - read
+          if (lost >= BREAK_MIN && lost >= 0.2 * expected && total >= 0.8 * expected) {
+            const found = breaks.get(e.turnId) ?? []
+            found.push({ lost, rewritten: Math.min(lost, write), idle_s: Math.floor((start - prev.at) / 1000) })
+            breaks.set(e.turnId, found)
+          }
+        }
+        last.set(u.model, { at: await $.clock.now(), read, write })
+        context = total
+      }
+    } catch {
+      // Observing only: the request's result goes on unchanged.
+    }
+    return result
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -160,10 +195,24 @@ export function register(on) {
       turn.mcp = [...servers].sort()
       servers.clear()
     }
-    await $.process.run([launcher($), 'meter', 'record'], {
+    const found = breaks.get(e.turnId)
+    breaks.delete(e.turnId)
+    if (found) turn.breaks = found
+    if (e.agentId === undefined && context > 0) turn.context = context
+    const run = await $.process.run([launcher($), 'meter', 'record'], {
       stdin: JSON.stringify(turn),
       timeoutMs: TIMEOUT_MS,
     })
+    let report = {}
+    try {
+      report = JSON.parse(run.stdout)
+    } catch {
+      return result
+    }
+    if (typeof report.line === 'string' && e.agentId === undefined) {
+      const text = result?.text ? result.text + '\n' + report.line : report.line
+      return { ...result, text }
+    }
     return result
   }).catch(async ($, e, next) => next(e))
 
