@@ -365,6 +365,13 @@ mod tests {
             ),
             // Another project's ping and turn are left out with a project filter.
             rec(7, ping("/q", 1_000, 1_000)),
+            rec(
+                8,
+                Event::Turn(Turn {
+                    project: "/q".into(),
+                    ..turn("claude-opus-5-5", &[(50_000, 50_000, 9_000)])
+                }),
+            ),
         ];
         let s = summarise(&records, Some("/p"));
         assert_eq!((s.breaks, s.rewritten), (2, 390_000));
@@ -376,7 +383,7 @@ mod tests {
             (s.warm_saved - 200_100.0 * (opus.cache_write - opus.cache_read) / 1e6).abs() < 1e-9
         );
         let all = summarise(&records, None);
-        assert_eq!(all.pings, 4);
+        assert_eq!((all.pings, all.breaks), (4, 3));
         // A turn of another project between pings doesn't end this project's idle period.
         let records = vec![
             rec(1, ping("/p", 5, 5)),
