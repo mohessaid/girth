@@ -110,7 +110,7 @@ pub fn payload(records: &[Record]) -> SharePayload {
                     }
                 }
             }
-            Event::Use { .. } => {}
+            Event::Use { .. } | Event::Seen { .. } | Event::Turn(_) => {}
         }
     }
     for sources in latest.values() {
@@ -278,6 +278,12 @@ mod tests {
                 record,
                 rec(Event::Use { skill: skill.clone(), project: project.clone() }),
                 rec(Event::Feedback { skill: skill.clone(), project: project.clone(), rating: Rating::Up, note: Some(note.clone()) }),
+                rec(Event::Seen { names: vec![skill.clone(), note.clone()] }),
+                rec(Event::Turn(crate::ledger::Turn {
+                    project: project.clone(), model: heading.clone(), input: 1, output: 1,
+                    cache_read: 0, cache_write: 0, agent: false, aborted: false,
+                    lens_before: None, lens_after: None,
+                })),
             ];
             let json = serde_json::to_string(&payload(&records)).unwrap();
             for secret in [&skill, &project, &heading, &note, &"vm#timing".to_string(), &"c-timing".to_string()] {
