@@ -141,6 +141,15 @@ fn short_tokens(n: u64) -> String {
     }
 }
 
+/// The line under the first answer after an idle compaction.
+pub fn compact_line(before: u64, after: Option<u64>) -> String {
+    let sizes = match after {
+        Some(after) => format!("{} → {} tokens", short_tokens(before), short_tokens(after)),
+        None => format!("it was {} tokens", short_tokens(before)),
+    };
+    format!("girth: compacted this conversation while you were away ({sizes})")
+}
+
 /// The line under the answer for a turn whose cache was written again, if any.
 pub fn doctor_line(turn: &Turn) -> Option<String> {
     let worst = turn.breaks.iter().max_by_key(|b| b.rewritten)?;
@@ -561,6 +570,18 @@ mod tests {
             ),
         ];
         assert_eq!(summarise(&records, None).warm_returns, 0);
+    }
+
+    #[test]
+    fn compact_line_says_what_shrank_while_away() {
+        assert_eq!(
+            compact_line(583_412, Some(21_999)),
+            "girth: compacted this conversation while you were away (583K → 21K tokens)"
+        );
+        assert_eq!(
+            compact_line(1_250_000, None),
+            "girth: compacted this conversation while you were away (it was 1.2M tokens)"
+        );
     }
 
     #[test]

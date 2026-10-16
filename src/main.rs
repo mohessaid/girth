@@ -885,10 +885,18 @@ fn main() -> ExitCode {
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
             if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
-                let context = serde_json::from_str::<serde_json::Value>(&input)
-                    .ok()
+                let extra = serde_json::from_str::<serde_json::Value>(&input).ok();
+                let context = extra
+                    .as_ref()
                     .and_then(|v| v.get("context").and_then(|c| c.as_u64()))
                     .unwrap_or(0);
+                let compacted = extra.as_ref().and_then(|v| {
+                    let c = v.get("compacted")?;
+                    Some(girth::keeper::compact_line(
+                        c.get("before")?.as_u64()?,
+                        c.get("after").and_then(|a| a.as_u64()),
+                    ))
+                });
                 let home = girth_home(&ctx);
                 let settings = girth::keeper::settings(std::path::Path::new(&turn.project), &home);
                 let keeper_off =
@@ -913,7 +921,10 @@ fn main() -> ExitCode {
                         interval,
                         context,
                     ),
-                    line: girth::keeper::doctor_line(&turn),
+                    line: match (compacted, girth::keeper::doctor_line(&turn)) {
+                        (Some(c), Some(d)) => Some(format!("{c}\n{d}")),
+                        (c, d) => c.or(d),
+                    },
                 };
                 let _ = writeln!(
                     out,

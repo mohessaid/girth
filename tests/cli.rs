@@ -843,6 +843,36 @@ fn meter_record_plans_an_idle_compaction_only_when_opted_in() {
 }
 
 #[test]
+fn meter_record_reports_an_idle_compaction_under_the_next_answer() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"compacted":{"before":583000,"after":21000}}"#;
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        json["line"],
+        "girth: compacted this conversation while you were away (583K → 21K tokens)"
+    );
+    // With a cache break as well, both lines, the compaction first.
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"breaks":[{"lost":40000,"rewritten":30000,"idle_s":9000}],"compacted":{"before":583000}}"#;
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        json["line"],
+        "girth: compacted this conversation while you were away (it was 583K tokens)\n\
+         girth: the prompt cache had expired (idle 2h 30m); this turn re-wrote 30K tokens (≈ $0.24)"
+    );
+}
+
+#[test]
 fn settings_print_the_subagent_model_and_the_project_wins() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");
