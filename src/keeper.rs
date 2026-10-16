@@ -91,6 +91,29 @@ pub fn settings(project_dir: &Path, home: &Path) -> Settings {
     s
 }
 
+/// The model to run built-in subagents on (`agents.model`), from
+/// `GIRTH_HOME/config.json`, then the project's config, which wins.
+pub fn agents_model(project_dir: &Path, home: &Path) -> Option<String> {
+    let mut model = None;
+    for file in [
+        home.join(crate::ledger::CONFIG_FILE),
+        project_dir.join(crate::config::CONFIG_PATH),
+    ] {
+        let value = std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        if let Some(m) = value
+            .as_ref()
+            .and_then(|v| v.pointer("/agents/model"))
+            .and_then(|m| m.as_str())
+            .filter(|m| !m.is_empty())
+        {
+            model = Some(m.to_string());
+        }
+    }
+    model
+}
+
 /// The plan for a conversation of `context` tokens. For a conversation large
 /// enough to compact, compaction replaces the pings: both would fire at once.
 pub fn plan(

@@ -773,6 +773,116 @@ fn keeper_record_appends_pings_and_stats_report_them() {
 }
 
 #[test]
+fn compact_record_appends_and_stats_report_it() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let compact = r#"{"project":"/w","model":"claude-opus-5-5","before":583000,"after":21000}"#;
+    for input in [compact, "not json"] {
+        home_cmd(&home)
+            .args(["compact", "record"])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout("");
+    }
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--project", "/w"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("meter: idle compaction: 1 times · 583K → 21K tokens on average"),
+        "{text}"
+    );
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["compactions"], 1);
+}
+
+#[test]
+fn meter_record_plans_an_idle_compaction_only_when_opted_in() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = |agent: bool| {
+        format!(
+            r#"{{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":200000,"cache_write":10,"agent":{agent},"aborted":false,"context":200012}}"#
+        )
+    };
+    let plan = |cmd: &mut Command, agent: bool| {
+        let out = cmd
+            .args(["meter", "record"])
+            .write_stdin(turn(agent))
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout)
+            .trim()
+            .to_string()
+    };
+    let pings = r#"{"keeper":{"pings":3,"interval_ms":3300000}}"#;
+    assert_eq!(plan(&mut home_cmd(&home), false), pings);
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("config.json"), r#"{"compact": {"idle": true}}"#).unwrap();
+    assert_eq!(
+        plan(&mut home_cmd(&home), false),
+        r#"{"keeper":{"pings":0,"interval_ms":3300000,"compact":true}}"#
+    );
+    assert_eq!(
+        plan(home_cmd(&home).env("GIRTH_COMPACT", "off"), false),
+        pings
+    );
+    assert_eq!(
+        plan(&mut home_cmd(&home), true),
+        r#"{"keeper":{"pings":0,"interval_ms":3300000}}"#
+    );
+}
+
+#[test]
+fn settings_print_the_subagent_model_and_the_project_wins() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let project = tmp.path().join("p");
+    std::fs::create_dir_all(project.join(".girth")).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let settings = || {
+        let out = home_cmd(&home)
+            .args(["settings", "--project"])
+            .arg(&project)
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout)
+            .trim()
+            .to_string()
+    };
+    assert_eq!(settings(), "{}");
+    std::fs::write(
+        home.join("config.json"),
+        r#"{"agents": {"model": "haiku"}}"#,
+    )
+    .unwrap();
+    assert_eq!(settings(), r#"{"agents":{"model":"haiku"}}"#);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"roots": [], "agents": {"model": "sonnet"}}"#,
+    )
+    .unwrap();
+    assert_eq!(settings(), r#"{"agents":{"model":"sonnet"}}"#);
+    // A model that isn't a non-empty string is ignored.
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"agents": {"model": 7}}"#,
+    )
+    .unwrap();
+    std::fs::write(home.join("config.json"), r#"{"agents": {"model": ""}}"#).unwrap();
+    assert_eq!(settings(), "{}");
+}
+
+#[test]
 fn stats_meter_without_turns_says_so() {
     let tmp = TempDir::new().unwrap();
     home_cmd(&tmp.path().join("home"))

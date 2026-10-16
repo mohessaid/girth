@@ -100,6 +100,17 @@ enum Command {
         #[command(subcommand)]
         what: KeeperWhat,
     },
+    /// Idle compactions of large conversations (used by the plugin's mod).
+    Compact {
+        #[command(subcommand)]
+        what: CompactWhat,
+    },
+    /// The settings the plugin's mod reads at session start, as JSON.
+    Settings {
+        /// The project directory (default: the current directory).
+        #[arg(long)]
+        project: Option<String>,
+    },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
         skill: String,
@@ -194,6 +205,12 @@ enum LensKind {
 enum MeterWhat {
     /// Append one turn's usage, read as JSON from stdin, and print the keeper's
     /// plan and any cache-break line as JSON. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum CompactWhat {
+    /// Append one idle compaction, read as JSON from stdin. Bad input is ignored.
     Record,
 }
 
@@ -660,7 +677,7 @@ fn run_stats(
         if summary.turns > 0 {
             value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
         }
-        if keeper.breaks > 0 || keeper.pings > 0 {
+        if keeper.breaks > 0 || keeper.pings > 0 || keeper.compactions > 0 {
             value["keeper"] = serde_json::to_value(&keeper).expect("keeper serialises");
         }
         let _ = writeln!(
@@ -906,6 +923,26 @@ fn main() -> ExitCode {
                 // Never disturb the session: a failed append is dropped.
                 let _ = ledger::append(&home, Event::Turn(turn));
             }
+            ExitCode::SUCCESS
+        }
+        Command::Compact {
+            what: CompactWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(compact) = serde_json::from_str::<ledger::Compact>(&input) {
+                let _ = ledger::append(&girth_home(&ctx), Event::Compact(compact));
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Settings { project } => {
+            let dir = project.map_or_else(|| ctx.cwd.clone(), std::path::PathBuf::from);
+            let mut value = serde_json::json!({});
+            if let Some(model) = girth::keeper::agents_model(&dir, &girth_home(&ctx)) {
+                value["agents"] = serde_json::json!({ "model": model });
+            }
+            let _ = writeln!(out, "{value}");
             ExitCode::SUCCESS
         }
         Command::Keeper {
