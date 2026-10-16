@@ -141,13 +141,14 @@ fn short_tokens(n: u64) -> String {
     }
 }
 
-/// The line under the first answer after an idle compaction.
+/// The line under the first answer after an idle compaction. Claude Code
+/// puts the plugin's name in front, so the line has no `girth:` of its own.
 pub fn compact_line(before: u64, after: Option<u64>) -> String {
     let sizes = match after {
         Some(after) => format!("{} → {} tokens", short_tokens(before), short_tokens(after)),
         None => format!("it was {} tokens", short_tokens(before)),
     };
-    format!("girth: compacted this conversation while you were away ({sizes})")
+    format!("compacted this conversation while you were away ({sizes})")
 }
 
 /// The line under the answer for a turn whose cache was written again, if any.
@@ -166,7 +167,7 @@ pub fn doctor_line(turn: &Turn) -> Option<String> {
         "the prompt changed before the cached part".to_string()
     };
     let mut line = format!(
-        "girth: {why}; this turn re-wrote {} tokens",
+        "{why}; this turn re-wrote {} tokens",
         short_tokens(worst.rewritten)
     );
     if let Some(r) = price::rates(&turn.model) {
@@ -480,13 +481,13 @@ mod tests {
         );
         assert_eq!(
             doctor_line(&t).unwrap(),
-            "girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
+            "the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
         );
         // Under an hour: the prompt changed before the cached part.
         let t = turn("claude-sonnet-5-5", &[(90_000, 80_000, 125)]);
         assert_eq!(
             doctor_line(&t).unwrap(),
-            "girth: the prompt changed before the cached part; this turn re-wrote 80K tokens (≈ $0.32)"
+            "the prompt changed before the cached part; this turn re-wrote 80K tokens (≈ $0.32)"
         );
         // Exactly an hour counts as expired; minutes only when under an hour.
         let t = turn("claude-opus-5-5", &[(50_000, 40_000, 3_600)]);
@@ -501,7 +502,7 @@ mod tests {
         // An unknown model has no price, and tokens of a million or more read as M.
         assert_eq!(
             doctor_line(&turn("mystery", &[(1_500_000, 1_250_000, 4_000)])).unwrap(),
-            "girth: the prompt cache had expired (idle 1h 6m); this turn re-wrote 1.2M tokens"
+            "the prompt cache had expired (idle 1h 6m); this turn re-wrote 1.2M tokens"
         );
     }
 
@@ -576,11 +577,11 @@ mod tests {
     fn compact_line_says_what_shrank_while_away() {
         assert_eq!(
             compact_line(583_412, Some(21_999)),
-            "girth: compacted this conversation while you were away (583K → 21K tokens)"
+            "compacted this conversation while you were away (583K → 21K tokens)"
         );
         assert_eq!(
             compact_line(1_250_000, None),
-            "girth: compacted this conversation while you were away (it was 1.2M tokens)"
+            "compacted this conversation while you were away (it was 1.2M tokens)"
         );
     }
 

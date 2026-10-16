@@ -594,10 +594,10 @@ test('a compact plan arms the compactor, not the keeper, and only for the main l
 
 test('the line the meter returns after a compaction goes under the answer', async ($, on) => {
   on('session.cwd', () => ({ value: '/work/app' }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line: 'girth: compacted this conversation while you were away (583K → 21K tokens)' }), stderr: '' } }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line: 'compacted this conversation while you were away (583K → 21K tokens)' }), stderr: '' } }))
   on('turn.complete', () => ({ text: '' }))
   const out = await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
-  expect(out.text).toBe('girth: compacted this conversation while you were away (583K → 21K tokens)')
+  expect(out.text).toBe('compacted this conversation while you were away (583K → 21K tokens)')
 })
 
 function spawnInput(over: any = {}) {
@@ -661,7 +661,7 @@ test('a settings command that exits non-zero leaves subagents alone', async ($, 
 })
 
 test("the line goes under the answer without repeating it, and after another mod's line", async ($, on) => {
-  const line = 'girth: compacted this conversation while you were away (583K → 21K tokens)'
+  const line = 'compacted this conversation while you were away (583K → 21K tokens)'
   let theirs: string | null = null
   on('session.cwd', () => ({ value: '/work/app' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line }), stderr: '' } }))

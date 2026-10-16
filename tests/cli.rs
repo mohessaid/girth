@@ -690,7 +690,7 @@ fn meter_record_plans_the_keeper_and_names_cache_breaks() {
     assert_eq!(json["keeper"]["interval_ms"], 55 * 60 * 1000);
     assert_eq!(
         json["line"],
-        "girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
+        "the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
     );
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
     assert!(ledger.contains(r#""breaks":[{"lost":460000"#), "{ledger}");
@@ -855,7 +855,7 @@ fn meter_record_reports_an_idle_compaction_under_the_next_answer() {
     let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(
         json["line"],
-        "girth: compacted this conversation while you were away (583K → 21K tokens)"
+        "compacted this conversation while you were away (583K → 21K tokens)"
     );
     // With a cache break as well, both lines, the compaction first.
     let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"breaks":[{"lost":40000,"rewritten":30000,"idle_s":9000}],"compacted":{"before":583000}}"#;
@@ -867,8 +867,8 @@ fn meter_record_reports_an_idle_compaction_under_the_next_answer() {
     let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(
         json["line"],
-        "girth: compacted this conversation while you were away (it was 583K tokens)\n\
-         girth: the prompt cache had expired (idle 2h 30m); this turn re-wrote 30K tokens (≈ $0.24)"
+        "compacted this conversation while you were away (it was 583K tokens)\n\
+         the prompt cache had expired (idle 2h 30m); this turn re-wrote 30K tokens (≈ $0.24)"
     );
 }
 
