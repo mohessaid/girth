@@ -1072,13 +1072,24 @@ fn meter_record_keeps_outcomes_and_never_the_commands() {
         .assert()
         .success();
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
-    assert!(ledger.contains(r#""outcomes":["test_fail","test_pass","commit"]"#), "{ledger}");
-    assert!(!ledger.contains(secret) && !ledger.contains("bash") && !ledger.contains("cargo"), "{ledger}");
+    assert!(
+        ledger.contains(r#""outcomes":["test_fail","test_pass","commit"]"#),
+        "{ledger}"
+    );
+    assert!(
+        !ledger.contains(secret) && !ledger.contains("bash") && !ledger.contains("cargo"),
+        "{ledger}"
+    );
 
-    let out = home_cmd(&home).args(["stats", "--meter"]).assert().success();
+    let out = home_cmd(&home)
+        .args(["stats", "--meter"])
+        .assert()
+        .success();
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
     assert!(
-        text.contains("meter: outcomes: 1 commits · ≈ $0.00 per commit · test runs: 1 passed, 1 failed"),
+        text.contains(
+            "meter: outcomes: 1 commits · ≈ $0.00 per commit · test runs: 1 passed, 1 failed"
+        ),
         "{text}"
     );
     let out = home_cmd(&home).args(["stats", "--json"]).assert().success();

@@ -129,7 +129,10 @@ pub fn render(summary: &Summary) -> String {
             summary.commits, summary.per_commit
         ));
         if summary.since_commit > 0.0 {
-            parts.push(format!("≈ ${:.2} since the last commit", summary.since_commit));
+            parts.push(format!(
+                "≈ ${:.2} since the last commit",
+                summary.since_commit
+            ));
         }
     }
     if summary.prs > 0 {
@@ -284,7 +287,10 @@ mod tests {
         let opus = price::rates("claude-opus-5-5").unwrap();
         let one = price::cost(opus, 1, 10, 1_000, 100);
         let records = vec![
-            with(turn("/a", "claude-opus-5-5", 1, None), &[TestFail, TestUntold]),
+            with(
+                turn("/a", "claude-opus-5-5", 1, None),
+                &[TestFail, TestUntold],
+            ),
             with(turn("/a", "claude-opus-5-5", 1, None), &[TestPass, Commit]),
             with(turn("/b", "claude-opus-5-5", 1, None), &[Commit, Pr]),
             with(turn("/a", "claude-opus-5-5", 1, None), &[]),
@@ -294,18 +300,32 @@ mod tests {
         assert_eq!((a.commits, a.prs), (1, 0));
         assert_eq!((a.tests_passed, a.tests_failed, a.tests_untold), (2, 1, 1));
         // The two turns after /a's last commit.
-        assert!((a.since_commit - 2.0 * one).abs() < 1e-12, "{}", a.since_commit);
+        assert!(
+            (a.since_commit - 2.0 * one).abs() < 1e-12,
+            "{}",
+            a.since_commit
+        );
         assert!((a.per_commit - 2.0 * one).abs() < 1e-12, "{}", a.per_commit);
         let all = summarise(&records, None);
         assert_eq!((all.commits, all.prs), (2, 1));
         // Everything up to the last commit (turn 3), over two commits.
-        assert!((all.per_commit - 1.5 * one).abs() < 1e-12, "{}", all.per_commit);
+        assert!(
+            (all.per_commit - 1.5 * one).abs() < 1e-12,
+            "{}",
+            all.per_commit
+        );
         assert!((all.since_commit - 2.0 * one).abs() < 1e-12);
     }
 
     #[test]
     fn without_a_commit_everything_is_since_and_nothing_is_per_commit() {
-        let s = summarise(&[with(turn("/a", "claude-opus-5-5", 1, None), &[Outcome::TestPass])], None);
+        let s = summarise(
+            &[with(
+                turn("/a", "claude-opus-5-5", 1, None),
+                &[Outcome::TestPass],
+            )],
+            None,
+        );
         assert_eq!(s.commits, 0);
         assert_eq!(s.per_commit, 0.0);
         assert!((s.since_commit - s.cost).abs() < 1e-12);
@@ -329,10 +349,25 @@ mod tests {
         assert!(render(&s).ends_with(
             "\nmeter: outcomes: 12 commits · ≈ $3.40 per commit · ≈ $1.20 since the last commit · test runs: 20 passed, 8 failed, 2 no verdict"
         ), "{}", render(&s));
-        let tests_only = render(&summarise(&[with(turn("/a", "claude-opus-5-5", 1, None), &[TestFail])], None));
-        assert!(tests_only.ends_with("\nmeter: outcomes: test runs: 1 failed"), "{tests_only}");
-        let commit_only = render(&summarise(&[with(turn("/a", "claude-opus-5-5", 1, None), &[Commit, Pr])], None));
-        assert!(commit_only.contains("\nmeter: outcomes: 1 commits · ≈ $"), "{commit_only}");
-        assert!(commit_only.ends_with(" per commit · 1 PRs"), "{commit_only}");
+        let tests_only = render(&summarise(
+            &[with(turn("/a", "claude-opus-5-5", 1, None), &[TestFail])],
+            None,
+        ));
+        assert!(
+            tests_only.ends_with("\nmeter: outcomes: test runs: 1 failed"),
+            "{tests_only}"
+        );
+        let commit_only = render(&summarise(
+            &[with(turn("/a", "claude-opus-5-5", 1, None), &[Commit, Pr])],
+            None,
+        ));
+        assert!(
+            commit_only.contains("\nmeter: outcomes: 1 commits · ≈ $"),
+            "{commit_only}"
+        );
+        assert!(
+            commit_only.ends_with(" per commit · 1 PRs"),
+            "{commit_only}"
+        );
     }
 }

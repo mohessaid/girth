@@ -96,7 +96,9 @@ fn heredoc_word(line: &str) -> Option<String> {
 /// A simple command's words, with wrappers (`rtk`, `sudo`, `timeout 60`,
 /// `NAME=value`, …) and the program's directory stripped. `cd` yields nothing.
 fn normalise(segment: &str) -> Vec<String> {
-    let segment = segment.trim().trim_matches(|c: char| c == '(' || c == ')' || c.is_whitespace());
+    let segment = segment
+        .trim()
+        .trim_matches(|c: char| c == '(' || c == ')' || c.is_whitespace());
     let mut words: Vec<&str> = segment.split_whitespace().collect();
     loop {
         let skip = match words.as_slice() {
@@ -129,7 +131,9 @@ fn is_assignment(word: &str) -> bool {
         Some((name, _)) => {
             !name.is_empty()
                 && name.starts_with(|c: char| c.is_ascii_uppercase() || c == '_')
-                && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
         }
         None => false,
     }
@@ -210,7 +214,12 @@ fn summary(line: &str) -> (bool, bool) {
         .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
         .collect();
     for pair in words.windows(2) {
-        match (pair[0].parse::<u64>().ok(), pair[1], pair[0], pair[1].parse::<u64>().ok()) {
+        match (
+            pair[0].parse::<u64>().ok(),
+            pair[1],
+            pair[0],
+            pair[1].parse::<u64>().ok(),
+        ) {
             (Some(n), "failed" | "failure" | "failures" | "error" | "errors" | "fail", _, _) => {
                 failed |= n > 0;
                 passed |= n == 0 && pair[1].starts_with("failure");
@@ -252,9 +261,13 @@ pub fn outcomes(calls: &[Call]) -> Vec<Outcome> {
 
 /// Git's answer when a commit made nothing.
 fn no_commit(output: &str) -> bool {
-    ["nothing to commit", "no changes added to commit", "nothing added to commit"]
-        .iter()
-        .any(|m| output.contains(m))
+    [
+        "nothing to commit",
+        "no changes added to commit",
+        "nothing added to commit",
+    ]
+    .iter()
+    .any(|m| output.contains(m))
 }
 
 #[cfg(test)]
@@ -366,7 +379,12 @@ mod tests {
         ] {
             assert!(classify(command).commit, "{command}");
         }
-        for command in ["git commit --dry-run", "git log", "git commit-tree abc", "git status"] {
+        for command in [
+            "git commit --dry-run",
+            "git log",
+            "git commit-tree abc",
+            "git status",
+        ] {
             assert!(!classify(command).commit, "{command}");
         }
         for command in ["gh pr create --fill", "gh pr merge 12 --squash"] {
@@ -417,16 +435,25 @@ mod tests {
 
     #[test]
     fn an_error_fails_and_no_summary_is_untold() {
-        assert_eq!(verdict("test result: ok. 1 passed", true), Outcome::TestFail);
+        assert_eq!(
+            verdict("test result: ok. 1 passed", true),
+            Outcome::TestFail
+        );
         assert_eq!(verdict("", false), Outcome::TestUntold);
-        assert_eq!(verdict("Compiling girth v0.9.0\nwarning: unused", false), Outcome::TestUntold);
+        assert_eq!(
+            verdict("Compiling girth v0.9.0\nwarning: unused", false),
+            Outcome::TestUntold
+        );
         assert_eq!(verdict("0 failed", false), Outcome::TestUntold);
     }
 
     #[test]
     fn only_the_tail_is_read() {
         let early = format!("test result: FAILED. 1 failed\n{}", "x".repeat(TAIL));
-        assert_eq!(verdict(&format!("{early}\ntest result: ok. 1 passed"), false), Outcome::TestPass);
+        assert_eq!(
+            verdict(&format!("{early}\ntest result: ok. 1 passed"), false),
+            Outcome::TestPass
+        );
         // A tail cut inside a multi-byte character must not panic.
         let wide = format!("é{}test result: ok. 1 passed", "é".repeat(TAIL));
         assert_eq!(verdict(&wide, false), Outcome::TestPass);
@@ -444,14 +471,31 @@ mod tests {
     #[test]
     fn calls_become_outcomes_in_order() {
         let calls = [
-            call("cargo test 2>&1 | tail -3", "test result: FAILED. 1 failed", false),
+            call(
+                "cargo test 2>&1 | tail -3",
+                "test result: FAILED. 1 failed",
+                false,
+            ),
             call("ls", "", false),
-            call("cargo test && git commit -m x", "test result: ok. 3 passed\n[main abc] x", false),
-            call("gh pr create --fill", "https://github.com/o/r/pull/1", false),
+            call(
+                "cargo test && git commit -m x",
+                "test result: ok. 3 passed\n[main abc] x",
+                false,
+            ),
+            call(
+                "gh pr create --fill",
+                "https://github.com/o/r/pull/1",
+                false,
+            ),
         ];
         assert_eq!(
             outcomes(&calls),
-            vec![Outcome::TestFail, Outcome::TestPass, Outcome::Commit, Outcome::Pr]
+            vec![
+                Outcome::TestFail,
+                Outcome::TestPass,
+                Outcome::Commit,
+                Outcome::Pr
+            ]
         );
     }
 
@@ -461,8 +505,16 @@ mod tests {
         bg.background = true;
         let calls = [
             call("git commit -m x", "error: pathspec", true),
-            call("git commit -m x | tail -2", "nothing to commit, working tree clean", false),
-            call("git commit -m x", "no changes added to commit (use \"git add\")", false),
+            call(
+                "git commit -m x | tail -2",
+                "nothing to commit, working tree clean",
+                false,
+            ),
+            call(
+                "git commit -m x",
+                "no changes added to commit (use \"git add\")",
+                false,
+            ),
             call("gh pr merge 3", "GraphQL: not mergeable", true),
             bg,
         ];
@@ -471,7 +523,8 @@ mod tests {
 
     #[test]
     fn outcomes_serialise_as_snake_case() {
-        let json = serde_json::to_string(&[Outcome::TestPass, Outcome::TestUntold, Outcome::Pr]).unwrap();
+        let json =
+            serde_json::to_string(&[Outcome::TestPass, Outcome::TestUntold, Outcome::Pr]).unwrap();
         assert_eq!(json, r#"["test_pass","test_untold","pr"]"#);
     }
 

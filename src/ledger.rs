@@ -401,7 +401,10 @@ mod tests {
         append(tmp.path(), turn.clone()).unwrap();
         assert_eq!(read(tmp.path())[0].event, turn);
         let text = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
-        assert!(text.contains(r#""outcomes":["test_fail","test_pass","commit"]"#), "{text}");
+        assert!(
+            text.contains(r#""outcomes":["test_fail","test_pass","commit"]"#),
+            "{text}"
+        );
         let quiet = serde_json::to_string(&Event::Turn(turn_fixture())).unwrap();
         assert!(!quiet.contains("outcomes"), "{quiet}");
         let old = r#"{"kind":"turn","project":"/p","model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"agent":false,"aborted":false}"#;
