@@ -49,6 +49,11 @@ let keep = null
 // Idle compaction, and the subagent settings (read once, on the first spawn).
 let squeeze = null
 let agentSettings = null
+// Outcomes: each loop's Bash calls this turn ('' is the main loop), for the
+// binary to classify. Only its labels reach the ledger.
+const bash = new Map()
+const OUTPUT_TAIL = 4000
+const MAX_CALLS = 64
 // A break re-wrote at least this much (and 20% of what was cached), and the
 // prompt didn't shrink below 80% of it (compaction or /clear).
 const BREAK_MIN = 5000
@@ -165,6 +170,14 @@ function note(kind, name, bytes, before) {
   parts.set(kind + '\u0000' + name, part)
 }
 
+// The last OUTPUT_TAIL characters, never starting inside a surrogate pair:
+// half a character would make the meter's JSON invalid.
+function tail(text) {
+  const cut = text.slice(-OUTPUT_TAIL)
+  const first = cut.charCodeAt(0)
+  return first >= 0xdc00 && first <= 0xdfff ? cut.slice(1) : cut
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     for (const [name, description] of [
@@ -225,6 +238,32 @@ export function register(on) {
   }).catch(async ($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
+    if (e.tool === 'Bash') {
+      const result = await next(e)
+      try {
+        const calls = bash.get(e.agentId ?? '') ?? []
+        // A denied call never ran. Keep the last MAX_CALLS: a turn's commit
+        // usually comes at its end.
+        if (result?.deny === undefined) {
+          if (calls.length >= MAX_CALLS) calls.shift()
+          const r = result?.result
+          const output =
+            typeof result?.text === 'string'
+              ? result.text
+              : [r?.stdout, r?.stderr].filter((t) => typeof t === 'string' && t !== '').join('\n')
+          calls.push({
+            command: String(e.command),
+            output: tail(output),
+            error: result?.isError === true,
+            background: Boolean(r?.backgroundTaskId || r?.interrupted),
+          })
+          bash.set(e.agentId ?? '', calls)
+        }
+      } catch {
+        // Observing only: the call's result goes back unchanged.
+      }
+      return result
+    }
     const id = serverOf(e.tool)
     if (id === null) return next(e)
     servers.add(id)
@@ -282,6 +321,8 @@ export function register(on) {
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    const calls = bash.get(e.agentId ?? '')
+    bash.delete(e.agentId ?? '')
     const usage = e.usage
     if (!usage) return result
     model = usage.model
@@ -312,6 +353,7 @@ export function register(on) {
       turn.mcp = [...servers].sort()
       servers.clear()
     }
+    if (calls) turn.bash = calls
     const found = breaks.get(e.turnId)
     breaks.delete(e.turnId)
     if (found) turn.breaks = found

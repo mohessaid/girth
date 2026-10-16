@@ -884,19 +884,36 @@ fn main() -> ExitCode {
             use std::io::Read;
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
-            if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
-                let extra = serde_json::from_str::<serde_json::Value>(&input).ok();
-                let context = extra
-                    .as_ref()
-                    .and_then(|v| v.get("context").and_then(|c| c.as_u64()))
-                    .unwrap_or(0);
-                let compacted = extra.as_ref().and_then(|v| {
-                    let c = v.get("compacted")?;
-                    Some(girth::keeper::compact_line(
-                        c.get("before")?.as_u64()?,
-                        c.get("after").and_then(|a| a.as_u64()),
-                    ))
-                });
+            if let Ok(mut turn) = serde_json::from_str::<ledger::Turn>(&input) {
+                // The plan's fields parse on their own, so a malformed `bash`
+                // list costs the turn its outcomes and nothing else.
+                #[derive(serde::Deserialize)]
+                struct Compacted {
+                    before: u64,
+                    after: Option<u64>,
+                }
+                #[derive(serde::Deserialize, Default)]
+                struct Extra {
+                    #[serde(default)]
+                    context: u64,
+                    compacted: Option<Compacted>,
+                }
+                let extra = serde_json::from_str::<Extra>(&input).unwrap_or_default();
+                let context = extra.context;
+                let compacted = extra
+                    .compacted
+                    .map(|c| girth::keeper::compact_line(c.before, c.after));
+                // Classified here and dropped: command text never reaches the ledger.
+                let calls: Vec<girth::outcome::Call> =
+                    serde_json::from_str::<serde_json::Value>(&input)
+                        .ok()
+                        .and_then(|v| v.get("bash")?.as_array().cloned())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .take(girth::outcome::MAX_CALLS)
+                        .filter_map(|c| serde_json::from_value(c).ok())
+                        .collect();
+                turn.outcomes = girth::outcome::outcomes(&calls);
                 let home = girth_home(&ctx);
                 let settings = girth::keeper::settings(std::path::Path::new(&turn.project), &home);
                 let keeper_off =

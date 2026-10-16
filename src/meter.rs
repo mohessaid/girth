@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use crate::ledger::{Event, Record};
+use crate::outcome::Outcome;
 use crate::price;
 
 /// Bytes per token for the Lens estimate (a conservative English-text ratio).
@@ -27,6 +28,16 @@ pub struct Summary {
     pub lens_tokens_saved: u64,
     /// The saving priced at cache-read rates: the lowest it could be.
     pub lens_cost_saved: f64,
+    /// Outcomes of the turns' Bash calls.
+    pub commits: u64,
+    pub prs: u64,
+    pub tests_passed: u64,
+    pub tests_failed: u64,
+    pub tests_untold: u64,
+    /// The cost up to and including the last commit's turn, per commit; 0 without one.
+    pub per_commit: f64,
+    /// The cost of the turns after the last commit (all of them without one).
+    pub since_commit: f64,
 }
 
 /// Summarise `turn` events, optionally for one project.
@@ -45,9 +56,30 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
         let rates = price::rates(&t.model).map(|r| if t.agent { r.five_minute() } else { r });
-        match rates {
-            Some(r) => s.cost += price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
-            None => s.unpriced_turns += 1,
+        let cost = match rates {
+            Some(r) => price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
+            None => {
+                s.unpriced_turns += 1;
+                0.0
+            }
+        };
+        s.cost += cost;
+        s.since_commit += cost;
+        let mut committed = false;
+        for outcome in &t.outcomes {
+            match outcome {
+                Outcome::TestPass => s.tests_passed += 1,
+                Outcome::TestFail => s.tests_failed += 1,
+                Outcome::TestUntold => s.tests_untold += 1,
+                Outcome::Commit => {
+                    s.commits += 1;
+                    committed = true;
+                }
+                Outcome::Pr => s.prs += 1,
+            }
+        }
+        if committed {
+            s.since_commit = 0.0;
         }
         if let (Some(before), Some(after)) = (t.lens_before, t.lens_after) {
             s.lens_turns += 1;
@@ -57,6 +89,9 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                 s.lens_cost_saved += saved as f64 * r.cache_read / 1e6;
             }
         }
+    }
+    if s.commits > 0 {
+        s.per_commit = (s.cost - s.since_commit) / s.commits as f64;
     }
     s
 }
@@ -87,6 +122,43 @@ pub fn render(summary: &Summary) -> String {
             summary.lens_cost_saved,
         ));
     }
+    let mut parts = Vec::new();
+    if summary.commits > 0 {
+        parts.push(format!(
+            "{} commit{} · ≈ ${:.2} per commit",
+            summary.commits,
+            if summary.commits == 1 { "" } else { "s" },
+            summary.per_commit
+        ));
+        if summary.since_commit > 0.0 {
+            parts.push(format!(
+                "≈ ${:.2} since the last commit",
+                summary.since_commit
+            ));
+        }
+    }
+    if summary.prs > 0 {
+        parts.push(format!(
+            "{} PR{}",
+            summary.prs,
+            if summary.prs == 1 { "" } else { "s" }
+        ));
+    }
+    let runs: Vec<String> = [
+        (summary.tests_passed, "passed"),
+        (summary.tests_failed, "failed"),
+        (summary.tests_untold, "no verdict"),
+    ]
+    .iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, what)| format!("{n} {what}"))
+    .collect();
+    if !runs.is_empty() {
+        parts.push(format!("test runs: {}", runs.join(", ")));
+    }
+    if !parts.is_empty() {
+        text.push_str(&format!("\nmeter: outcomes: {}", parts.join(" · ")));
+    }
     text
 }
 
@@ -113,6 +185,7 @@ mod tests {
                 requests: None,
                 mcp: vec![],
                 breaks: vec![],
+                outcomes: vec![],
             }),
         }
     }
@@ -205,5 +278,99 @@ mod tests {
             !plain.contains("Lens") && plain.contains("(1 turns unpriced)"),
             "{plain}"
         );
+    }
+
+    fn with(mut record: Record, outcomes: &[Outcome]) -> Record {
+        if let Event::Turn(t) = &mut record.event {
+            t.outcomes = outcomes.to_vec();
+        }
+        record
+    }
+
+    #[test]
+    fn outcomes_are_counted_and_priced_per_commit() {
+        use Outcome::*;
+        let opus = price::rates("claude-opus-5-5").unwrap();
+        let one = price::cost(opus, 1, 10, 1_000, 100);
+        let records = vec![
+            with(
+                turn("/a", "claude-opus-5-5", 1, None),
+                &[TestFail, TestUntold],
+            ),
+            with(turn("/a", "claude-opus-5-5", 1, None), &[TestPass, Commit]),
+            with(turn("/b", "claude-opus-5-5", 1, None), &[Commit, Pr]),
+            with(turn("/a", "claude-opus-5-5", 1, None), &[]),
+            with(turn("/a", "claude-opus-5-5", 1, None), &[TestPass]),
+        ];
+        let a = summarise(&records, Some("/a"));
+        assert_eq!((a.commits, a.prs), (1, 0));
+        assert_eq!((a.tests_passed, a.tests_failed, a.tests_untold), (2, 1, 1));
+        // The two turns after /a's last commit.
+        assert!(
+            (a.since_commit - 2.0 * one).abs() < 1e-12,
+            "{}",
+            a.since_commit
+        );
+        assert!((a.per_commit - 2.0 * one).abs() < 1e-12, "{}", a.per_commit);
+        let all = summarise(&records, None);
+        assert_eq!((all.commits, all.prs), (2, 1));
+        // Everything up to the last commit (turn 3), over two commits.
+        assert!(
+            (all.per_commit - 1.5 * one).abs() < 1e-12,
+            "{}",
+            all.per_commit
+        );
+        assert!((all.since_commit - 2.0 * one).abs() < 1e-12);
+    }
+
+    #[test]
+    fn without_a_commit_everything_is_since_and_nothing_is_per_commit() {
+        let s = summarise(
+            &[with(
+                turn("/a", "claude-opus-5-5", 1, None),
+                &[Outcome::TestPass],
+            )],
+            None,
+        );
+        assert_eq!(s.commits, 0);
+        assert_eq!(s.per_commit, 0.0);
+        assert!((s.since_commit - s.cost).abs() < 1e-12);
+    }
+
+    #[test]
+    fn render_adds_an_outcomes_line_with_only_the_parts_it_has() {
+        use Outcome::*;
+        let plain = render(&summarise(&[turn("/a", "claude-opus-5-5", 5, None)], None));
+        assert!(!plain.contains("outcomes"), "{plain}");
+        let s = Summary {
+            turns: 3,
+            commits: 12,
+            per_commit: 3.4,
+            since_commit: 1.2,
+            tests_passed: 20,
+            tests_failed: 8,
+            tests_untold: 2,
+            ..Summary::default()
+        };
+        assert!(render(&s).ends_with(
+            "\nmeter: outcomes: 12 commits · ≈ $3.40 per commit · ≈ $1.20 since the last commit · test runs: 20 passed, 8 failed, 2 no verdict"
+        ), "{}", render(&s));
+        let tests_only = render(&summarise(
+            &[with(turn("/a", "claude-opus-5-5", 1, None), &[TestFail])],
+            None,
+        ));
+        assert!(
+            tests_only.ends_with("\nmeter: outcomes: test runs: 1 failed"),
+            "{tests_only}"
+        );
+        let commit_only = render(&summarise(
+            &[with(turn("/a", "claude-opus-5-5", 1, None), &[Commit, Pr])],
+            None,
+        ));
+        assert!(
+            commit_only.contains("\nmeter: outcomes: 1 commit · ≈ $"),
+            "{commit_only}"
+        );
+        assert!(commit_only.ends_with(" per commit · 1 PR"), "{commit_only}");
     }
 }

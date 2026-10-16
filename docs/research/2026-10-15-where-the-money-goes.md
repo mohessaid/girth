@@ -86,3 +86,21 @@ That gives a better design: at 55 minutes idle, while the 1-hour cache is still 
   - the opt-in shape (it changes what the model knows while the user is away);
   - an outcome A/B (does work after an idle compaction go as well as without it?);
   - interactive only.
+
+## 6. What an outcome costs (2026-10-16)
+Measured with `examples/outcomes/analyze-outcomes.py`. It pairs each Bash call with its result, classifies the command, and prices the requests between outcomes. Projects are anonymised as P1, P2, … by spend.
+
+- **Commits:** 1,417 across 13 projects, **$3.28 per commit** overall.
+  - Per project the cost ranges from $0.91 to $6.41, a 7× spread, so the number tells projects apart.
+  - Three projects show identical rows. They are copies of the same transcripts (worktree folders), so the true project count is 11.
+  - **Spend between commits:** p25 $0.64, median **$1.48**, p75 $3.34, p95 $11.31.
+- **The exit status of a test run says almost nothing.** 2,066 of 2,086 test commands (99%) were piped through `tail`, `grep` or `head`, so the exit status was the filter's.
+  - By exit status, 99% of runs passed.
+  - **The runners' own summaries tell a different story.** Read from the end of the output (`test result: FAILED`, `3 failed`, `1 failure`, `ℹ fail 2`, …), there were 1,568 passing runs, **851 failing (35% of runs with a verdict)** and 570 with no verdict in the output.
+  - Girth must therefore read the summary line, never the exit status.
+- **A filter at the end of the pipe owns the exit status.** A passing run piped to `grep FAILED` exits 1 when grep finds nothing. Such errors are ignored, and the output decides. Re-measured with this rule (found in review), the failure share stays at 35%.
+- **Spend while the last test run had failed:** $333, or 7.2% of all spend. Request-level, so a lower bound on the cost of fix loops.
+- **The classifier was checked against ground truth.** On this repo it found 117 commits in the transcripts; `git log` has 122 non-merge commits in the same period. The rest are merges, which `git merge` makes, not `git commit`.
+- **Wrappers the classifier must strip:** `rtk` and `rtk proxy`, `/usr/bin/`, `timeout N`, `nice -n N`, `mise exec … --`, `uv run`, environment assignments, `cd … &&` chains and heredoc bodies.
+  - Without the heredoc rule, a `python3 - <<EOF` script that mentions `pytest` counts as a test run.
+- **Verdict:** cost per commit is informative and cheap to compute locally. Cost per passing test run is not a useful unit, because agents rerun tests constantly. Report pass/fail counts instead.

@@ -1,6 +1,6 @@
 {
   "name": "girth",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Just-in-time, project-scoped skills distilled from the skills you already have.",
   "author": { "name": "mohessaid" },
   "license": "MIT"
