@@ -158,6 +158,10 @@ pub struct Summary {
     pub warm_returns: u64,
     /// The re-write those returns avoided, at most.
     pub warm_saved: f64,
+    /// Idle compactions, and the conversation sizes before and after, summed.
+    pub compactions: u64,
+    pub compact_before: u64,
+    pub compact_after: u64,
 }
 
 /// Summarise breaks and pings, optionally for one project.
@@ -175,6 +179,11 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                     s.ping_cost += price::cost(r, p.input, p.output, p.read, p.write);
                 }
                 pending.insert(&p.project, (&p.model, p.expected));
+            }
+            Event::Compact(c) if wanted(&c.project) => {
+                s.compactions += 1;
+                s.compact_before += c.before;
+                s.compact_after += c.after;
             }
             Event::Turn(t) if wanted(&t.project) => {
                 let rates = price::rates(&t.model);
@@ -219,6 +228,14 @@ pub fn render(summary: &Summary) -> String {
         lines.push(format!(
             "meter: keeper: {} pings (≈ ${:.2}); {} returns found the cache warm (up to ≈ ${:.2} not re-written)",
             summary.pings, summary.ping_cost, summary.warm_returns, summary.warm_saved
+        ));
+    }
+    if summary.compactions > 0 {
+        lines.push(format!(
+            "meter: idle compaction: {} times · {} → {} tokens on average",
+            summary.compactions,
+            short_tokens(summary.compact_before / summary.compactions),
+            short_tokens(summary.compact_after / summary.compactions)
         ));
     }
     lines.join("\n")
@@ -524,6 +541,33 @@ mod tests {
     }
 
     #[test]
+    fn summary_counts_idle_compactions_per_project() {
+        let compact = |project: &str, before, after| {
+            Event::Compact(crate::ledger::Compact {
+                project: project.into(),
+                model: "claude-opus-5-5".into(),
+                before,
+                after,
+            })
+        };
+        let records = vec![
+            rec(1, compact("/p", 600_000, 20_000)),
+            rec(2, compact("/p", 400_000, 30_000)),
+            rec(3, compact("/q", 1, 1)),
+        ];
+        let s = summarise(&records, Some("/p"));
+        assert_eq!(
+            (s.compactions, s.compact_before, s.compact_after),
+            (2, 1_000_000, 50_000)
+        );
+        assert_eq!(summarise(&records, None).compactions, 3);
+        assert_eq!(
+            render(&s),
+            "meter: idle compaction: 2 times · 500K → 25K tokens on average"
+        );
+    }
+
+    #[test]
     fn render_says_nothing_without_breaks_or_pings() {
         assert_eq!(render(&Summary::default()), "");
         let s = Summary {
@@ -534,6 +578,7 @@ mod tests {
             ping_cost: 0.12,
             warm_returns: 1,
             warm_saved: 1.56,
+            ..Summary::default()
         };
         assert_eq!(
             render(&s),

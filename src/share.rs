@@ -110,7 +110,11 @@ pub fn payload(records: &[Record]) -> SharePayload {
                     }
                 }
             }
-            Event::Use { .. } | Event::Seen { .. } | Event::Turn(_) | Event::Ping(_) => {}
+            Event::Use { .. }
+            | Event::Seen { .. }
+            | Event::Turn(_)
+            | Event::Ping(_)
+            | Event::Compact(_) => {}
         }
     }
     for sources in latest.values() {
@@ -289,9 +293,12 @@ mod tests {
                     project: project.clone(), model: heading.clone(), input: 1, output: 1,
                     read: 888_001, write: 0, expected: 888_002,
                 })),
+                rec(Event::Compact(crate::ledger::Compact {
+                    project: project.clone(), model: heading.clone(), before: 999_001, after: 999_002,
+                })),
             ];
             let json = serde_json::to_string(&payload(&records)).unwrap();
-            for secret in [&skill, &project, &heading, &note, &"vm#timing".to_string(), &"c-timing".to_string(), &"777_00".replace('_', ""), &"888_00".replace('_', "")] {
+            for secret in [&skill, &project, &heading, &note, &"vm#timing".to_string(), &"c-timing".to_string(), &"777_00".replace('_', ""), &"888_00".replace('_', ""), &"999_00".replace('_', "")] {
                 prop_assert!(!json.contains(secret.as_str()), "leaked {secret} in {json}");
             }
         }

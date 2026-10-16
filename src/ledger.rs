@@ -77,6 +77,18 @@ pub enum Event {
     Turn(Turn),
     /// A keeper ping: a fork that read the cached conversation to keep it warm.
     Ping(Ping),
+    /// An idle compaction: Girth compacted a large conversation while it sat idle.
+    Compact(Compact),
+}
+
+/// One idle compaction. Numbers and a model id only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Compact {
+    pub project: String,
+    pub model: String,
+    /// The conversation's size in tokens before and after.
+    pub before: u64,
+    pub after: u64,
 }
 
 /// One keeper ping's usage. Numbers and a model id only.
@@ -326,6 +338,21 @@ mod tests {
         assert!(
             matches!(&read(tmp.path())[0].event, Event::Turn(t) if t.lens_before.is_none() && t.agent)
         );
+    }
+
+    #[test]
+    fn idle_compactions_round_trip() {
+        let tmp = TempDir::new().unwrap();
+        let compact = Event::Compact(Compact {
+            project: "/p".into(),
+            model: "claude-opus-5-5".into(),
+            before: 583_000,
+            after: 21_000,
+        });
+        append(tmp.path(), compact.clone()).unwrap();
+        assert_eq!(read(tmp.path())[0].event, compact);
+        let line = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(line.contains(r#""kind":"compact""#), "{line}");
     }
 
     #[test]
