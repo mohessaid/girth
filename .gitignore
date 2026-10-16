@@ -8,3 +8,4 @@ skills/girth/bin/
 /fuzz/artifacts/
 /fuzz/coverage/
 __pycache__/
+node_modules/
