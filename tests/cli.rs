@@ -913,6 +913,31 @@ fn settings_print_the_subagent_model_and_the_project_wins() {
 }
 
 #[test]
+fn stats_json_shows_keeper_only_when_there_is_something_to_show() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let json = || {
+        let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+        serde_json::from_slice::<serde_json::Value>(&out.get_output().stdout).unwrap()
+    };
+    let plain = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(plain)
+        .assert()
+        .success();
+    assert!(json().get("keeper").is_none());
+    // A cache break alone is enough.
+    let broke = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false,"breaks":[{"lost":9000,"rewritten":9000,"idle_s":4000}]}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(broke)
+        .assert()
+        .success();
+    assert_eq!(json()["keeper"]["breaks"], 1);
+}
+
+#[test]
 fn stats_meter_without_turns_says_so() {
     let tmp = TempDir::new().unwrap();
     home_cmd(&tmp.path().join("home"))
