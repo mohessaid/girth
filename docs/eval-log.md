@@ -88,3 +88,11 @@ What `taste-launch` checks:
 - The keeper and doctor are proved live (`examples/cache/RESULTS.md`):
   - the 66-minute probe: the return cost 81% less;
   - an isolated end-to-end run: pings, cancellation, a real break recorded.
+
+## v0.8.0 (2026-10-16): idle compaction, subagent model
+`make evals` on the release tree: **7 of 7 cases at 1.00 (21 runs), $1.45.**
+- No SKILL.md change. Both features are opt-in, and idle compaction can't run in `claude -p`.
+- **Proved live on the dist build** (interactive tmux, Haiku 5.5, 20 s interval, isolated GIRTH_HOME):
+  - a compaction from 38,668 to 9,096 tokens; the next answer still knew the codename, with the line under it;
+  - a turn inside the interval cancels the pending compaction;
+  - with `agents.model: haiku`, a general-purpose subagent of a Sonnet session ran on Haiku.
