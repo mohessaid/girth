@@ -141,6 +141,9 @@ pub struct Turn {
     /// Requests in the turn that re-wrote cache the previous request had written.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub breaks: Vec<Break>,
+    /// What the turn's Bash calls achieved. Labels only, never command text.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outcomes: Vec<crate::outcome::Outcome>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -322,6 +325,7 @@ mod tests {
             requests: Some(4),
             mcp: vec!["claude_ai_Figma".into()],
             breaks: vec![],
+            outcomes: vec![],
         });
         append(tmp.path(), seen.clone()).unwrap();
         append(tmp.path(), turn.clone()).unwrap();
@@ -386,6 +390,27 @@ mod tests {
         assert!(!quiet.contains("breaks"), "{quiet}");
     }
 
+    #[test]
+    fn a_turn_keeps_its_outcomes_and_old_turns_have_none() {
+        use crate::outcome::Outcome;
+        let tmp = TempDir::new().unwrap();
+        let turn = Event::Turn(Turn {
+            outcomes: vec![Outcome::TestFail, Outcome::TestPass, Outcome::Commit],
+            ..turn_fixture()
+        });
+        append(tmp.path(), turn.clone()).unwrap();
+        assert_eq!(read(tmp.path())[0].event, turn);
+        let text = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(text.contains(r#""outcomes":["test_fail","test_pass","commit"]"#), "{text}");
+        let quiet = serde_json::to_string(&Event::Turn(turn_fixture())).unwrap();
+        assert!(!quiet.contains("outcomes"), "{quiet}");
+        let old = r#"{"kind":"turn","project":"/p","model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"agent":false,"aborted":false}"#;
+        match serde_json::from_str::<Event>(old).unwrap() {
+            Event::Turn(t) => assert!(t.outcomes.is_empty()),
+            other => panic!("{other:?}"),
+        }
+    }
+
     fn turn_fixture() -> Turn {
         Turn {
             project: "/p".into(),
@@ -401,6 +426,7 @@ mod tests {
             requests: None,
             mcp: vec![],
             breaks: vec![],
+            outcomes: vec![],
         }
     }
 

@@ -301,6 +301,7 @@ mod tests {
                     idle_s,
                 })
                 .collect(),
+            outcomes: vec![],
         }
     }
 
