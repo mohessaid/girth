@@ -108,3 +108,4 @@ What `taste-launch` checks:
   - Its turn recorded `["test_pass"]`; the main turn recorded no outcomes.
   - The output had been rewritten by the author's RTK hook (`cargo test: 1 passed (2 suites, 0.00s)`) and was still read correctly. RTK keeps cargo's own `test result: FAILED` line for failures.
 - **The ledger held no command text** after both runs (`cargo`, `tail -3` and `lib.rs`: 0 matches). The real `~/.girth` was unchanged.
+- **Evals (0.9.0 dist):** 7 of 7 cases at 1.00, 3 runs each, 381 s, $1.46.
