@@ -659,3 +659,17 @@ test('a settings command that exits non-zero leaves subagents alone', async ($, 
   on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit' }))
   expect((await $.agent.spawn(spawnInput())).model).toBe('inherit')
 })
+
+test("the line goes under the answer without repeating it, and after another mod's line", async ($, on) => {
+  const line = 'girth: compacted this conversation while you were away (583K → 21K tokens)'
+  let theirs: string | null = null
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line }), stderr: '' } }))
+  // The engine resolves turn.complete to the answer itself; another mod's line replaces it.
+  on('turn.complete', ($, e) => ({ text: theirs ?? e.answer }))
+  const out = await $.turn.complete({ turnId: 't', answer: 'HELIOTROPE KIWI', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(out.text).toBe(line)
+  theirs = 'tl;dr: done'
+  const both = await $.turn.complete({ turnId: 't2', answer: 'HELIOTROPE KIWI', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(both.text).toBe('tl;dr: done\n' + line)
+})

@@ -355,7 +355,10 @@ export function register(on) {
       squeeze.start(report.keeper, context)
     }
     if (typeof report.line === 'string' && e.agentId === undefined) {
-      const text = result?.text ? result.text + '\n' + report.line : report.line
+      // next(e) resolves to the answer itself; a different text is another
+      // mod's line under it, which ours follows.
+      const theirs = result?.text && result.text !== e.answer ? result.text : ''
+      const text = theirs ? theirs + '\n' + report.line : report.line
       return { ...result, text }
     }
     return result
