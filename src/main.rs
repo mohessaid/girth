@@ -884,8 +884,18 @@ fn main() -> ExitCode {
             use std::io::Read;
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
-            if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
+            if let Ok(mut turn) = serde_json::from_str::<ledger::Turn>(&input) {
                 let extra = serde_json::from_str::<serde_json::Value>(&input).ok();
+                // Classified here and dropped: command text never reaches the ledger.
+                let calls: Vec<girth::outcome::Call> = extra
+                    .as_ref()
+                    .and_then(|v| v.get("bash")?.as_array().cloned())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .take(girth::outcome::MAX_CALLS)
+                    .filter_map(|c| serde_json::from_value(c).ok())
+                    .collect();
+                turn.outcomes = girth::outcome::outcomes(&calls);
                 let context = extra
                     .as_ref()
                     .and_then(|v| v.get("context").and_then(|c| c.as_u64()))

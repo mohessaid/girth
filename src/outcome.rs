@@ -43,6 +43,9 @@ pub struct Call {
 /// Characters of output the verdict reads, from the end.
 pub const TAIL: usize = 4_000;
 
+/// Bash calls read per turn; the rest are ignored.
+pub const MAX_CALLS: usize = 64;
+
 /// What `command` does: its simple commands, read through wrappers and chains.
 pub fn classify(command: &str) -> Kinds {
     let mut kinds = Kinds::default();
