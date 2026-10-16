@@ -129,11 +129,8 @@ fn normalise(segment: &str) -> Vec<String> {
 fn is_assignment(word: &str) -> bool {
     match word.split_once('=') {
         Some((name, _)) => {
-            !name.is_empty()
-                && name.starts_with(|c: char| c.is_ascii_uppercase() || c == '_')
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+            name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
         }
         None => false,
     }
@@ -457,6 +454,66 @@ mod tests {
         // A tail cut inside a multi-byte character must not panic.
         let wide = format!("é{}test result: ok. 1 passed", "é".repeat(TAIL));
         assert_eq!(verdict(&wide, false), Outcome::TestPass);
+    }
+
+    #[test]
+    fn heredoc_words_end_where_they_should() {
+        assert!(test("cat <<'EOF'\nx\nEOF\ncargo test"));
+        assert!(test("cat <<END_OF\ncargo build\nEND_OF\ncargo test"));
+        assert!(!test("cat <<END_OF\ncargo test\nEND_OF"));
+    }
+
+    #[test]
+    fn only_real_assignments_are_stripped() {
+        assert!(test("foo=1 cargo test"));
+        assert!(test("_X=1 cargo test"));
+        for command in ["=x cargo test", "1A=x cargo test", "A-B=x cargo test"] {
+            assert!(!test(command), "{command}");
+        }
+    }
+
+    #[test]
+    fn summary_edge_cases() {
+        // A word that starts like a marker is not the marker.
+        assert_eq!(
+            verdict("FAIL_FAST=1\ntest result: ok. 1 passed", false),
+            Outcome::TestPass
+        );
+        assert_eq!(verdict("PASSWORD reset", false), Outcome::TestUntold);
+        // "Error" alone is not make's failure line, nor is make's line without it.
+        assert_eq!(
+            verdict("test result: ok. 3 passed\nhandles TypeError", false),
+            Outcome::TestPass
+        );
+        assert_eq!(
+            verdict("make: *** Waiting for unfinished jobs", false),
+            Outcome::TestUntold
+        );
+        assert_eq!(
+            verdict("Ran 1 test across 1 file. [3.00ms]", false),
+            Outcome::TestPass
+        );
+        assert_eq!(
+            verdict("Ran 4 tests across 2 files.", false),
+            Outcome::TestPass
+        );
+        assert_eq!(verdict("Ran out of disk space", false), Outcome::TestUntold);
+        assert_eq!(
+            verdict("tests across the board", false),
+            Outcome::TestUntold
+        );
+        assert_eq!(verdict("0 passed", false), Outcome::TestUntold);
+    }
+
+    #[test]
+    fn the_tail_is_exactly_tail_characters() {
+        // One character more would complete "FAIL" at the start of the window.
+        let output = format!("FAIL x\n{}", "y".repeat(TAIL - 6));
+        assert_eq!(output.chars().count(), TAIL + 1);
+        assert_eq!(verdict(&output, false), Outcome::TestUntold);
+        let exact = format!("FAIL x\n{}", "y".repeat(TAIL - 7));
+        assert_eq!(exact.chars().count(), TAIL);
+        assert_eq!(verdict(&exact, false), Outcome::TestFail);
     }
 
     fn call(command: &str, output: &str, error: bool) -> Call {
