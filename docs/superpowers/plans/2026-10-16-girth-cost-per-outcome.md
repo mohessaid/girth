@@ -9,7 +9,7 @@
 - **No command text or output in the ledger.** Only the outcome labels are stored.
 - **Test verdicts come from the runner's summary,** never from the exit status alone.
 - **Every mod hook fails open,** and a Bash result is returned unchanged.
-- **At most 64 calls per turn,** and a 4,000-character output tail.
+- **The last 64 calls of a turn,** and a 4,000-character output tail.
 - **Tests never touch the real `~/.girth`.**
 - **Version:** 0.9.0.
 

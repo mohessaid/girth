@@ -103,7 +103,7 @@ What `taste-launch` checks:
 ## 0.9.0 (2026-10-16)
 - **Live run A** (dist build, Haiku 5.5, isolated `GIRTH_HOME`, $0.004):
   - unpiped `cargo test` (failing), a fix, then `cargo test 2>&1 | tail -3`, then `git commit`;
-  - the turn recorded `"outcomes":["test_fail","test_pass","commit"]`. The first verdict came through core's `isError` path, which the mod tests can't fake.
+  - the turn recorded `"outcomes":["test_fail","test_pass","commit"]`. RTK kept cargo's `test result: FAILED` line, so this run alone doesn't prove the `isError` path; run E does.
 - **Live run B** ($0.005): a general-purpose subagent ran the piped tests.
   - Its turn recorded `["test_pass"]`; the main turn recorded no outcomes.
   - The output had been rewritten by the author's RTK hook (`cargo test: 1 passed (2 suites, 0.00s)`) and was still read correctly. RTK keeps cargo's own `test result: FAILED` line for failures.
@@ -112,3 +112,6 @@ What `taste-launch` checks:
 - **Live run C, after review fixes** ($0.004):
   - `cargo test 2>&1 | grep -E 'test result'` (failing), a fix, then `cargo test 2>&1 | grep -E 'FAILED|panicked'` (passing; grep printed nothing and exited 1), then `git commit -am`;
   - recorded `["test_fail","test_untold","commit"]`. The grep-filtered passing run is no longer a false failure.
+- **Live run E** ($0.002): `cargo test --no-such-flag >/dev/null 2>&1`. The tool result was only `Exit code 1`, which matches no summary marker, and the turn recorded `["test_fail"]`. This proves core's `isError` reaches the mod, which the harness can't fake.
+  - Run D (same command without the redirect) didn't prove it. RTK rewrote the output to `cargo test: 1 errors, 0 warnings`, which is itself a failure marker.
+- **The mod keeps a turn's last 64 Bash calls,** not its first, because a turn's commit usually comes last (raised in review).

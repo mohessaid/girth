@@ -715,7 +715,7 @@ test('Bash calls go to the meter with their turn, and their results pass through
   expect(records[3].bash).toBeUndefined()
 })
 
-test('at most 64 Bash calls a turn go to the meter', async ($, on) => {
+test('the last 64 Bash calls of a turn go to the meter', async ($, on) => {
   const records: any[] = []
   on('session.cwd', () => ({ value: '/work/app' }))
   on('process.run', ($, e) => {
@@ -726,8 +726,10 @@ test('at most 64 Bash calls a turn go to the meter', async ($, on) => {
   on('turn.complete', () => ({ text: '' }))
   for (let i = 0; i < 65; i++) await $.tool.call({ tool: 'Bash', command: 'echo ' + i })
   await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // The commit usually comes last, so the oldest calls are the ones dropped.
   expect(records[0].bash.length).toBe(64)
-  expect(records[0].bash[63].command).toBe('echo 63')
+  expect(records[0].bash[0].command).toBe('echo 1')
+  expect(records[0].bash[63].command).toBe('echo 64')
 })
 
 test('a denied Bash call is not recorded, and the output tail never starts inside a character', async ($, on) => {

@@ -11,7 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
   - `/girth-meter` and `girth stats --meter` add a line with the cost per commit, the cost since the last commit and the test verdicts. `girth stats --json` has the same counts under `meter`.
   - Verdicts come from the test runner's summary, not the exit status, which piped output hides.
   - Only the labels are stored; command text and output never reach the ledger, and `share` never reads them.
-- **Research:** `examples/outcomes/analyze-outcomes.py` and §6 of `docs/research/2026-10-15-where-the-money-goes.md`. On the author's history a commit cost $3.28, and 35% of test runs failed where exit status said 2%.
+- **Research:** `examples/outcomes/analyze-outcomes.py` and §6 of `docs/research/2026-10-15-where-the-money-goes.md`. On the author's history a commit cost $3.28, and 35% of test runs failed where exit status said 1%.
 
 ## [0.8.0] - 2026-10-16
 

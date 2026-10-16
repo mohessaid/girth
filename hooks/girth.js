@@ -242,8 +242,10 @@ export function register(on) {
       const result = await next(e)
       try {
         const calls = bash.get(e.agentId ?? '') ?? []
-        // A denied call never ran.
-        if (result?.deny === undefined && calls.length < MAX_CALLS) {
+        // A denied call never ran. Keep the last MAX_CALLS: a turn's commit
+        // usually comes at its end.
+        if (result?.deny === undefined) {
+          if (calls.length >= MAX_CALLS) calls.shift()
           const r = result?.result
           const output =
             typeof result?.text === 'string'

@@ -5,8 +5,8 @@
 
 ## Why
 - **Meter says what a turn cost, not what it bought.** The industry is moving from cost per token to cost per task. Girth can measure it locally, from outcomes the repo already has.
-- **On the author's history,** a commit cost $3.28 on average and from $0.95 to $6.41 per project. The median spend between commits was $1.48, p95 $11.31. The number tells projects and weeks apart, so it can show whether a lever (Lens, a crafted skill, idle compaction, a cheaper subagent model) changed what work costs.
-- **A test run's exit status is useless for this.** 99% of agent test commands are piped, and by exit status 98% passed; by the runners' own summaries 35% failed. Girth reads the summary.
+- **On the author's history,** a commit cost $3.28 on average and from $0.91 to $6.41 per project. The median spend between commits was $1.48, p95 $11.31. The number tells projects and weeks apart, so it can show whether a lever (Lens, a crafted skill, idle compaction, a cheaper subagent model) changed what work costs.
+- **A test run's exit status is useless for this.** 99% of agent test commands are piped, and by exit status 99% passed; by the runners' own summaries 35% failed. Girth reads the summary.
 
 ## What it measures
 For each Bash call in a turn (main or subagent), from the command and the end of its output:
@@ -48,7 +48,7 @@ For each Bash call in a turn (main or subagent), from the command and the end of
   - `verdict(output, error) -> Outcome`;
   - `outcomes(calls: &[Call]) -> Vec<Outcome>`, where `Call { command, output, error, background }`.
 - **Ledger:** `Turn` gains `outcomes: Vec<Outcome>`, skipped when empty. Old lines parse unchanged.
-- **CLI:** `girth meter record` reads `bash: [Call]` from its input, sets `turn.outcomes` and never stores `bash`. At most 64 calls per turn are read.
+- **CLI:** `girth meter record` reads `bash: [Call]` from its input, sets `turn.outcomes` and never stores `bash`. The mod keeps a turn's last 64 calls (the commit usually comes last), and the binary reads at most 64.
 - **Meter summary:**
   - It gains `commits`, `prs`, `tests_passed`, `tests_failed`, `tests_untold` and `since_commit`. `since_commit` is the cost of the turns after the project's last commit turn, or of all turns when there is none.
   - **A new line** when any outcome was recorded: `meter: outcomes: 12 commits · ≈ $3.40 per commit · ≈ $1.20 since the last commit · test runs: 20 passed, 8 failed, 2 no verdict`. A part with no data is left out.
