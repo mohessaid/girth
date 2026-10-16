@@ -874,7 +874,10 @@ fn main() -> ExitCode {
                     .unwrap_or(0);
                 let home = girth_home(&ctx);
                 let settings = girth::keeper::settings(std::path::Path::new(&turn.project), &home);
-                let off = turn.agent || ctx.env.get("GIRTH_KEEPER").is_some_and(|v| v == "off");
+                let keeper_off =
+                    turn.agent || ctx.env.get("GIRTH_KEEPER").is_some_and(|v| v == "off");
+                let compact_off =
+                    turn.agent || ctx.env.get("GIRTH_COMPACT").is_some_and(|v| v == "off");
                 let interval = ctx
                     .env
                     .get("GIRTH_KEEPER_INTERVAL_MS")
@@ -886,7 +889,13 @@ fn main() -> ExitCode {
                     line: Option<String>,
                 }
                 let report = Report {
-                    keeper: girth::keeper::plan(&settings, off, interval, context),
+                    keeper: girth::keeper::plan(
+                        &settings,
+                        keeper_off,
+                        compact_off,
+                        interval,
+                        context,
+                    ),
                     line: girth::keeper::doctor_line(&turn),
                 };
                 let _ = writeln!(

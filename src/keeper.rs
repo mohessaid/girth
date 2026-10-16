@@ -24,6 +24,9 @@ pub struct Settings {
     pub enabled: bool,
     pub max_pings: u32,
     pub min_context: u64,
+    /// Compact a large conversation after an idle interval (opt-in).
+    pub compact_idle: bool,
+    pub compact_min_context: u64,
 }
 
 impl Default for Settings {
@@ -32,6 +35,8 @@ impl Default for Settings {
             enabled: true,
             max_pings: 3,
             min_context: 20_000,
+            compact_idle: false,
+            compact_min_context: 150_000,
         }
     }
 }
@@ -41,21 +46,37 @@ impl Default for Settings {
 pub struct Plan {
     pub pings: u32,
     pub interval_ms: u64,
+    /// Compact the conversation after `interval_ms` instead of pinging it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub compact: bool,
 }
 
-/// `keeper` settings from `GIRTH_HOME/config.json`, then the project's
-/// `.girth/config.json` (which wins for numbers); off when either says so.
+/// `keeper` and `compact` settings from `GIRTH_HOME/config.json`, then the
+/// project's `.girth/config.json` (which wins for numbers); off when either
+/// says so. Idle compaction is on only when a file says so and none says no.
 pub fn settings(project_dir: &Path, home: &Path) -> Settings {
     let mut s = Settings::default();
+    let mut compact_no = false;
     for file in [
         home.join(crate::ledger::CONFIG_FILE),
         project_dir.join(crate::config::CONFIG_PATH),
     ] {
-        let keeper = std::fs::read_to_string(&file)
+        let value = std::fs::read_to_string(&file)
             .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-            .and_then(|v| v.get("keeper").cloned());
-        let Some(keeper) = keeper else { continue };
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        if let Some(compact) = value.as_ref().and_then(|v| v.get("compact")) {
+            match compact.get("idle").and_then(|v| v.as_bool()) {
+                Some(true) => s.compact_idle = true,
+                Some(false) => compact_no = true,
+                None => {}
+            }
+            if let Some(n) = compact.get("min_context").and_then(|v| v.as_u64()) {
+                s.compact_min_context = n;
+            }
+        }
+        let Some(keeper) = value.and_then(|v| v.get("keeper").cloned()) else {
+            continue;
+        };
         if keeper.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
             s.enabled = false;
         }
@@ -66,15 +87,25 @@ pub fn settings(project_dir: &Path, home: &Path) -> Settings {
             s.min_context = n;
         }
     }
+    s.compact_idle &= !compact_no;
     s
 }
 
-/// The plan for a conversation of `context` tokens.
-pub fn plan(settings: &Settings, off: bool, interval_ms: Option<u64>, context: u64) -> Plan {
-    let active = settings.enabled && !off && context >= settings.min_context;
+/// The plan for a conversation of `context` tokens. For a conversation large
+/// enough to compact, compaction replaces the pings: both would fire at once.
+pub fn plan(
+    settings: &Settings,
+    keeper_off: bool,
+    compact_off: bool,
+    interval_ms: Option<u64>,
+    context: u64,
+) -> Plan {
+    let compact = settings.compact_idle && !compact_off && context >= settings.compact_min_context;
+    let ping = settings.enabled && !keeper_off && context >= settings.min_context && !compact;
     Plan {
-        pings: if active { settings.max_pings } else { 0 },
+        pings: if ping { settings.max_pings } else { 0 },
         interval_ms: interval_ms.unwrap_or(INTERVAL_MS),
+        compact,
     }
 }
 
@@ -243,31 +274,111 @@ mod tests {
     fn plan_pings_large_conversations_unless_turned_off() {
         let s = Settings::default();
         assert_eq!(
-            plan(&s, false, None, 20_000),
+            plan(&s, false, false, None, 20_000),
             Plan {
                 pings: 3,
-                interval_ms: 55 * 60 * 1000
+                interval_ms: 55 * 60 * 1000,
+                compact: false
             }
         );
-        assert_eq!(plan(&s, false, None, 19_999).pings, 0);
-        assert_eq!(plan(&s, true, None, 500_000).pings, 0);
+        assert_eq!(plan(&s, false, false, None, 19_999).pings, 0);
+        assert_eq!(plan(&s, true, false, None, 500_000).pings, 0);
         let off = Settings {
             enabled: false,
             ..Settings::default()
         };
-        assert_eq!(plan(&off, false, None, 500_000).pings, 0);
+        assert_eq!(plan(&off, false, false, None, 500_000).pings, 0);
         let two = Settings {
             max_pings: 2,
             min_context: 1_000,
             ..Settings::default()
         };
         assert_eq!(
-            plan(&two, false, Some(50), 1_000),
+            plan(&two, false, false, Some(50), 1_000),
             Plan {
                 pings: 2,
-                interval_ms: 50
+                interval_ms: 50,
+                compact: false
             }
         );
+    }
+
+    #[test]
+    fn idle_compaction_replaces_pings_for_large_conversations_when_turned_on() {
+        let off = Settings::default();
+        assert!(!off.compact_idle);
+        assert_eq!(off.compact_min_context, 150_000);
+        // Off by default: v0.7 pings, and no `compact` key in the JSON.
+        let p = plan(&off, false, false, None, 900_000);
+        assert_eq!((p.pings, p.compact), (3, false));
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"pings":3,"interval_ms":3300000}"#
+        );
+        let on = Settings {
+            compact_idle: true,
+            ..Settings::default()
+        };
+        let p = plan(&on, false, false, Some(50), 150_000);
+        assert_eq!(
+            p,
+            Plan {
+                pings: 0,
+                interval_ms: 50,
+                compact: true
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"pings":0,"interval_ms":50,"compact":true}"#
+        );
+        // Below the threshold the keeper decides as before.
+        assert_eq!(
+            plan(&on, false, false, None, 149_999),
+            plan(&off, false, false, None, 149_999)
+        );
+        // Turning compaction off leaves the pings; turning the keeper off leaves compaction.
+        assert_eq!(plan(&on, false, true, None, 900_000).pings, 3);
+        assert!(!plan(&on, false, true, None, 900_000).compact);
+        assert!(plan(&on, true, false, None, 900_000).compact);
+    }
+
+    #[test]
+    fn compact_settings_are_opt_in_and_a_no_anywhere_wins() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (project, home) = (tmp.path().join("p"), tmp.path().join("h"));
+        std::fs::create_dir_all(project.join(".girth")).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        let home_cfg = home.join("config.json");
+        let project_cfg = project.join(".girth/config.json");
+        std::fs::write(
+            &home_cfg,
+            r#"{"compact": {"idle": true, "min_context": 90000}}"#,
+        )
+        .unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 90_000);
+        // The project wins for numbers.
+        std::fs::write(&project_cfg, r#"{"compact": {"min_context": 200000}}"#).unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 200_000);
+        // "idle": false in either file wins over true in the other.
+        std::fs::write(&project_cfg, r#"{"compact": {"idle": false}}"#).unwrap();
+        assert!(!settings(&project, &home).compact_idle);
+        std::fs::write(&home_cfg, r#"{"compact": {"idle": false}}"#).unwrap();
+        std::fs::write(&project_cfg, r#"{"compact": {"idle": true}}"#).unwrap();
+        assert!(!settings(&project, &home).compact_idle);
+        // The project alone can turn it on; malformed values are ignored.
+        std::fs::write(
+            &home_cfg,
+            r#"{"compact": {"idle": "yes", "min_context": "big"}}"#,
+        )
+        .unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 150_000);
     }
 
     #[test]
@@ -290,9 +401,9 @@ mod tests {
         assert_eq!(
             settings(&project, &home),
             Settings {
-                enabled: true,
                 max_pings: 1,
-                min_context: 1000
+                min_context: 1000,
+                ..Settings::default()
             }
         );
         std::fs::write(
