@@ -391,7 +391,7 @@ test('the doctor line is left out when there is none, and bad meter output chang
   expect((await $.turn.complete(done)).text).toBe('other mod\ngirth: x')
 })
 
-import { keeper, ping } from '../girth.js'
+import { compactor, keeper, ping } from '../girth.js'
 
 const FORK_USAGE = { input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 200_000, cache_creation_input_tokens: 0 }
 
@@ -498,4 +498,178 @@ test('main turns arm the keeper with the meter plan', async ($, on) => {
   pings = 0
   await $.turn.complete({ turnId: 't3', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
   expect(armed.length).toBe(2)
+})
+
+test('the compactor compacts once after the interval, records it, and leaves a note for the next answer', async () => {
+  const clock = fakeClock()
+  const recorded: any[] = []
+  let answer: any = { messages: [{}, {}], tokensBefore: 583_000, tokensAfter: 21_000 }
+  let calls = 0
+  const c = compactor({
+    after: clock.after,
+    compact: async () => {
+      calls += 1
+      if (answer instanceof Error) throw answer
+      return answer
+    },
+    record: async (r: any) => { recorded.push(r) },
+  })
+  expect(c.takeNote()).toBe(null)
+  c.start({ pings: 0, interval_ms: 3_300_000, compact: true }, 600_000)
+  expect(clock.timers.map((t) => t.ms)).toEqual([3_300_000])
+  await clock.timers[0].fn()
+  expect(calls).toBe(1)
+  expect(recorded).toEqual([{ before: 583_000, after: 21_000 }])
+  expect(c.takeNote()).toEqual({ before: 583_000, after: 21_000 })
+  // The note is given once.
+  expect(c.takeNote()).toBe(null)
+  // One compaction per idle period: no second timer.
+  expect(clock.timers.length).toBe(1)
+  // Without the engine's counts, the context Girth saw stands in for "before",
+  // and nothing goes to the ledger without an "after".
+  answer = { messages: [] }
+  c.start({ pings: 0, interval_ms: 10, compact: true }, 400_000)
+  await clock.timers[1].fn()
+  expect(c.takeNote()).toEqual({ before: 400_000 })
+  expect(recorded.length).toBe(1)
+  // A veto, a refusal or an error: no record, no note, nothing thrown.
+  for (const a of [{ skip: 'not now' }, new Error('headless'), undefined]) {
+    answer = a
+    c.start({ pings: 0, interval_ms: 10, compact: true }, 400_000)
+    await clock.timers[clock.timers.length - 1].fn()
+    expect(c.takeNote()).toBe(null)
+  }
+  expect(recorded.length).toBe(1)
+  // stop() and a new start() cancel the pending timer, and a stale callback does nothing.
+  const before = calls
+  c.start({ pings: 0, interval_ms: 10, compact: true }, 400_000)
+  const stale = clock.timers[clock.timers.length - 1]
+  c.stop()
+  expect(stale.cancelled).toBe(true)
+  await stale.fn()
+  expect(calls).toBe(before)
+  c.start({ pings: 0, interval_ms: 10, compact: true }, 400_000)
+  const first = clock.timers[clock.timers.length - 1]
+  c.start({ pings: 0, interval_ms: 10, compact: true }, 400_000)
+  expect(first.cancelled).toBe(true)
+  await first.fn()
+  expect(calls).toBe(before)
+  // A failing record still leaves the note.
+  const failing = compactor({
+    after: clock.after,
+    compact: async () => ({ tokensBefore: 5, tokensAfter: 1 }),
+    record: async () => { throw new Error('disk full') },
+  })
+  failing.start({ pings: 0, interval_ms: 10, compact: true }, 9)
+  await clock.timers[clock.timers.length - 1].fn()
+  expect(failing.takeNote()).toEqual({ before: 5, after: 1 })
+})
+
+test('a compact plan arms the compactor, not the keeper, and only for the main loop', async ($, on) => {
+  const armed: number[] = []
+  const sent: any[] = []
+  on('clock.now', () => ({ value: 0 }))
+  on('clock.after', ($, e) => {
+    armed.push(e.ms)
+    return { value: {} }
+  })
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    sent.push(e.init?.stdin ? JSON.parse(e.init.stdin) : null)
+    return { value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 3_300_000, compact: true } }), stderr: '' } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  on('turn.start', ($, e) => e)
+  on('turn.step', async function* ($, e) {
+    return { turnId: e.turnId, index: 0, answer: 'ok', toolUses: [], stopReason: 'end_turn', usage: step('claude-opus-5-5', 2, 500_000, 20_000) }
+  })
+  await drive($, { turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 })
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(armed).toEqual([3_300_000])
+  // No compaction happened yet, so the next turn carries no note.
+  expect(sent[0].compacted).toBe(undefined)
+  await $.turn.complete({ turnId: 's', answer: 'a', durationMs: 1, isAborted: false, agentId: 'sub-1', usage: USAGE })
+  expect(armed.length).toBe(1)
+})
+
+test('the line the meter returns after a compaction goes under the answer', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line: 'compacted this conversation while you were away (583K → 21K tokens)' }), stderr: '' } }))
+  on('turn.complete', () => ({ text: '' }))
+  const out = await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(out.text).toBe('compacted this conversation while you were away (583K → 21K tokens)')
+})
+
+function spawnInput(over: any = {}) {
+  return {
+    tool_use_id: 'toolu_1',
+    prompt: 'look around',
+    description: 'explore',
+    subagentType: 'Explore',
+    provider: { plugin: 'engine', tier: 'core' },
+    parentModel: 'claude-opus-5-5',
+    ...over,
+  }
+}
+
+test('built-in subagents run on the configured model; explicit models, plugin agents and forks keep theirs', async ($, on) => {
+  const runs: string[][] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push(e.argv)
+    return { value: { exitCode: 0, stdout: '{"agents":{"model":"haiku"}}\n', stderr: '' } }
+  })
+  // Stands in for the engine: what the subagent ends up on (`inherit` when no model was set).
+  on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit' }))
+  expect((await $.agent.spawn(spawnInput())).model).toBe('haiku')
+  expect((await $.agent.spawn(spawnInput({ subagentType: 'general-purpose' }))).model).toBe('haiku')
+  // The settings are read once per session.
+  expect(runs.length).toBe(1)
+  expect(runs[0].slice(1)).toEqual(['settings', '--project', '/work/app'])
+  expect((await $.agent.spawn(spawnInput({ model: 'opus' }))).model).toBe('opus')
+  expect((await $.agent.spawn(spawnInput({ provider: { plugin: 'superpowers', tier: 'user' } }))).model).toBe('inherit')
+  expect((await $.agent.spawn(spawnInput({ subagentType: 'fork' }))).model).toBe('inherit')
+})
+
+test('no subagent model configured, or settings that fail, change nothing', async ($, on) => {
+  let stdout = '{}\n'
+  let exitCode = 0
+  let runs = 0
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => {
+    runs += 1
+    return { value: { exitCode, stdout, stderr: '' } }
+  })
+  on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit' }))
+  expect((await $.agent.spawn(spawnInput())).model).toBe('inherit')
+  expect((await $.agent.spawn(spawnInput())).model).toBe('inherit')
+  expect(runs).toBe(1)
+})
+
+test('a settings command that fails or prints garbage leaves subagents alone', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: 'not json', stderr: '' } }))
+  on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit' }))
+  expect((await $.agent.spawn(spawnInput())).model).toBe('inherit')
+})
+
+test('a settings command that exits non-zero leaves subagents alone', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 2, stdout: '{"agents":{"model":"haiku"}}', stderr: '' } }))
+  on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit' }))
+  expect((await $.agent.spawn(spawnInput())).model).toBe('inherit')
+})
+
+test("the line goes under the answer without repeating it, and after another mod's line", async ($, on) => {
+  const line = 'compacted this conversation while you were away (583K → 21K tokens)'
+  let theirs: string | null = null
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 }, line }), stderr: '' } }))
+  // The engine resolves turn.complete to the answer itself; another mod's line replaces it.
+  on('turn.complete', ($, e) => ({ text: theirs ?? e.answer }))
+  const out = await $.turn.complete({ turnId: 't', answer: 'HELIOTROPE KIWI', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(out.text).toBe(line)
+  theirs = 'tl;dr: done'
+  const both = await $.turn.complete({ turnId: 't2', answer: 'HELIOTROPE KIWI', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(both.text).toBe('tl;dr: done\n' + line)
 })

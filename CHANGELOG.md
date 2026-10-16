@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-16
+
+### Added
+- **Idle compaction (opt-in):** after 55 minutes idle, Girth compacts a conversation of at least 150,000 tokens while its cache is still warm. This replaces the keeper's pings for that conversation.
+  - The next answer carries a line saying so, and `girth stats --meter` counts compactions.
+  - On the author's history it would have saved about $1.8K at API prices.
+  - **Turn it on** with `{"compact": {"idle": true}}`. It works in interactive sessions only.
+- **Subagent model (opt-in):** `{"agents": {"model": "sonnet"}}` runs built-in subagents on that model. Explicit models, plugins' agents and forks are kept.
+- **New commands:** `girth compact record` and `girth settings`.
+- **Research:** `examples/compact/` (the spike and `analyze-idle-compaction.py`).
+
+### Fixed
+- A line under the answer (the doctor's, and now the compaction's) repeated the whole answer above it. Claude Code's own text for `turn.complete` is the answer, which Girth had treated as another mod's line.
+- Lines under the answer no longer start with their own `girth:`, because Claude Code already names the plugin.
+
 ## [0.7.1] - 2026-10-15
 
 ### Fixed
@@ -135,7 +150,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mohessaid/girth/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/mohessaid/girth/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mohessaid/girth/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mohessaid/girth/compare/v0.5.0...v0.6.0

@@ -24,6 +24,9 @@ pub struct Settings {
     pub enabled: bool,
     pub max_pings: u32,
     pub min_context: u64,
+    /// Compact a large conversation after an idle interval (opt-in).
+    pub compact_idle: bool,
+    pub compact_min_context: u64,
 }
 
 impl Default for Settings {
@@ -32,6 +35,8 @@ impl Default for Settings {
             enabled: true,
             max_pings: 3,
             min_context: 20_000,
+            compact_idle: false,
+            compact_min_context: 150_000,
         }
     }
 }
@@ -41,21 +46,37 @@ impl Default for Settings {
 pub struct Plan {
     pub pings: u32,
     pub interval_ms: u64,
+    /// Compact the conversation after `interval_ms` instead of pinging it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub compact: bool,
 }
 
-/// `keeper` settings from `GIRTH_HOME/config.json`, then the project's
-/// `.girth/config.json` (which wins for numbers); off when either says so.
+/// `keeper` and `compact` settings from `GIRTH_HOME/config.json`, then the
+/// project's `.girth/config.json` (which wins for numbers); off when either
+/// says so. Idle compaction is on only when a file says so and none says no.
 pub fn settings(project_dir: &Path, home: &Path) -> Settings {
     let mut s = Settings::default();
+    let mut compact_no = false;
     for file in [
         home.join(crate::ledger::CONFIG_FILE),
         project_dir.join(crate::config::CONFIG_PATH),
     ] {
-        let keeper = std::fs::read_to_string(&file)
+        let value = std::fs::read_to_string(&file)
             .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-            .and_then(|v| v.get("keeper").cloned());
-        let Some(keeper) = keeper else { continue };
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        if let Some(compact) = value.as_ref().and_then(|v| v.get("compact")) {
+            match compact.get("idle").and_then(|v| v.as_bool()) {
+                Some(true) => s.compact_idle = true,
+                Some(false) => compact_no = true,
+                None => {}
+            }
+            if let Some(n) = compact.get("min_context").and_then(|v| v.as_u64()) {
+                s.compact_min_context = n;
+            }
+        }
+        let Some(keeper) = value.and_then(|v| v.get("keeper").cloned()) else {
+            continue;
+        };
         if keeper.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
             s.enabled = false;
         }
@@ -66,15 +87,48 @@ pub fn settings(project_dir: &Path, home: &Path) -> Settings {
             s.min_context = n;
         }
     }
+    s.compact_idle &= !compact_no;
     s
 }
 
-/// The plan for a conversation of `context` tokens.
-pub fn plan(settings: &Settings, off: bool, interval_ms: Option<u64>, context: u64) -> Plan {
-    let active = settings.enabled && !off && context >= settings.min_context;
+/// The model to run built-in subagents on (`agents.model`), from
+/// `GIRTH_HOME/config.json`, then the project's config, which wins.
+pub fn agents_model(project_dir: &Path, home: &Path) -> Option<String> {
+    let mut model = None;
+    for file in [
+        home.join(crate::ledger::CONFIG_FILE),
+        project_dir.join(crate::config::CONFIG_PATH),
+    ] {
+        let value = std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
+        if let Some(m) = value
+            .as_ref()
+            .and_then(|v| v.pointer("/agents/model"))
+            .and_then(|m| m.as_str())
+            .filter(|m| !m.is_empty())
+        {
+            model = Some(m.to_string());
+        }
+    }
+    model
+}
+
+/// The plan for a conversation of `context` tokens. For a conversation large
+/// enough to compact, compaction replaces the pings: both would fire at once.
+pub fn plan(
+    settings: &Settings,
+    keeper_off: bool,
+    compact_off: bool,
+    interval_ms: Option<u64>,
+    context: u64,
+) -> Plan {
+    let compact = settings.compact_idle && !compact_off && context >= settings.compact_min_context;
+    let ping = settings.enabled && !keeper_off && context >= settings.min_context && !compact;
     Plan {
-        pings: if active { settings.max_pings } else { 0 },
+        pings: if ping { settings.max_pings } else { 0 },
         interval_ms: interval_ms.unwrap_or(INTERVAL_MS),
+        compact,
     }
 }
 
@@ -85,6 +139,16 @@ fn short_tokens(n: u64) -> String {
     } else {
         format!("{}K", n / 1_000)
     }
+}
+
+/// The line under the first answer after an idle compaction. Claude Code
+/// puts the plugin's name in front, so the line has no `girth:` of its own.
+pub fn compact_line(before: u64, after: Option<u64>) -> String {
+    let sizes = match after {
+        Some(after) => format!("{} → {} tokens", short_tokens(before), short_tokens(after)),
+        None => format!("it was {} tokens", short_tokens(before)),
+    };
+    format!("compacted this conversation while you were away ({sizes})")
 }
 
 /// The line under the answer for a turn whose cache was written again, if any.
@@ -103,7 +167,7 @@ pub fn doctor_line(turn: &Turn) -> Option<String> {
         "the prompt changed before the cached part".to_string()
     };
     let mut line = format!(
-        "girth: {why}; this turn re-wrote {} tokens",
+        "{why}; this turn re-wrote {} tokens",
         short_tokens(worst.rewritten)
     );
     if let Some(r) = price::rates(&turn.model) {
@@ -127,6 +191,10 @@ pub struct Summary {
     pub warm_returns: u64,
     /// The re-write those returns avoided, at most.
     pub warm_saved: f64,
+    /// Idle compactions, and the conversation sizes before and after, summed.
+    pub compactions: u64,
+    pub compact_before: u64,
+    pub compact_after: u64,
 }
 
 /// Summarise breaks and pings, optionally for one project.
@@ -144,6 +212,11 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                     s.ping_cost += price::cost(r, p.input, p.output, p.read, p.write);
                 }
                 pending.insert(&p.project, (&p.model, p.expected));
+            }
+            Event::Compact(c) if wanted(&c.project) => {
+                s.compactions += 1;
+                s.compact_before += c.before;
+                s.compact_after += c.after;
             }
             Event::Turn(t) if wanted(&t.project) => {
                 let rates = price::rates(&t.model);
@@ -188,6 +261,14 @@ pub fn render(summary: &Summary) -> String {
         lines.push(format!(
             "meter: keeper: {} pings (≈ ${:.2}); {} returns found the cache warm (up to ≈ ${:.2} not re-written)",
             summary.pings, summary.ping_cost, summary.warm_returns, summary.warm_saved
+        ));
+    }
+    if summary.compactions > 0 {
+        lines.push(format!(
+            "meter: idle compaction: {} times · {} → {} tokens on average",
+            summary.compactions,
+            short_tokens(summary.compact_before / summary.compactions),
+            short_tokens(summary.compact_after / summary.compactions)
         ));
     }
     lines.join("\n")
@@ -243,31 +324,111 @@ mod tests {
     fn plan_pings_large_conversations_unless_turned_off() {
         let s = Settings::default();
         assert_eq!(
-            plan(&s, false, None, 20_000),
+            plan(&s, false, false, None, 20_000),
             Plan {
                 pings: 3,
-                interval_ms: 55 * 60 * 1000
+                interval_ms: 55 * 60 * 1000,
+                compact: false
             }
         );
-        assert_eq!(plan(&s, false, None, 19_999).pings, 0);
-        assert_eq!(plan(&s, true, None, 500_000).pings, 0);
+        assert_eq!(plan(&s, false, false, None, 19_999).pings, 0);
+        assert_eq!(plan(&s, true, false, None, 500_000).pings, 0);
         let off = Settings {
             enabled: false,
             ..Settings::default()
         };
-        assert_eq!(plan(&off, false, None, 500_000).pings, 0);
+        assert_eq!(plan(&off, false, false, None, 500_000).pings, 0);
         let two = Settings {
             max_pings: 2,
             min_context: 1_000,
             ..Settings::default()
         };
         assert_eq!(
-            plan(&two, false, Some(50), 1_000),
+            plan(&two, false, false, Some(50), 1_000),
             Plan {
                 pings: 2,
-                interval_ms: 50
+                interval_ms: 50,
+                compact: false
             }
         );
+    }
+
+    #[test]
+    fn idle_compaction_replaces_pings_for_large_conversations_when_turned_on() {
+        let off = Settings::default();
+        assert!(!off.compact_idle);
+        assert_eq!(off.compact_min_context, 150_000);
+        // Off by default: v0.7 pings, and no `compact` key in the JSON.
+        let p = plan(&off, false, false, None, 900_000);
+        assert_eq!((p.pings, p.compact), (3, false));
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"pings":3,"interval_ms":3300000}"#
+        );
+        let on = Settings {
+            compact_idle: true,
+            ..Settings::default()
+        };
+        let p = plan(&on, false, false, Some(50), 150_000);
+        assert_eq!(
+            p,
+            Plan {
+                pings: 0,
+                interval_ms: 50,
+                compact: true
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"pings":0,"interval_ms":50,"compact":true}"#
+        );
+        // Below the threshold the keeper decides as before.
+        assert_eq!(
+            plan(&on, false, false, None, 149_999),
+            plan(&off, false, false, None, 149_999)
+        );
+        // Turning compaction off leaves the pings; turning the keeper off leaves compaction.
+        assert_eq!(plan(&on, false, true, None, 900_000).pings, 3);
+        assert!(!plan(&on, false, true, None, 900_000).compact);
+        assert!(plan(&on, true, false, None, 900_000).compact);
+    }
+
+    #[test]
+    fn compact_settings_are_opt_in_and_a_no_anywhere_wins() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let (project, home) = (tmp.path().join("p"), tmp.path().join("h"));
+        std::fs::create_dir_all(project.join(".girth")).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        let home_cfg = home.join("config.json");
+        let project_cfg = project.join(".girth/config.json");
+        std::fs::write(
+            &home_cfg,
+            r#"{"compact": {"idle": true, "min_context": 90000}}"#,
+        )
+        .unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 90_000);
+        // The project wins for numbers.
+        std::fs::write(&project_cfg, r#"{"compact": {"min_context": 200000}}"#).unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 200_000);
+        // "idle": false in either file wins over true in the other.
+        std::fs::write(&project_cfg, r#"{"compact": {"idle": false}}"#).unwrap();
+        assert!(!settings(&project, &home).compact_idle);
+        std::fs::write(&home_cfg, r#"{"compact": {"idle": false}}"#).unwrap();
+        std::fs::write(&project_cfg, r#"{"compact": {"idle": true}}"#).unwrap();
+        assert!(!settings(&project, &home).compact_idle);
+        // The project alone can turn it on; malformed values are ignored.
+        std::fs::write(
+            &home_cfg,
+            r#"{"compact": {"idle": "yes", "min_context": "big"}}"#,
+        )
+        .unwrap();
+        let s = settings(&project, &home);
+        assert!(s.compact_idle);
+        assert_eq!(s.compact_min_context, 150_000);
     }
 
     #[test]
@@ -290,9 +451,9 @@ mod tests {
         assert_eq!(
             settings(&project, &home),
             Settings {
-                enabled: true,
                 max_pings: 1,
-                min_context: 1000
+                min_context: 1000,
+                ..Settings::default()
             }
         );
         std::fs::write(
@@ -320,13 +481,13 @@ mod tests {
         );
         assert_eq!(
             doctor_line(&t).unwrap(),
-            "girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
+            "the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
         );
         // Under an hour: the prompt changed before the cached part.
         let t = turn("claude-sonnet-5-5", &[(90_000, 80_000, 125)]);
         assert_eq!(
             doctor_line(&t).unwrap(),
-            "girth: the prompt changed before the cached part; this turn re-wrote 80K tokens (≈ $0.32)"
+            "the prompt changed before the cached part; this turn re-wrote 80K tokens (≈ $0.32)"
         );
         // Exactly an hour counts as expired; minutes only when under an hour.
         let t = turn("claude-opus-5-5", &[(50_000, 40_000, 3_600)]);
@@ -341,7 +502,7 @@ mod tests {
         // An unknown model has no price, and tokens of a million or more read as M.
         assert_eq!(
             doctor_line(&turn("mystery", &[(1_500_000, 1_250_000, 4_000)])).unwrap(),
-            "girth: the prompt cache had expired (idle 1h 6m); this turn re-wrote 1.2M tokens"
+            "the prompt cache had expired (idle 1h 6m); this turn re-wrote 1.2M tokens"
         );
     }
 
@@ -413,6 +574,45 @@ mod tests {
     }
 
     #[test]
+    fn compact_line_says_what_shrank_while_away() {
+        assert_eq!(
+            compact_line(583_412, Some(21_999)),
+            "compacted this conversation while you were away (583K → 21K tokens)"
+        );
+        assert_eq!(
+            compact_line(1_250_000, None),
+            "compacted this conversation while you were away (it was 1.2M tokens)"
+        );
+    }
+
+    #[test]
+    fn summary_counts_idle_compactions_per_project() {
+        let compact = |project: &str, before, after| {
+            Event::Compact(crate::ledger::Compact {
+                project: project.into(),
+                model: "claude-opus-5-5".into(),
+                before,
+                after,
+            })
+        };
+        let records = vec![
+            rec(1, compact("/p", 600_000, 20_000)),
+            rec(2, compact("/p", 400_000, 30_000)),
+            rec(3, compact("/q", 1, 1)),
+        ];
+        let s = summarise(&records, Some("/p"));
+        assert_eq!(
+            (s.compactions, s.compact_before, s.compact_after),
+            (2, 1_000_000, 50_000)
+        );
+        assert_eq!(summarise(&records, None).compactions, 3);
+        assert_eq!(
+            render(&s),
+            "meter: idle compaction: 2 times · 500K → 25K tokens on average"
+        );
+    }
+
+    #[test]
     fn render_says_nothing_without_breaks_or_pings() {
         assert_eq!(render(&Summary::default()), "");
         let s = Summary {
@@ -423,6 +623,7 @@ mod tests {
             ping_cost: 0.12,
             warm_returns: 1,
             warm_saved: 1.56,
+            ..Summary::default()
         };
         assert_eq!(
             render(&s),

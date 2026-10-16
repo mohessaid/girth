@@ -8,6 +8,9 @@
 //   a changed prompt) is named under the answer.
 // - Keeper: while the conversation sits idle, a ping (a fork of it) reads the
 //   cache before its hour runs out, so coming back doesn't write it all again.
+// - Idle compaction (opt-in): a large conversation is compacted instead, while
+//   its cache is still warm, and the next answer says so.
+// - Subagent model (opt-in): built-in subagents run on the configured model.
 // The girth binary makes every decision, and every hook fails open: on any
 // error Claude Code carries on unchanged.
 
@@ -43,6 +46,9 @@ let context = 0
 // Keeper: what the next ping should read (the last main request's read + write).
 let expected = 0
 let keep = null
+// Idle compaction, and the subagent settings (read once, on the first spawn).
+let squeeze = null
+let agentSettings = null
 // A break re-wrote at least this much (and 20% of what was cached), and the
 // prompt didn't shrink below 80% of it (compaction or /clear).
 const BREAK_MIN = 5000
@@ -93,6 +99,53 @@ export function keeper(deps) {
         })
       }
       next()
+    },
+  }
+}
+
+/**
+ * Compacts the conversation once, `plan.interval_ms` after the last turn.
+ * A success is recorded and leaves a note for the next answer; a veto, a
+ * refusal (headless sessions) or an error leaves nothing.
+ */
+export function compactor(deps) {
+  let timer = null
+  let generation = 0
+  let note = null
+  return {
+    stop() {
+      generation += 1
+      timer?.cancel()
+      timer = null
+    },
+    start(plan, context) {
+      this.stop()
+      const mine = generation
+      timer = deps.after(plan.interval_ms, async () => {
+        if (mine !== generation) return
+        timer = null
+        let r
+        try {
+          r = await deps.compact()
+        } catch {
+          return
+        }
+        if (!r || r.skip) return
+        const before = typeof r.tokensBefore === 'number' ? r.tokensBefore : context
+        note = typeof r.tokensAfter === 'number' ? { before, after: r.tokensAfter } : { before }
+        if (note.after !== undefined) {
+          try {
+            await deps.record(note)
+          } catch {
+            // The note still goes under the next answer.
+          }
+        }
+      })
+    },
+    takeNote() {
+      const n = note
+      note = null
+      return n
     },
   }
 }
@@ -189,7 +242,10 @@ export function register(on) {
   }).catch(async ($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    if (e.agentId === undefined) keep?.stop()
+    if (e.agentId === undefined) {
+      keep?.stop()
+      squeeze?.stop()
+    }
     return next(e)
   }).catch(async ($, e, next) => next(e))
 
@@ -260,6 +316,8 @@ export function register(on) {
     breaks.delete(e.turnId)
     if (found) turn.breaks = found
     if (e.agentId === undefined && context > 0) turn.context = context
+    const note = e.agentId === undefined ? squeeze?.takeNote() : null
+    if (note) turn.compacted = note
     const run = await $.process.run([launcher($), 'meter', 'record'], {
       stdin: JSON.stringify(turn),
       timeoutMs: TIMEOUT_MS,
@@ -283,11 +341,40 @@ export function register(on) {
       })
       keep.start(report.keeper, expected)
     }
+    if (e.agentId === undefined && report.keeper?.compact === true) {
+      const cwd = turn.project
+      squeeze ??= compactor({
+        after: (ms, fn) => $.clock.after(ms, fn),
+        compact: () => $.session.compact(),
+        record: (c) =>
+          $.process.run([launcher($), 'compact', 'record'], {
+            stdin: JSON.stringify({ project: cwd, model: usage.model, ...c }),
+            timeoutMs: TIMEOUT_MS,
+          }),
+      })
+      squeeze.start(report.keeper, context)
+    }
     if (typeof report.line === 'string' && e.agentId === undefined) {
-      const text = result?.text ? result.text + '\n' + report.line : report.line
+      // next(e) resolves to the answer itself; a different text is another
+      // mod's line under it, which ours follows.
+      const theirs = result?.text && result.text !== e.answer ? result.text : ''
+      const text = theirs ? theirs + '\n' + report.line : report.line
       return { ...result, text }
     }
     return result
+  }).catch(async ($, e, next) => next(e))
+
+  on('agent.spawn', async ($, e, next) => {
+    if (e.model !== undefined || e.subagentType === 'fork' || e.provider?.plugin !== 'engine') return next(e)
+    if (agentSettings === null) {
+      agentSettings = {}
+      const run = await $.process.run([launcher($), 'settings', '--project', await $.session.cwd()], {
+        timeoutMs: TIMEOUT_MS,
+      })
+      if (run.exitCode === 0) agentSettings = JSON.parse(run.stdout)
+    }
+    const model = agentSettings?.agents?.model
+    return typeof model === 'string' && model !== '' ? next({ ...e, model }) : next(e)
   }).catch(async ($, e, next) => next(e))
 
   on('command.run', { command: 'girth-meter' }, async ($, e) => {

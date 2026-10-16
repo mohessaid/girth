@@ -690,7 +690,7 @@ fn meter_record_plans_the_keeper_and_names_cache_breaks() {
     assert_eq!(json["keeper"]["interval_ms"], 55 * 60 * 1000);
     assert_eq!(
         json["line"],
-        "girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
+        "the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)"
     );
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
     assert!(ledger.contains(r#""breaks":[{"lost":460000"#), "{ledger}");
@@ -770,6 +770,171 @@ fn keeper_record_appends_pings_and_stats_report_them() {
     let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(json["keeper"]["pings"], 1);
     assert_eq!(json["keeper"]["warm_returns"], 1);
+}
+
+#[test]
+fn compact_record_appends_and_stats_report_it() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let compact = r#"{"project":"/w","model":"claude-opus-5-5","before":583000,"after":21000}"#;
+    for input in [compact, "not json"] {
+        home_cmd(&home)
+            .args(["compact", "record"])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout("");
+    }
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--project", "/w"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("meter: idle compaction: 1 times · 583K → 21K tokens on average"),
+        "{text}"
+    );
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["compactions"], 1);
+}
+
+#[test]
+fn meter_record_plans_an_idle_compaction_only_when_opted_in() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = |agent: bool| {
+        format!(
+            r#"{{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":200000,"cache_write":10,"agent":{agent},"aborted":false,"context":200012}}"#
+        )
+    };
+    let plan = |cmd: &mut Command, agent: bool| {
+        let out = cmd
+            .args(["meter", "record"])
+            .write_stdin(turn(agent))
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout)
+            .trim()
+            .to_string()
+    };
+    let pings = r#"{"keeper":{"pings":3,"interval_ms":3300000}}"#;
+    assert_eq!(plan(&mut home_cmd(&home), false), pings);
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("config.json"), r#"{"compact": {"idle": true}}"#).unwrap();
+    assert_eq!(
+        plan(&mut home_cmd(&home), false),
+        r#"{"keeper":{"pings":0,"interval_ms":3300000,"compact":true}}"#
+    );
+    assert_eq!(
+        plan(home_cmd(&home).env("GIRTH_COMPACT", "off"), false),
+        pings
+    );
+    assert_eq!(
+        plan(&mut home_cmd(&home), true),
+        r#"{"keeper":{"pings":0,"interval_ms":3300000}}"#
+    );
+}
+
+#[test]
+fn meter_record_reports_an_idle_compaction_under_the_next_answer() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"compacted":{"before":583000,"after":21000}}"#;
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        json["line"],
+        "compacted this conversation while you were away (583K → 21K tokens)"
+    );
+    // With a cache break as well, both lines, the compaction first.
+    let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"breaks":[{"lost":40000,"rewritten":30000,"idle_s":9000}],"compacted":{"before":583000}}"#;
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        json["line"],
+        "compacted this conversation while you were away (it was 583K tokens)\n\
+         the prompt cache had expired (idle 2h 30m); this turn re-wrote 30K tokens (≈ $0.24)"
+    );
+}
+
+#[test]
+fn settings_print_the_subagent_model_and_the_project_wins() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let project = tmp.path().join("p");
+    std::fs::create_dir_all(project.join(".girth")).unwrap();
+    std::fs::create_dir_all(&home).unwrap();
+    let settings = || {
+        let out = home_cmd(&home)
+            .args(["settings", "--project"])
+            .arg(&project)
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout)
+            .trim()
+            .to_string()
+    };
+    assert_eq!(settings(), "{}");
+    std::fs::write(
+        home.join("config.json"),
+        r#"{"agents": {"model": "haiku"}}"#,
+    )
+    .unwrap();
+    assert_eq!(settings(), r#"{"agents":{"model":"haiku"}}"#);
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"roots": [], "agents": {"model": "sonnet"}}"#,
+    )
+    .unwrap();
+    assert_eq!(settings(), r#"{"agents":{"model":"sonnet"}}"#);
+    // A model that isn't a non-empty string is ignored.
+    std::fs::write(
+        project.join(".girth/config.json"),
+        r#"{"agents": {"model": 7}}"#,
+    )
+    .unwrap();
+    std::fs::write(home.join("config.json"), r#"{"agents": {"model": ""}}"#).unwrap();
+    assert_eq!(settings(), "{}");
+}
+
+#[test]
+fn stats_json_shows_keeper_only_when_there_is_something_to_show() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let json = || {
+        let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+        serde_json::from_slice::<serde_json::Value>(&out.get_output().stdout).unwrap()
+    };
+    let plain = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(plain)
+        .assert()
+        .success();
+    assert!(json().get("keeper").is_none());
+    // A cache break alone is enough.
+    let broke = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":10,"agent":false,"aborted":false,"breaks":[{"lost":9000,"rewritten":9000,"idle_s":4000}]}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(broke)
+        .assert()
+        .success();
+    assert_eq!(json()["keeper"]["breaks"], 1);
 }
 
 #[test]

@@ -100,6 +100,17 @@ enum Command {
         #[command(subcommand)]
         what: KeeperWhat,
     },
+    /// Idle compactions of large conversations (used by the plugin's mod).
+    Compact {
+        #[command(subcommand)]
+        what: CompactWhat,
+    },
+    /// The settings the plugin's mod reads at session start, as JSON.
+    Settings {
+        /// The project directory (default: the current directory).
+        #[arg(long)]
+        project: Option<String>,
+    },
     /// Rate a crafted skill: up or down, with an optional private note.
     Feedback {
         skill: String,
@@ -194,6 +205,12 @@ enum LensKind {
 enum MeterWhat {
     /// Append one turn's usage, read as JSON from stdin, and print the keeper's
     /// plan and any cache-break line as JSON. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum CompactWhat {
+    /// Append one idle compaction, read as JSON from stdin. Bad input is ignored.
     Record,
 }
 
@@ -660,7 +677,7 @@ fn run_stats(
         if summary.turns > 0 {
             value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
         }
-        if keeper.breaks > 0 || keeper.pings > 0 {
+        if keeper.breaks > 0 || keeper.pings > 0 || keeper.compactions > 0 {
             value["keeper"] = serde_json::to_value(&keeper).expect("keeper serialises");
         }
         let _ = writeln!(
@@ -868,13 +885,24 @@ fn main() -> ExitCode {
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
             if let Ok(turn) = serde_json::from_str::<ledger::Turn>(&input) {
-                let context = serde_json::from_str::<serde_json::Value>(&input)
-                    .ok()
+                let extra = serde_json::from_str::<serde_json::Value>(&input).ok();
+                let context = extra
+                    .as_ref()
                     .and_then(|v| v.get("context").and_then(|c| c.as_u64()))
                     .unwrap_or(0);
+                let compacted = extra.as_ref().and_then(|v| {
+                    let c = v.get("compacted")?;
+                    Some(girth::keeper::compact_line(
+                        c.get("before")?.as_u64()?,
+                        c.get("after").and_then(|a| a.as_u64()),
+                    ))
+                });
                 let home = girth_home(&ctx);
                 let settings = girth::keeper::settings(std::path::Path::new(&turn.project), &home);
-                let off = turn.agent || ctx.env.get("GIRTH_KEEPER").is_some_and(|v| v == "off");
+                let keeper_off =
+                    turn.agent || ctx.env.get("GIRTH_KEEPER").is_some_and(|v| v == "off");
+                let compact_off =
+                    turn.agent || ctx.env.get("GIRTH_COMPACT").is_some_and(|v| v == "off");
                 let interval = ctx
                     .env
                     .get("GIRTH_KEEPER_INTERVAL_MS")
@@ -886,8 +914,17 @@ fn main() -> ExitCode {
                     line: Option<String>,
                 }
                 let report = Report {
-                    keeper: girth::keeper::plan(&settings, off, interval, context),
-                    line: girth::keeper::doctor_line(&turn),
+                    keeper: girth::keeper::plan(
+                        &settings,
+                        keeper_off,
+                        compact_off,
+                        interval,
+                        context,
+                    ),
+                    line: match (compacted, girth::keeper::doctor_line(&turn)) {
+                        (Some(c), Some(d)) => Some(format!("{c}\n{d}")),
+                        (c, d) => c.or(d),
+                    },
                 };
                 let _ = writeln!(
                     out,
@@ -897,6 +934,26 @@ fn main() -> ExitCode {
                 // Never disturb the session: a failed append is dropped.
                 let _ = ledger::append(&home, Event::Turn(turn));
             }
+            ExitCode::SUCCESS
+        }
+        Command::Compact {
+            what: CompactWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(compact) = serde_json::from_str::<ledger::Compact>(&input) {
+                let _ = ledger::append(&girth_home(&ctx), Event::Compact(compact));
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Settings { project } => {
+            let dir = project.map_or_else(|| ctx.cwd.clone(), std::path::PathBuf::from);
+            let mut value = serde_json::json!({});
+            if let Some(model) = girth::keeper::agents_model(&dir, &girth_home(&ctx)) {
+                value["agents"] = serde_json::json!({ "model": model });
+            }
+            let _ = writeln!(out, "{value}");
             ExitCode::SUCCESS
         }
         Command::Keeper {

@@ -41,3 +41,17 @@ v0.5 (2026-10-15):
   - Fixed: the `isAnswered` guard was a real bug. An aborted fork still spends tokens, so a ping is now recorded whenever usage comes back.
   - Not observable in `claude plugin test`: `turn.start` → `keep.stop()`. A timer's `cancel()` runs client-side and emits no event. It is covered by the live run (`examples/cache/RESULTS.md`): a turn inside the interval cancels the pending ping.
 - **Rust (`keeper`, `price`, `ledger`):** 107 mutants, 6 unviable, **100 of 101 caught (99%)**. The survivor (another project's turn passing the project filter) is now covered by a test.
+
+## v0.8 (idle compaction, subagent model)
+- **Rust (lines changed on the branch, `--in-diff`):** 58 mutants, 3 unviable, **50 of 55 caught**.
+  - The five survivors were all on one line: `stats --json`'s condition for showing `keeper`.
+  - `stats_json_shows_keeper_only_when_there_is_something_to_show` now covers it. It fails under the hand-applied `>=` mutant.
+- **Mod (hand-mutation pass, 17 mutants):** 12 caught. The five survivors:
+  - **`squeeze?.stop()` in `turn.start`:** not observable in `claude plugin test`, because a timer's `cancel()` runs client-side.
+    - Covered live, on the dist build with a 20 s interval: turns at 881 s and 895 s; turn 1's timer would have fired at 901 s, and nothing compacted; one compaction at 917 s.
+  - **The `agentId` guard on `takeNote()`:** needs a fired timer inside the wiring, which the harness can't do.
+    - It matters because a subagent spawned in the first answer after a return completes before the main turn, and would otherwise take the note.
+  - **Equivalent:**
+    - `timer = null` after the timer fired: a later `stop()` cancels an already-fired timer harmlessly.
+    - `model !== ''`: `girth settings` never prints an empty model.
+    - `start(plan, context)` → `0`: `context` is only a fallback when the engine reports no `tokensBefore`, and Claude Code 2.1.300 always reports it.
