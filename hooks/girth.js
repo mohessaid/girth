@@ -170,6 +170,14 @@ function note(kind, name, bytes, before) {
   parts.set(kind + '\u0000' + name, part)
 }
 
+// The last OUTPUT_TAIL characters, never starting inside a surrogate pair:
+// half a character would make the meter's JSON invalid.
+function tail(text) {
+  const cut = text.slice(-OUTPUT_TAIL)
+  const first = cut.charCodeAt(0)
+  return first >= 0xdc00 && first <= 0xdfff ? cut.slice(1) : cut
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     for (const [name, description] of [
@@ -234,7 +242,8 @@ export function register(on) {
       const result = await next(e)
       try {
         const calls = bash.get(e.agentId ?? '') ?? []
-        if (calls.length < MAX_CALLS) {
+        // A denied call never ran.
+        if (result?.deny === undefined && calls.length < MAX_CALLS) {
           const r = result?.result
           const output =
             typeof result?.text === 'string'
@@ -242,7 +251,7 @@ export function register(on) {
               : [r?.stdout, r?.stderr].filter((t) => typeof t === 'string' && t !== '').join('\n')
           calls.push({
             command: String(e.command),
-            output: output.slice(-OUTPUT_TAIL),
+            output: tail(output),
             error: result?.isError === true,
             background: Boolean(r?.backgroundTaskId || r?.interrupted),
           })

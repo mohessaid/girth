@@ -5,7 +5,7 @@
 
 ## Why
 - **Meter says what a turn cost, not what it bought.** The industry is moving from cost per token to cost per task. Girth can measure it locally, from outcomes the repo already has.
-- **On the author's history,** a commit cost $3.33 on average and from $0.95 to $6.41 per project. The median spend between commits was $1.51, p95 $11.43. The number tells projects and weeks apart, so it can show whether a lever (Lens, a crafted skill, idle compaction, a cheaper subagent model) changed what work costs.
+- **On the author's history,** a commit cost $3.28 on average and from $0.95 to $6.41 per project. The median spend between commits was $1.48, p95 $11.31. The number tells projects and weeks apart, so it can show whether a lever (Lens, a crafted skill, idle compaction, a cheaper subagent model) changed what work costs.
 - **A test run's exit status is useless for this.** 99% of agent test commands are piped, and by exit status 98% passed; by the runners' own summaries 35% failed. Girth reads the summary.
 
 ## What it measures
@@ -28,6 +28,14 @@ For each Bash call in a turn (main or subagent), from the command and the end of
   - **Failing:** `test result: FAILED`, a line starting `FAIL` or `FAILED`, `N failed|failure(s)|error(s)` with N ≥ 1, `fail N` (node) or `N fail` (bun) with N ≥ 1, `could not compile`, `make: *** … Error`.
   - **Passing:** `test result: ok.`, `N passed`, a line starting `ok ` (go) or `PASS`, `N tests, 0 failures` (ExUnit), `fail 0`, `N pass`, `Ran N tests across` (bun).
 - **Calls that were backgrounded or interrupted** are ignored: their output is not the run's.
+- **Added in review:**
+  - **A filter owns the exit status:** when the last pipeline ends in a text filter (`grep`, `tail`, `head`, `sed`, …), its error is ignored and the output decides.
+  - **Key-value summaries:** `Failures: 1` and `Errors: 2` (JUnit, phpunit) are read by key, not by the number before them.
+  - **More formats:** TAP's `not ok`, mocha's `N passing` / `N failing`, dart's `All tests passed!` / `Some tests failed.`, and phpunit's `OK (`.
+  - **Quotes:** separators inside quotes don't split a command line.
+  - **Denied calls never ran,** so they aren't recorded.
+  - **A clean tail:** the output tail never starts inside a surrogate pair.
+  - **Robust plan fields:** a malformed `bash` list costs only the outcomes, never the keeper plan or the compaction line.
 
 ## Privacy
 - **No command text or output is stored.** The mod hands each call's command and output tail to `girth meter record` on stdin. The binary classifies them and stores only the outcome labels on the turn: `"outcomes": ["test_fail", "commit"]`.

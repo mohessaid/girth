@@ -729,3 +729,26 @@ test('at most 64 Bash calls a turn go to the meter', async ($, on) => {
   expect(records[0].bash.length).toBe(64)
   expect(records[0].bash[63].command).toBe('echo 63')
 })
+
+test('a denied Bash call is not recorded, and the output tail never starts inside a character', async ($, on) => {
+  const records: any[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('tool.call', ($, e) => {
+    if (e.command === 'git commit -m blocked') return { deny: 'not allowed' }
+    return { result: { stdout: '🎉'.repeat(2001) + 'x', stderr: '', interrupted: false } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m blocked' })
+  expect(denied.deny).toBe('not allowed')
+  await $.tool.call({ tool: 'Bash', command: 'cargo test' })
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(records[0].bash.length).toBe(1)
+  const output: string = records[0].bash[0].output
+  expect(output.endsWith('🎉x')).toBe(true)
+  const first = output.charCodeAt(0)
+  expect(first >= 0xdc00 && first <= 0xdfff).toBe(false)
+})

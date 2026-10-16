@@ -50,7 +50,7 @@ pub const MAX_CALLS: usize = 64;
 pub fn classify(command: &str) -> Kinds {
     let mut kinds = Kinds::default();
     let text = strip_heredocs(command);
-    for segment in text.split(['&', '|', ';', '\n']) {
+    for segment in split_unquoted(&text, &['&', '|', ';', '\n']) {
         let words = normalise(segment);
         let w: Vec<&str> = words.iter().map(String::as_str).collect();
         kinds.test |= is_test(&w);
@@ -58,6 +58,30 @@ pub fn classify(command: &str) -> Kinds {
         kinds.pr |= matches!(w.as_slice(), ["gh", "pr", "create" | "merge", ..]);
     }
     kinds
+}
+
+/// `text` split on `seps` outside single and double quotes.
+fn split_unquoted<'a>(text: &'a str, seps: &[char]) -> Vec<&'a str> {
+    let mut parts = Vec::new();
+    let (mut start, mut quote, mut escaped) = (0, None, false);
+    for (i, c) in text.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (quote, c) {
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (Some('"'), '\\') | (None, '\\') => escaped = true,
+            (None, '\'' | '"') => quote = Some(c),
+            (None, c) if seps.contains(&c) => {
+                parts.push(&text[start..i]);
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    parts.push(&text[start..]);
+    parts
 }
 
 /// `command` without heredoc bodies: their lines are data, not commands.
@@ -199,34 +223,47 @@ fn summary(line: &str) -> (bool, bool) {
     let mut failed = lower.contains("test result: failed")
         || starts_word(t, "FAIL")
         || starts_word(t, "FAILED")
+        || starts_word(&lower, "not ok")
+        || lower.contains("some tests failed")
         || lower.contains("could not compile")
         || (t.starts_with("make: ***") && t.contains("Error"));
     let mut passed = lower.contains("test result: ok.")
+        || lower.contains("all tests passed")
         || starts_word(t, "PASS")
+        || t.starts_with("OK (")
         || t.starts_with("ok ")
         || t.starts_with("ok\t")
         || (t.starts_with("Ran ") && (t.contains(" tests across") || t.contains(" test across")));
-    let words: Vec<&str> = lower
-        .split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
-        .collect();
-    for pair in words.windows(2) {
-        match (
-            pair[0].parse::<u64>().ok(),
-            pair[1],
-            pair[0],
-            pair[1].parse::<u64>().ok(),
-        ) {
-            (Some(n), "failed" | "failure" | "failures" | "error" | "errors" | "fail", _, _) => {
-                failed |= n > 0;
-                passed |= n == 0 && pair[1].starts_with("failure");
+    let raw: Vec<&str> = lower.split_whitespace().collect();
+    let word = |w: &str| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+    for pair in raw.windows(2) {
+        let (a, b) = (word(pair[0]), word(pair[1]));
+        // "3 failed": a count, then what it counts. Not "5, Failures:", where
+        // the count belongs to the key before it.
+        if let Ok(n) = a.parse::<u64>() {
+            if !pair[0].ends_with([',', ';', ':']) {
+                match b.as_str() {
+                    "failed" | "failure" | "failures" | "error" | "errors" | "fail" | "failing" => {
+                        failed |= n > 0;
+                        passed |= n == 0 && b.starts_with("failure");
+                    }
+                    "passed" | "pass" | "passing" => passed |= n > 0,
+                    _ => {}
+                }
             }
-            (Some(n), "passed" | "pass", _, _) => passed |= n > 0,
-            (_, _, "fail", Some(n)) => {
-                failed |= n > 0;
-                passed |= n == 0;
+        }
+        // "Failures: 1", "errors: 0", node's "fail 1": a key, then its count.
+        if pair[0].ends_with(':') || a == "fail" {
+            if let Ok(n) = b.parse::<u64>() {
+                match a.as_str() {
+                    "failed" | "failure" | "failures" | "fail" => {
+                        failed |= n > 0;
+                        passed |= n == 0;
+                    }
+                    "error" | "errors" => failed |= n > 0,
+                    _ => {}
+                }
             }
-            _ => {}
         }
     }
     (passed, failed)
@@ -244,7 +281,10 @@ pub fn outcomes(calls: &[Call]) -> Vec<Outcome> {
     for call in calls.iter().filter(|c| !c.background) {
         let kinds = classify(&call.command);
         if kinds.test {
-            found.push(verdict(&call.output, call.error));
+            // A filter at the end of the pipe owns the exit status: grep
+            // finding nothing in a passing run exits 1.
+            let error = call.error && !ends_in_filter(&call.command);
+            found.push(verdict(&call.output, error));
         }
         if kinds.commit && !call.error && !no_commit(&call.output) {
             found.push(Outcome::Commit);
@@ -254,6 +294,42 @@ pub fn outcomes(calls: &[Call]) -> Vec<Outcome> {
         }
     }
     found
+}
+
+/// The command's last pipeline ends in a text filter (`| grep`, `| tail`, …).
+fn ends_in_filter(command: &str) -> bool {
+    let text = strip_heredocs(command)
+        .replace("&&", "\n")
+        .replace("||", "\n");
+    let Some(pipeline) = split_unquoted(&text, &['\n', ';'])
+        .into_iter()
+        .map(str::trim)
+        .rfind(|p| !p.is_empty())
+    else {
+        return false;
+    };
+    let stages = split_unquoted(pipeline, &['|']);
+    stages.len() > 1
+        && normalise(stages[stages.len() - 1])
+            .first()
+            .is_some_and(|w| {
+                matches!(
+                    w.as_str(),
+                    "grep"
+                        | "egrep"
+                        | "fgrep"
+                        | "rg"
+                        | "tail"
+                        | "head"
+                        | "sed"
+                        | "awk"
+                        | "cut"
+                        | "sort"
+                        | "uniq"
+                        | "wc"
+                        | "tr"
+                )
+            })
 }
 
 /// Git's answer when a commit made nothing.
@@ -514,6 +590,71 @@ mod tests {
         let exact = format!("FAIL x\n{}", "y".repeat(TAIL - 7));
         assert_eq!(exact.chars().count(), TAIL);
         assert_eq!(verdict(&exact, false), Outcome::TestFail);
+    }
+
+    #[test]
+    fn key_value_summaries_are_read_by_key() {
+        for output in [
+            "Tests run: 5, Failures: 0, Errors: 0, Skipped: 0",
+            "OK (5 tests, 7 assertions)",
+            "  3 passing (12ms)",
+            "00:02 +12: All tests passed!",
+        ] {
+            assert_eq!(verdict(output, false), Outcome::TestPass, "{output}");
+        }
+        for output in [
+            "Tests run: 5, Failures: 1, Errors: 0",
+            "Tests run: 5, Failures: 0, Errors: 2",
+            "errors: 1",
+            "Assertions: 7, Failures: 1.",
+            "ok 1 - adds\nnot ok 2 - subtracts",
+            "  3 passing (12ms)\n  1 failing",
+            "00:02 +11 -1: Some tests failed.",
+        ] {
+            assert_eq!(verdict(output, false), Outcome::TestFail, "{output}");
+        }
+    }
+
+    #[test]
+    fn a_filter_at_the_end_of_the_pipe_makes_the_exit_status_meaningless() {
+        // grep found nothing and exited 1: the run itself passed.
+        let quiet = call("cargo test 2>&1 | grep -E 'FAILED|panicked'", "", true);
+        assert_eq!(outcomes(&[quiet]), vec![Outcome::TestUntold]);
+        let summary = call(
+            "cargo test 2>&1 | grep 'test result'",
+            "test result: ok. 3 passed",
+            true,
+        );
+        assert_eq!(outcomes(&[summary]), vec![Outcome::TestPass]);
+        let failed = call(
+            "cargo test 2>&1 | tail -3",
+            "test result: FAILED. 1 failed",
+            true,
+        );
+        assert_eq!(outcomes(&[failed]), vec![Outcome::TestFail]);
+        // Without a filter at the end, an error still fails the run.
+        assert_eq!(
+            outcomes(&[call("cargo test", "", true)]),
+            vec![Outcome::TestFail]
+        );
+        assert_eq!(
+            outcomes(&[call("cargo test | tee log && echo done", "", true)]),
+            vec![Outcome::TestFail]
+        );
+    }
+
+    #[test]
+    fn separators_inside_quotes_do_not_split() {
+        let message = "git commit -m \"fix; cargo test now passes\ncargo test | grep ok\"";
+        assert_eq!(
+            classify(message),
+            Kinds {
+                commit: true,
+                ..Kinds::default()
+            }
+        );
+        assert!(test("echo 'a | b' && cargo test"));
+        assert!(test("echo \"it's\" && cargo test"));
     }
 
     fn call(command: &str, output: &str, error: bool) -> Call {

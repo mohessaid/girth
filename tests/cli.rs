@@ -1088,7 +1088,7 @@ fn meter_record_keeps_outcomes_and_never_the_commands() {
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
     assert!(
         text.contains(
-            "meter: outcomes: 1 commits · ≈ $0.00 per commit · test runs: 1 passed, 1 failed"
+            "meter: outcomes: 1 commit · ≈ $0.00 per commit · test runs: 1 passed, 1 failed"
         ),
         "{text}"
     );
@@ -1125,4 +1125,23 @@ fn meter_record_reads_at_most_64_bash_calls_and_ignores_a_bad_list() {
     assert_eq!(lines.len(), 2, "{ledger}");
     assert_eq!(lines[0].matches("\"commit\"").count(), 64, "{}", lines[0]);
     assert!(!lines[1].contains("outcomes"), "{}", lines[1]);
+}
+
+#[test]
+fn meter_record_keeps_the_plan_when_the_bash_output_is_not_well_formed() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    // A lone surrogate (half an emoji cut at the tail; the mod now cuts
+    // cleanly) must not cost the turn its context or its compaction line.
+    let turn = r#"{"project":"/work/a","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":0,"agent":false,"aborted":false,"context":450000,"compacted":{"before":583000,"after":21000},"bash":[{"command":"git commit -m x","output":"[main 1] x","error":false},{"command":"cargo test","output":"\udf89 test result: ok. 1 passed","error":false}]}"#;
+    let out = home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["keeper"]["pings"], 3, "{json}");
+    assert!(json["line"].as_str().unwrap().contains("583K"), "{json}");
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 1, "{ledger}");
 }

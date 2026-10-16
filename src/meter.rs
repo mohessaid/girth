@@ -125,8 +125,10 @@ pub fn render(summary: &Summary) -> String {
     let mut parts = Vec::new();
     if summary.commits > 0 {
         parts.push(format!(
-            "{} commits · ≈ ${:.2} per commit",
-            summary.commits, summary.per_commit
+            "{} commit{} · ≈ ${:.2} per commit",
+            summary.commits,
+            if summary.commits == 1 { "" } else { "s" },
+            summary.per_commit
         ));
         if summary.since_commit > 0.0 {
             parts.push(format!(
@@ -136,7 +138,11 @@ pub fn render(summary: &Summary) -> String {
         }
     }
     if summary.prs > 0 {
-        parts.push(format!("{} PRs", summary.prs));
+        parts.push(format!(
+            "{} PR{}",
+            summary.prs,
+            if summary.prs == 1 { "" } else { "s" }
+        ));
     }
     let runs: Vec<String> = [
         (summary.tests_passed, "passed"),
@@ -362,12 +368,9 @@ mod tests {
             None,
         ));
         assert!(
-            commit_only.contains("\nmeter: outcomes: 1 commits · ≈ $"),
+            commit_only.contains("\nmeter: outcomes: 1 commit · ≈ $"),
             "{commit_only}"
         );
-        assert!(
-            commit_only.ends_with(" per commit · 1 PRs"),
-            "{commit_only}"
-        );
+        assert!(commit_only.ends_with(" per commit · 1 PR"), "{commit_only}");
     }
 }

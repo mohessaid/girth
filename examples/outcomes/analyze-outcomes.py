@@ -67,6 +67,19 @@ def verdict(output, is_error):
     return "pass" if PASSED.search(tail) else "unknown"
 
 
+FILTERS = {"grep", "egrep", "fgrep", "rg", "tail", "head", "sed", "awk", "cut", "sort", "uniq", "wc", "tr"}
+
+
+def ends_in_filter(command):
+    """The last pipeline ends in a text filter, which owns the exit status."""
+    last = [p for p in re.split(r"&&|\|\||;|\n", HEREDOC.sub("", command)) if p.strip()]
+    if not last:
+        return False
+    stages = re.split(r"(?<!\|)\|(?!\|)", last[-1])
+    words = list(segments(stages[-1])) if len(stages) > 1 else []
+    return bool(words) and words[0].split()[0] in FILTERS
+
+
 def classify(command):
     kinds = set()
     for seg in segments(command):
@@ -125,7 +138,8 @@ def events(path):
                 if isinstance(text, list):
                     text = " ".join(x.get("text", "") for x in text if isinstance(x, dict))
                 ok = not b.get("is_error") and not background
-                yield ts, "outcome", (command, ok, bool(background), verdict(text or "", bool(b.get("is_error"))))
+                error = bool(b.get("is_error")) and not ends_in_filter(command)
+                yield ts, "outcome", (command, ok, bool(background), verdict(text or "", error))
 
 
 def pct(values, q):
