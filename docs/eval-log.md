@@ -109,3 +109,6 @@ What `taste-launch` checks:
   - The output had been rewritten by the author's RTK hook (`cargo test: 1 passed (2 suites, 0.00s)`) and was still read correctly. RTK keeps cargo's own `test result: FAILED` line for failures.
 - **The ledger held no command text** after both runs (`cargo`, `tail -3` and `lib.rs`: 0 matches). The real `~/.girth` was unchanged.
 - **Evals (0.9.0 dist):** 7 of 7 cases at 1.00, 3 runs each, 381 s, $1.46.
+- **Live run C, after review fixes** ($0.004):
+  - `cargo test 2>&1 | grep -E 'test result'` (failing), a fix, then `cargo test 2>&1 | grep -E 'FAILED|panicked'` (passing; grep printed nothing and exited 1), then `git commit -am`;
+  - recorded `["test_fail","test_untold","commit"]`. The grep-filtered passing run is no longer a false failure.

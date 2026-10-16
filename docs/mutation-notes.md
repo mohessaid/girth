@@ -69,3 +69,6 @@ v0.5 (2026-10-15):
 - **Mod (hand-mutation pass, 10 mutants):** 8 caught, and the cap's off-by-one now has a test (`at most 64 Bash calls a turn go to the meter`). One survivor:
   - **Keying the calls by `e.agentId`:** a test's own `$.tool.call` carries no `agentId`, so a subagent's call can't be faked.
     - Covered live, on the dist build: a general-purpose subagent ran `cargo test 2>&1 | tail -3`. Its turn recorded `["test_pass"]`, and the main turn recorded none.
+- **After the branch review's fixes** (filter pipes, key-value summaries, quote-aware splitting), `--in-diff` again: 187 mutants, 2 unviable, **182 of 185 caught**.
+  - The three survivors were the splitter's backslash escape and two edges of the filter rule (`tee` is not a filter; a grep with no pipe before it is not one).
+  - Tests now pin all three. Each fails under its hand-applied mutant.

@@ -657,6 +657,26 @@ mod tests {
         assert!(test("echo \"it's\" && cargo test"));
     }
 
+    #[test]
+    fn escaped_quotes_do_not_open_a_quote() {
+        assert!(test(r"echo \' && cargo test"));
+        assert!(test(r#"echo "a \" ; b" && cargo test"#));
+    }
+
+    #[test]
+    fn only_a_filter_after_a_pipe_owns_the_exit_status() {
+        // tee is not a filter: its stage's error stands.
+        assert_eq!(
+            outcomes(&[call("cargo test 2>&1 | tee log", "", true)]),
+            vec![Outcome::TestFail]
+        );
+        // A grep of its own, not after a pipe: the error stands too.
+        assert_eq!(
+            outcomes(&[call("cargo test; grep -q ok log", "", true)]),
+            vec![Outcome::TestFail]
+        );
+    }
+
     fn call(command: &str, output: &str, error: bool) -> Call {
         Call {
             command: command.into(),
