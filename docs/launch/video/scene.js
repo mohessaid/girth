@@ -90,6 +90,19 @@ hand.geometry.translate(0, 0.6, 0)
 const pivot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 24, 16), gbuffer)
 scene.add(ring, hand, pivot)
 
+// The call to action: a chalk star.
+const starShape = new THREE.Shape()
+for (let i = 0; i < 10; i++) {
+  const r = i % 2 === 0 ? 1.2 : 0.5
+  const a = Math.PI / 2 + (i * Math.PI) / 5
+  if (i === 0) starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r)
+  else starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r)
+}
+starShape.closePath()
+const star = new THREE.Mesh(new THREE.ExtrudeGeometry(starShape, { depth: 0.3, bevelEnabled: false }), gbuffer)
+star.geometry.center()
+scene.add(star)
+
 // The wink: a chalk face, because this video was made with Girth.
 const face = new THREE.Group()
 const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), gbuffer)
@@ -230,8 +243,11 @@ function drawText(t) {
   line('girth', 170, 230, span(t, 41.6, 42.3) * out, 700)
   line('local. measured. open source.', 46, 880, span(t, 42.6, 43.2) * out)
   line('/plugin marketplace add mohessaid/girth', 36, 960, span(t, 43.4, 44.0) * out, 400)
-  line('p.s. this video was made with girth.', 52, 160, span(t, 46.8, 47.4))
-  line('it remembered the taste: chalk, calm lines, room to breathe.', 34, 950, span(t, 48.0, 48.6), 400)
+  cap("star it on github, so it's there when you need it.", 46.6, 49.0)
+  cap("know someone who'd use it? share it with them.", 49.4, 52.4)
+  line('github.com/mohessaid/girth', 36, 960, Math.min(span(t, 46.8, 47.3), 1 - span(t, 52.0, 52.4)), 400)
+  line('p.s. this video was made with girth.', 52, 160, span(t, 52.8, 53.4))
+  line('it remembered the taste: chalk, calm lines, room to breathe.', 34, 950, span(t, 54.0, 54.6), 400)
   textTex.needsUpdate = true
 }
 
@@ -304,13 +320,20 @@ function layout(t) {
   }
   hand.rotateZ(-span(t, 28, 34.4) * Math.PI * 2)
 
+  // The star spins in, and turns slowly while the call to action shows.
+  const st = Math.min(span(t, 46.4, 47.2), 1 - span(t, 52.1, 52.5))
+  show(star, st * 0.9)
+  star.position.set(0, 0.5, 0)
+  star.lookAt(camera.position.x, 0.5, camera.position.z)
+  star.rotateY((1 - span(t, 46.4, 47.6)) * Math.PI * 2 + Math.sin(t * 1.2) * 0.25)
+
   // The wink: the face turns to the camera, and one eye closes.
-  const f = span(t, 46.6, 47.4)
+  const f = span(t, 52.6, 53.4)
   face.visible = f > 0.002
   face.scale.setScalar(Math.max(0.0001, f * 1.4))
   face.position.set(0, 0.2, 0)
   face.lookAt(camera.position.x, 0.2, camera.position.z)
-  const wink = Math.min(span(t, 49.2, 49.45), 1 - span(t, 50.3, 50.55))
+  const wink = Math.min(span(t, 55.2, 55.45), 1 - span(t, 56.3, 56.55))
   eyeR.scale.set(1.3, 1 - wink * 0.85, 1)
 
   // Compaction: a tall block pressed into a small one.

@@ -2,12 +2,12 @@
 
 A silent, black-and-white, hand-drawn 3D intro, rendered by code.
 
-- **`scene.js`:** the scene, its 52-second timeline and the sketch shader. The shader draws outlines where surfaces turn, hatching where they're in shade, paper or chalk grain, and lines that redraw slightly 8 times a second.
+- **`scene.js`:** the scene, its 58-second timeline and the sketch shader. The shader draws outlines where surfaces turn, hatching where they're in shade, paper or chalk grain, and lines that redraw slightly 8 times a second.
 - **`render.mjs`:** renders frame by frame in headless Chrome (SwiftShader) and streams the frames into ffmpeg, so every run is identical.
 
 ```sh
 npm install
-node render.mjs chalk 52 girth-intro.mp4            # the intro (also: ink, pencil)
+node render.mjs chalk 58 girth-intro.mp4            # the intro (also: ink, pencil)
 FRAMES=60,300,900 node render.mjs chalk 52 x.mp4 960 540   # stills in frames/chalk/ for review
 ```
 
