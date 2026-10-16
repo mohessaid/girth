@@ -714,3 +714,18 @@ test('Bash calls go to the meter with their turn, and their results pass through
   await $.turn.complete({ turnId: 't4', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
   expect(records[3].bash).toBeUndefined()
 })
+
+test('at most 64 Bash calls a turn go to the meter', async ($, on) => {
+  const records: any[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
+  on('turn.complete', () => ({ text: '' }))
+  for (let i = 0; i < 65; i++) await $.tool.call({ tool: 'Bash', command: 'echo ' + i })
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(records[0].bash.length).toBe(64)
+  expect(records[0].bash[63].command).toBe('echo 63')
+})

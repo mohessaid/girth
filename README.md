@@ -122,6 +122,11 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - an estimated cost;
 - how much Lens kept out of the prompt.
 
+**Cost per outcome:** Meter also counts what the money bought. For each Bash call Claude runs, Girth works out whether it was a test run (and whether it passed), a commit or a pull request. `/girth-meter` then adds a line such as `meter: outcomes: 12 commits · ≈ $3.40 per commit · ≈ $1.20 since the last commit · test runs: 20 passed, 8 failed, 2 no verdict`.
+- **Test verdicts come from the runner's own summary** (`test result: FAILED`, `3 failed`, `12 tests, 1 failure`, …), not the exit status. Claude almost always pipes test output through `tail` or `grep`, so the exit status is the filter's. On the author's history, exit status called 98% of runs green; the summaries said 35% failed.
+- **Only the labels are stored** (`test_fail`, `commit`, …). Command text and output never reach the ledger.
+- **Use it to compare:** turn a lever on or off for a week and see whether a commit got cheaper. `examples/outcomes/analyze-outcomes.py` measures your history, locally; on the author's it was $3.33 per commit, from $0.95 to $6.41 per project.
+
 The estimate prices the main conversation's cache writes at the 1-hour rate Claude Code uses, and subagents' at the 5-minute rate they use. This reproduces Claude Code's own cost figure for the main conversation. It leaves out background requests, such as session titles. Meter data is never shared.
 
 **Keeper** stops you paying twice for the same conversation.

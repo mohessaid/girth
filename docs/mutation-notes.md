@@ -55,3 +55,17 @@ v0.5 (2026-10-15):
     - `timer = null` after the timer fired: a later `stop()` cancels an already-fired timer harmlessly.
     - `model !== ''`: `girth settings` never prints an empty model.
     - `start(plan, context)` → `0`: `context` is only a fallback when the engine reports no `tokensBefore`, and Claude Code 2.1.300 always reports it.
+
+## v0.9 (cost per outcome)
+- **Rust (lines changed on the branch, `--in-diff`):** 157 mutants, 2 unviable, **143 of 155 caught**. All 12 survivors were edge cases in the `outcome` classifier:
+  - a heredoc word with `_`;
+  - the assignment rule, which now accepts any shell identifier, so `foo=1 cargo test` counts;
+  - the 4,000-character tail's exact edge;
+  - `make: ***` without `Error`;
+  - `Ran 1 test across`;
+  - `0 passed`;
+  - `FAIL_FAST` not being `FAIL`.
+  - Tests now pin each one. A rerun on `src/outcome.rs`: **111 of 111 caught** (2 unviable).
+- **Mod (hand-mutation pass, 10 mutants):** 8 caught, and the cap's off-by-one now has a test (`at most 64 Bash calls a turn go to the meter`). One survivor:
+  - **Keying the calls by `e.agentId`:** a test's own `$.tool.call` carries no `agentId`, so a subagent's call can't be faked.
+    - Covered live, on the dist build: a general-purpose subagent ran `cargo test 2>&1 | tail -3`. Its turn recorded `["test_pass"]`, and the main turn recorded none.
