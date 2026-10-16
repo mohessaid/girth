@@ -96,3 +96,6 @@ What `taste-launch` checks:
   - a compaction from 38,668 to 9,096 tokens; the next answer still knew the codename, with the line under it;
   - a turn inside the interval cancels the pending compaction;
   - with `agents.model: haiku`, a general-purpose subagent of a Sonnet session ran on Haiku.
+- **Post-release checks** (`claude -p`, Sonnet main, dist build):
+  - With no `agents` config, an Explore subagent ran on the parent's model (Sonnet). It has no Haiku default of its own here, so `agents.model` doesn't upgrade it.
+  - A project agent whose frontmatter says `model: opus` ran on Opus even with `agents.model: haiku`. The agent's own choice is kept.
