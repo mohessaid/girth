@@ -673,3 +673,44 @@ test("the line goes under the answer without repeating it, and after another mod
   const both = await $.turn.complete({ turnId: 't2', answer: 'HELIOTROPE KIWI', durationMs: 1, isAborted: false, usage: USAGE })
   expect(both.text).toBe('tl;dr: done\n' + line)
 })
+
+test('Bash calls go to the meter with their turn, and their results pass through unchanged', async ($, on) => {
+  // A test's tool.call answer can only be { result }, and a test's own call
+  // carries no agentId, so the error path (core's isError and text) and a
+  // subagent's own calls are checked live, not here.
+  const records: any[] = []
+  const LONG = 'x'.repeat(5000) + 'test result: ok. 1 passed'
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('tool.call', ($, e) => {
+    if (e.command === 'sleep 600') return { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' } }
+    if (e.command === 'make') return { result: { stdout: 'built', stderr: 'warn', interrupted: true } }
+    return { result: { stdout: LONG, stderr: '', interrupted: false } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  const passed = await $.tool.call({ tool: 'Bash', command: 'cargo test | tail -1' })
+  expect((passed.result as any).stdout).toBe(LONG)
+  await $.tool.call({ tool: 'Bash', command: 'sleep 600' })
+  await $.tool.call({ tool: 'Bash', command: 'make' })
+  await $.tool.call({ tool: 'Read', file_path: 'a.md' } as any)
+  await $.turn.complete({ turnId: 's', answer: 'a', durationMs: 1, isAborted: false, agentId: 'sub-1', usage: USAGE })
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const tail = LONG.slice(-4000)
+  // A subagent's turn does not take the main loop's calls.
+  expect(records[0].bash).toBeUndefined()
+  expect(records[1].bash).toEqual([
+    { command: 'cargo test | tail -1', output: tail, error: false, background: false },
+    { command: 'sleep 600', output: '', error: false, background: true },
+    { command: 'make', output: 'built\nwarn', error: false, background: true },
+  ])
+  // Calls are counted per turn, and a turn without usage drops its own.
+  expect(records[2].bash).toBeUndefined()
+  await $.tool.call({ tool: 'Bash', command: 'git commit -m aborted' })
+  await $.turn.complete({ turnId: 't3', answer: '', durationMs: 1, isAborted: true, usage: null })
+  await $.turn.complete({ turnId: 't4', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(records[3].bash).toBeUndefined()
+})
