@@ -40,6 +40,38 @@ def ease_io(k, p=3):
     return 2 ** (p - 1) * k ** p if k < 0.5 else 1 - (-2 * k + 2) ** p / 2
 
 
+# --- the edit ----------------------------------------------------------------
+# The film is authored on the first cut's clock. EDL maps that clock onto the final
+# edit, piecewise linearly, so a station can grow or shrink without rewriting it.
+
+EDL = [(0.0, 0.0), (1e6, 1e6)]
+
+
+def retime(points):
+    """Set the edit: a list of (authored time, final time) breakpoints, both increasing."""
+    EDL[:] = list(points)
+
+
+def _map(t, src, dst):
+    pts = EDL
+    for (a0, b0), (a1, b1) in zip(pts, pts[1:]):
+        lo, hi = (a0, a1) if src == 0 else (b0, b1)
+        if t <= hi or (a1, b1) == pts[-1]:
+            k = (t - lo) / (hi - lo)
+            return (b0 + k * (b1 - b0)) if src == 0 else (a0 + k * (a1 - a0))
+    return t
+
+
+def at(t):
+    """Authored time -> final time."""
+    return _map(t, 0, 1)
+
+
+def N(t):
+    """Final time -> authored time (for beats placed on the final clock)."""
+    return _map(t, 1, 0)
+
+
 def prog(t, t0, t1):
     return clamp((t - t0) / (t1 - t0)) if t1 > t0 else float(t >= t1)
 
@@ -318,9 +350,8 @@ def text(name, body, size=0.3, loc=(0, 0, 0), rot=(0, 0, 0), align='CENTER', par
 
 def bake(obj, path, t0, t1, fn, index=-1):
     """Key `obj.<path>` on every frame from t0 to t1 with value fn(t), linearly between keys."""
-    for f in range(F(t0), F(t1) + 1):
-        t = (f - 1) / FPS
-        v = fn(t)
+    for f in range(F(at(t0)), F(at(t1)) + 1):
+        v = fn(N((f - 1) / FPS))
         if index >= 0:
             getattr(obj, path)[index] = v
         else:
@@ -361,7 +392,7 @@ def windows(obj, spans, keep=False):
     """
     keys = [(1, True)]
     for t0, t1 in spans:
-        keys += [(max(1, F(t0)), False), (F(t1), True)]
+        keys += [(max(1, F(at(t0))), False), (F(at(t1)), True)]
     for o in [obj] + list(obj.children_recursive):
         if keep and o.animation_data and o.animation_data.action and \
                 any(fc.data_path == 'hide_render' for fc in fcurves(o.animation_data)):

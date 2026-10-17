@@ -9,12 +9,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
 from mathutils import Euler, Vector  # noqa: E402
 
-from lib import (FPS, F, bake, box, clamp, ease_in, ease_io, ease_out, fade, lerp,  # noqa: E402
+from lib import (FPS, F, N, at, retime, bake, box, clamp, ease_in, ease_io, ease_out, fade, lerp,  # noqa: E402
                  fcurves, line_art, mesh_from, prog, setup, solid, text, veil, visible, windows)
 
 LENGTH = 75.0
 STATIONS = []
 s, cam, drawn, _ = setup(LENGTH)
+# The director's edit (see STORYBOARD.md): each station's authored span -> its span in the final cut.
+retime([(0, 0), (7, 7.5), (14, 14.5), (18, 19.5), (24.5, 25.5), (28, 29), (32, 33), (38, 38.5),
+        (44, 42.3), (50, 49), (53, 52.4), (56, 55.4), (59, 58.2), (64, 63.5), (70, 69.5), (75, 75)])
+# Fast moves strobe on thin chalk lines; a short shutter smears what motion is left.
+s.render.use_motion_blur = True
+s.render.motion_blur_shutter = 0.3
+s.eevee.taa_render_samples = 12
 line_art(drawn)
 VEIL = veil(cam)
 
@@ -86,7 +93,7 @@ def move(a, b, k):
 def bake_camera():
     prev = None
     for f in range(1, F(LENGTH)):
-        t = (f - 1) / FPS
+        t = N((f - 1) / FPS)
         for t0, t1, path in SHOTS:
             if t0 <= t < t1:
                 loc, tgt = path(t)
@@ -133,11 +140,17 @@ def card(name, parent, loc=(0, 0, 0)):
     return c
 
 
+BOX_H = 1.45
+CARD_REST = 0.05 + 0.6 + 0.03     # card centre when it stands on the box floor
+CARD_CLEAR = BOX_H + 0.6 + 0.15   # card centre that clears the walls
+
+
 def folder(name, parent, loc, tag):
     f = root(name, (0, 0, 0))
     f.parent = parent
     f.location = loc
-    w, d, h = 1.6, 1.1, 0.75
+    # Taller than the card (1.2) so the lid closes over it with room to spare.
+    w, d, h = 1.6, 1.1, BOX_H
     box(name + '-bottom', (w, d, 0.05), loc=(0, 0, 0.025), parent=f)
     box(name + '-back', (w, 0.05, h), loc=(0, d / 2, h / 2), parent=f)
     box(name + '-front', (w, 0.05, h * 0.75), loc=(0, -d / 2, h * 0.375), parent=f)
@@ -155,30 +168,34 @@ S1 = (0, 0, 0)
 shelf1, books1, shelf_len = shelf('shelf', S1, SKILLS)
 STATIONS.append((shelf1, [(0, 7.0), (18.0, 24.5)]))
 
-shot(0.0, 3.5, lambda t: (move((1.0, -9.6, 2.3), (5.2, -9.6, 2.3), ease_in(prog(t, 0, 3.5), 2) * 0.85 + prog(t, 0, 3.5) * 0.15),
-                          move((3.0, 0, 1.45), (7.2, 0, 1.45), ease_in(prog(t, 0, 3.5), 2) * 0.85 + prog(t, 0, 3.5) * 0.15)))
+def glide(t):
+    return 0.7 * prog(t, 0, 3.5) + 0.3 * ease_out(prog(t, 0, 3.5), 2)
+
+
+shot(0.0, 3.5, lambda t: (move((1.8, -9.6, 2.3), (4.0, -9.6, 2.3), glide(t)),
+                          move((3.8, 0, 1.45), (6.0, 0, 1.45), glide(t))))
 
 
 def s1b(t):
     k = prog(t, 3.5, 7.0)
-    side = ease_out(prog(t, 3.5, 5.6), 3)
+    side = 0.6 * prog(t, 3.5, 6.3) + 0.4 * ease_out(prog(t, 3.5, 6.3), 2)   # enters at shot 1's speed
     push = ease_in(prog(t, 6.3, 7.0), 3)
-    loc = move((8.0, -8.6, 1.5), (11.0, -8.6, 1.5), side)
+    loc = move((8.4, -8.6, 1.5), (9.6, -8.6, 1.5), side)
     loc = (loc[0], loc[1] + 1.6 * push, loc[2])
     return loc, (loc[0] + 1.4 + 0.2 * k, 0, 1.6)
 
 
 shot(3.5, 7.0, s1b)
 
-caption('you installed dozens of skills.', 0.5, 3.5)
+caption('you installed dozens of skills.', N(0.5), N(3.3))
 prompt = '› make a title card'
 for i in range(1, len(prompt) + 1):
     o = text('prompt', prompt[:i], size=0.04, loc=(-0.42, 0.14, -1), parent=cam, align='LEFT', mono=True)
     t_on = 3.7 + i * 0.035
     t_off = 3.7 + (i + 1) * 0.035 if i < len(prompt) else 6.8
     visible(o, t_on, t_off)
-caption('your AI carries all of them.', 4.5, 7.0)
-caption('every turn.', 5.8, 7.0, y=VERDICT_Y, size=0.07, slam=True)
+caption('your AI carries all of them.', N(3.8), N(7.3))
+caption('every turn.', N(6.3), N(7.3), y=VERDICT_Y, size=0.07, slam=True)
 
 for i, n in enumerate(SKILLS):
     b = books1[n]
@@ -231,8 +248,8 @@ def s2a(t):
     k = prog(t, 7.0, 10.5)
     fwd = ease_out(prog(t, 7.0, 8.4), 3)
     pan = ease_io(prog(t, 8.0, 10.5), 2)
-    loc = (S2.x - 0.6 + 5.0 * pan, -8.6 + 2.2 * fwd, 1.5 + 0.6 * pan)
-    return loc, (S2.x + 0.9 + 6.5 * pan, 0, 1.45 + 0.1 * k)
+    loc = (S2.x - 0.6 + 3.0 * pan, -8.6 + 2.2 * fwd - 0.8 * pan, 1.5 + 0.6 * pan)   # pull back, not whip along
+    return loc, (S2.x + 0.9 + 4.2 * pan, 0, 1.45 + 0.1 * k)
 
 
 def s2b(t):
@@ -243,12 +260,12 @@ def s2b(t):
 
 shot(7.0, 10.5, s2a)
 shot(10.5, 14.0, s2b)
-caption('the video skills alone:', 7.9, 10.5)
-caption('1.7 MB of manuals.', 8.9, 10.5, y=VERDICT_Y, size=0.07, slam=True)
+caption('the video skills alone:', N(8.0), N(11.0))
+caption('1.7 MB of manuals.', N(9.6), N(11.0), y=VERDICT_Y, size=0.07, slam=True)
 tag = text('next-session', 'next session', size=0.24, loc=(1.6, -0.6, 2.25), rot=(math.radians(90), 0, math.radians(-30)), parent=r2, mono=True)
 visible(tag, 10.5, 14.0)
-caption('next session, it reads them again.', 10.8, 13.6)
-caption('and again.', 12.4, 13.6, y=VERDICT_Y, size=0.07, slam=True)
+caption('next session, it reads them again.', N(11.3), N(14.3))
+caption('and again.', N(13.2), N(14.3), y=VERDICT_Y, size=0.07, slam=True)
 dip(13.5, 14.0, to_black=True)
 
 # =============================================================================
@@ -271,15 +288,15 @@ dip(14.0, 14.5, to_black=False)
 
 
 def s3(t):
-    push = ease_out(prog(t, 14.0, 17.4), 2)
+    push = 0.6 * prog(t, 14.0, 17.45) + 0.4 * ease_out(prog(t, 14.0, 17.45), 2)
     leave = ease_in(prog(t, 17.45, 18.0), 3)
     loc = (S3.x - 2.2 * leave, -7.2 + 1.1 * push, 1.25)
     return loc, (S3.x - 2.2 * leave, 0, 1.15)
 
 
 shot(14.0, 18.0, s3)
-caption('read once.', 14.9, 18.0, y=TITLE_Y + 0.01, size=0.07, slam=True)
-caption('keep only the slice you need.', 15.4, 18.0, y=VERDICT_Y + 0.005, slide=-1)
+caption('read once.', N(16.0), N(19.5), y=TITLE_Y + 0.01, size=0.07, slam=True)
+caption('keep only the slice you need.', N(16.5), N(19.5), y=VERDICT_Y + 0.005, slide=-1)
 
 # =============================================================================
 # 4 · Search (18–24.5): a scan line passes the shelf; four sources step out
@@ -324,7 +341,7 @@ for n in SOURCES:
 
 def s4a(t):
     k = oi(prog(t, 18.0, 21.0))
-    loc = (lerp(shelf_len - 2.0, 4.0, k), -11.5, 2.6)
+    loc = (lerp(shelf_len * 0.62, shelf_len * 0.48, k), -11.5, 2.6)   # the scan line crosses; the camera barely drifts
     return loc, (loc[0] - 1.0, 0, 1.0)
 
 
@@ -333,15 +350,15 @@ span = max(xs[n] for n in SOURCES) - min(xs[n] for n in SOURCES)
 
 
 def s4b(t):
-    settle = ease_out(prog(t, 21.0, 22.0), 3)
-    loc = (mid - 0.8 + 0.8 * settle, -12.5, 2.8)
-    return loc, (mid - 0.4 + 0.8 * settle, 0, 1.95)
+    settle = ease_out(prog(t, 21.0, 22.4), 2)
+    loc = (mid - 0.5 + 0.5 * settle, -12.5, 2.8)
+    return loc, (mid - 0.1 + 0.5 * settle, 0, 1.95)
 
 
 shot(18.0, 21.0, s4a)
 shot(21.0, 24.5, s4b)
-caption('it searches the skills you have.', 18.4, 21.0, slide=-1)
-caption('only the slice.', 22.7, 24.5, y=VERDICT_Y, size=0.07, slam=True)
+caption('it searches the skills you have.', N(19.8), N(22.8), slide=-1)
+caption('only the slice.', N(23.7), N(25.5), y=VERDICT_Y, size=0.07, slam=True)
 
 # =============================================================================
 # 5 · Distil (24.5–32): four pages become one small card, kept in the project
@@ -376,9 +393,10 @@ windows(folder5, [(28.0, 32.1)])
 
 
 def card5_path(t):
-    k = ease_io(prog(t, 28.3, 29.5), 3)
-    x = lerp(0.0, 2.4, k)
-    z = lerp(1.5, 0.66, ease_in(prog(t, 28.9, 29.5), 2)) + 0.25 * bump(prog(t, 28.3, 29.2))
+    """Lift above the walls, travel over the open box, then drop straight in."""
+    x = lerp(0.0, 2.4, ease_io(prog(t, 28.3, 29.1), 3))
+    z = lerp(1.5, CARD_CLEAR, ease_out(prog(t, 28.3, 28.75), 2))
+    z = lerp(z, CARD_REST, ease_io(prog(t, 29.1, 29.7), 3))
     return x, z
 
 
@@ -396,8 +414,9 @@ def s5a(t):
 def s5b(t):
     settle = ease_out(prog(t, 28.0, 29.0), 3)
     dive = ease_in(prog(t, 31.2, 32.0), 3)
-    loc = Vector((S5.x + 0.6 + 0.4 * settle, -5.8 + 0.4 * settle, 2.2))
-    tgt = Vector((S5.x + 1.2, 1.2, 1.15))
+    # Wide enough for the card's arc over the open lid (its top reaches z ≈ 2.8).
+    loc = Vector((S5.x + 0.6 + 0.4 * settle, -7.0 + 0.4 * settle, 2.4))
+    tgt = Vector((S5.x + 1.2, 1.2, 1.5))
     loc = loc.lerp(Vector((S5.x + 2.4, 0.4, 0.45)), dive)
     tgt = tgt.lerp(Vector((S5.x + 2.4, 1.6, 0.4)), dive)
     return tuple(loc), tuple(tgt)
@@ -408,7 +427,9 @@ shot(28.0, 32.0, s5b)
 caption('distilled into one small skill.', 24.9, 28.0)
 caption('3 KB.', 26.9, 28.0, y=VERDICT_Y + 0.008, size=0.075, slam=True)
 caption('four skills, 1.1 MB of docs', 25.4, 28.0, y=FOOT_Y + 0.006, size=0.034, alpha=0.75)
-caption('it lives in your project.', 28.6, 31.2)
+caption('it lives in your project.', N(29.4), N(32.4))
+dip(N(32.7), N(33.0), to_black=True)
+dip(N(33.0), N(33.3), to_black=False)
 
 # =============================================================================
 # 6 · Reuse (32–38): next session, it's already there
@@ -417,18 +438,18 @@ S6 = Vector((400, 0, 0))
 r6 = root('s6', S6)
 STATIONS.append((r6, [(31.9, 38.1)]))
 folder6, lid6 = folder('folder6', r6, (0, 1.4, 0), 'your-project/')
-text('ns6', 'next session', size=0.22, loc=(0, 1.4, 2.6), rot=(math.radians(90), 0, 0), parent=r6, mono=True)
-card6 = card('card6', r6, loc=(0, 1.4, 0.66))
+text('ns6', 'next session', size=0.22, loc=(0, 1.4, CARD_CLEAR + 0.95), rot=(math.radians(90), 0, 0), parent=r6, mono=True)
+card6 = card('card6', r6, loc=(0, 1.4, CARD_REST))
 bake(lid6, 'rotation_euler', 32.0, 33.6, lambda t: math.radians(-100) * ease_io(prog(t, 32.8, 33.5), 3), index=0)
-bake(card6, 'location', 32.0, 34.6, lambda t: lerp(0.66, 1.75, ease_out(prog(t, 33.4, 34.4), 3)), index=2)
+bake(card6, 'location', 32.0, 34.6, lambda t: lerp(CARD_REST, CARD_CLEAR, ease_out(prog(t, 33.4, 34.4), 3)), index=2)
 bg6, bg_books, bg_len = shelf('shelf6', S6 + Vector((-5.0, 7.0, 0)), SKILLS[:16], seed=1)
 STATIONS.append((bg6, [(31.9, 38.1)]))
 
 
 def s6a(t):
     fwd = ease_out(prog(t, 32.0, 32.9), 3)
-    loc = (S6.x, -4.4 - 3.4 * fwd, 0.9 + 1.1 * fwd)
-    return loc, (S6.x, 1.4, 1.1 + 0.3 * fwd)
+    loc = (S6.x, -4.4 - 4.4 * fwd, 0.9 + 1.4 * fwd)
+    return loc, (S6.x, 1.4, 1.2 + 0.45 * fwd)
 
 
 def s6b(t):
@@ -439,8 +460,8 @@ def s6b(t):
 
 shot(32.0, 35.0, s6a)
 shot(35.0, 38.0, s6b)
-caption("next session, it's already there.", 32.7, 35.0)
-caption('nothing to reread.', 35.9, 38.0, y=VERDICT_Y, size=0.07, slam=True)
+caption("next session, it's already there.", N(33.3), N(36.2))
+caption('nothing to reread.', N(36.4), N(38.5), y=VERDICT_Y, size=0.07, slam=True)
 
 # =============================================================================
 # 7 · Proof (38–50): five sessions, then two towers
@@ -460,7 +481,7 @@ for i in range(5):
         b = box(f'{kind}{i}', (0.45, 0.45, h), loc=(x + dx, 0, 0), parent=r7, pivot=(0, 0, -1),
                 mat=solid() if kind == 'girth' else None)
         bars.append((kind, i, b, h))
-        t0 = 38.7 + i * 0.6
+        t0 = 38.25 + i * 0.6
         windows(b, [(t0, 50.1)])
         bake(b, 'scale', t0 - 0.05, t0 + 0.55, lambda t, t0=t0: max(0.001, ease_out(prog(t, t0, t0 + 0.5), 3)), index=2)
         v = text(f'v-{kind}{i}', f'${vals[i]:.2f}', size=0.17, loc=(x + dx, -0.3, h + 0.16), rot=(math.radians(90), 0, 0), parent=r7)
@@ -505,15 +526,15 @@ def s7a(t):
 def s7b(t):
     settle = ease_out(prog(t, 44.0, 45.4), 3)
     leave = ease_in(prog(t, 49.5, 50.0), 3)
-    loc = (S7.x + 8.6 + 0.8 * settle + 1.5 * leave, -10.6, 2.8)
-    return loc, (loc[0] + 0.3, 0, 2.45)
+    loc = (S7.x + 8.6 + 0.8 * settle + 1.5 * leave, -12.2 + 0.5 * prog(t, 45.4, 50.0), 2.6)
+    return loc, (loc[0] + 0.3, 0, 2.1)
 
 
 shot(38.0, 44.0, s7a)
 shot(44.0, 50.0, s7b)
 caption('same tasks, five sessions.', 38.4, 44.0)
-caption('–34%', 46.8, 50.0, y=VERDICT_Y + 0.02, size=0.085, slam=True)
-caption('measured on one machine. yours will differ.', 47.1, 50.0, y=FOOT_Y + 0.006, size=0.034, alpha=0.75)
+caption('–34%', N(45.2), N(49.0), y=VERDICT_Y + 0.02, size=0.085, slam=True)
+caption('measured on one machine. yours will differ.', N(45.8), N(49.0), y=FOOT_Y + 0.006, size=0.034, alpha=0.75)
 
 # =============================================================================
 # 8 · The rest of the bill (50–59): lens, meter, keeper
@@ -539,7 +560,7 @@ def lane(origin, t0, t1, z=1.4, dist=7.0, look_dz=-0.3, width=2.0):
     return path
 
 
-shot(50.0, 53.0, lane(S8a + Vector((la_len / 2, 0, 0)), 50.0, 53.0, z=1.6, dist=7.6, width=2.6))
+shot(50.0, 53.0, lane(S8a + Vector((la_len / 2, 0, 0)), 50.0, 53.0, z=1.6, dist=7.6, width=1.6))
 caption('lens: unused skills become one line.', 50.3, 53.0)
 
 r8b = root('meter', S8b)
@@ -598,7 +619,7 @@ fade(cmd9, 61.4, None)
 def s9(t):
     k = ease_out(prog(t, 59.0, 60.0), 3)
     up = ease_in(prog(t, 63.55, 64.0), 3)
-    loc = (S9.x, -6.2, 1.2 - 1.6 * (1 - k) + 1.6 * up)
+    loc = (S9.x, -6.2 + 0.6 * prog(t, 60.0, 63.55), 1.2 - 1.6 * (1 - k) + 1.6 * up)
     return loc, (S9.x, 0, 1.1 - 1.6 * (1 - k) + 1.6 * up)
 
 
@@ -612,55 +633,86 @@ r10 = root('s10', S10)
 STATIONS.append((r10, [(63.9, 70.1)]))
 
 
-def star_mesh():
+def prism(name, pts, depth):
+    """A flat outline (x, z) extruded toward -y: icons drawn by Line Art."""
     import bmesh
-    me = bpy.data.meshes.new('star')
+    me = bpy.data.meshes.new(name)
     bm = bmesh.new()
-    pts = []
-    for i in range(10):
-        a = math.pi / 2 + i * math.pi / 5
-        r = 1.0 if i % 2 == 0 else 0.42
-        pts.append(bm.verts.new((r * math.cos(a), 0, r * math.sin(a))))
-    face = bm.faces.new(pts)
+    face = bm.faces.new([bm.verts.new((x, 0, z)) for x, z in pts])
     ext = bmesh.ops.extrude_face_region(bm, geom=[face])
     for v in ext['geom']:
         if isinstance(v, bmesh.types.BMVert):
-            v.co.y += 0.18
+            v.co.y -= depth
     bm.to_mesh(me)
     bm.free()
     return me
 
 
-star = bpy.data.objects.new('star', star_mesh())
-drawn.objects.link(star)
-star.data.materials.append(bpy.data.materials['ink-black'])
-star.parent = r10
-star.location = (0, 0, 1.55)
+STAR = [((1.0 if i % 2 == 0 else 0.42) * math.cos(math.pi / 2 + i * math.pi / 5),
+         (1.0 if i % 2 == 0 else 0.42) * math.sin(math.pi / 2 + i * math.pi / 5)) for i in range(10)]
+ARROW = [(0, 0), (0, -0.62), (0.15, -0.48), (0.27, -0.74), (0.37, -0.69), (0.25, -0.44), (0.45, -0.42)]
 
 
-def star_spin(t):
-    base = 0.6 * math.sin((t - 64.0) * 1.1)
-    whip = math.tau * 2 * ease_in(prog(t, 69.3, 70.0), 3)
-    return base + whip
+def icon(name, pts, depth, loc, scale, mat):
+    o = bpy.data.objects.new(name, prism(name, pts, depth))
+    drawn.objects.link(o)
+    o.data.materials.append(mat)
+    o.parent = r10
+    o.location = loc
+    o.scale = (scale, scale, scale)
+    return o
 
 
-windows(star, [(64.1, 70.1)])
-bake(star, 'rotation_euler', 64.0, 70.0, star_spin, index=2)
-bake(star, 'location', 64.0, 70.0, lambda t: 1.55 + 0.45 * ease_io(prog(t, 66.8, 67.6), 3), index=2)
+# A chalk sketch of the repo's GitHub header: the address, the repo name, and its Star button.
+T10 = 64.0
+CLICK = T10 + 1.3
+box('repo-panel', (5.6, 0.05, 2.1), loc=(0, 0.1, 1.75), parent=r10)
+text('repo-url', 'github.com/mohessaid/girth', size=0.17, loc=(-2.55, 0.0, 2.48), align='LEFT', rot=(math.radians(90), 0, 0), parent=r10, mono=True)
+box('repo-rule', (5.2, 0.03, 0.012), loc=(0, 0.06, 2.3), parent=r10)
+text('repo-name', 'mohessaid / girth', size=0.36, loc=(-2.55, 0.0, 1.62), align='LEFT', rot=(math.radians(90), 0, 0), parent=r10)
+text('repo-about', 'Just-in-time, project-scoped agent skills.', size=0.16, loc=(-2.55, 0.0, 1.2), align='LEFT', rot=(math.radians(90), 0, 0), parent=r10)
+BTN = Vector((1.65, -0.05, 1.72))
+box('star-button', (1.5, 0.12, 0.5), loc=tuple(BTN), parent=r10)
+icon_at = (BTN.x - 0.45, BTN.y - 0.07, BTN.z)
+icon('star-empty', STAR, 0.04, icon_at, 0.15, bpy.data.materials['ink-black'])
+full = icon('star-full', STAR, 0.05, (icon_at[0], icon_at[1] - 0.01, icon_at[2]), 0.15, solid())
+windows(full, [(CLICK + 0.05, 70.1)])
 for ax in range(3):
-    bake(star, 'scale', 64.0, 67.8, lambda t: lerp(0.001, 1.0, ease_out(prog(t, 64.1, 64.7), 3)) * lerp(1.0, 0.7, ease_io(prog(t, 66.8, 67.6), 3)), index=ax)
+    bake(full, 'scale', CLICK, CLICK + 0.6, lambda t: 0.15 * (1 + 0.6 * bump(prog(t, CLICK + 0.05, CLICK + 0.5))), index=ax)
+lbl = text('star-label', 'Star', size=0.24, loc=(BTN.x + 0.15, BTN.y - 0.07, BTN.z - 0.08), rot=(math.radians(90), 0, 0), parent=r10)
+visible(lbl, T10, CLICK + 0.05)
+lbl2 = text('star-label2', 'Starred', size=0.24, loc=(BTN.x + 0.15, BTN.y - 0.07, BTN.z - 0.08), rot=(math.radians(90), 0, 0), parent=r10)
+visible(lbl2, CLICK + 0.05, 70.1)
+
+cursor = icon('cursor', ARROW, 0.04, (0, 0, 0), 0.55, solid())
+TIP = Vector((icon_at[0] + 0.05, icon_at[1] - 0.12, icon_at[2] - 0.05))
+START = Vector((3.4, -0.3, 0.2))
+
+
+def cursor_at(t):
+    k = ease_io(prog(t, T10 + 0.3, CLICK - 0.15), 3)
+    return START.lerp(TIP, k) + Vector((0, 0, 0.25 * bump(k)))
+
+
+for ax in range(3):
+    bake(cursor, 'location', T10, 70.0, lambda t, ax=ax: cursor_at(t)[ax], index=ax)
+    bake(cursor, 'scale', T10, 70.0, lambda t: 0.55 * (1 - 0.18 * bump(prog(t, CLICK - 0.08, CLICK + 0.18))), index=ax)
+windows(cursor, [(T10 + 0.2, 70.1)])
 
 
 def s10(t):
-    k = ease_out(prog(t, 64.0, 65.0), 3)
-    loc = (S10.x, -7.0 + 0.6 * k, 1.5 - 1.6 * (1 - k) + 0.45 * ease_io(prog(t, 66.8, 67.6), 3))
-    return loc, (S10.x, 0, 1.75 - 1.6 * (1 - k) + 0.45 * ease_io(prog(t, 66.8, 67.6), 3))
+    k = ease_out(prog(t, T10, T10 + 1.2), 3)
+    push = ease_io(prog(t, CLICK - 0.6, CLICK + 0.4), 2)   # lean into the click
+    back = ease_io(prog(t, 67.0, 69.6), 2)                 # then give the share line room
+    d = -7.4 + 0.6 * k + 0.5 * push * (1 - back) - 0.3 * back
+    x = S10.x - 0.22 + 0.12 * push * (1 - back)            # panel centred; lean only slightly right
+    return (x, d, 1.55 - 1.0 * (1 - k)), (x, 0, 1.6 - 1.0 * (1 - k))
 
 
 shot(64.0, 70.0, s10)
-caption("star it, so it's there later.", 64.4, 67.0)
-caption('know someone paying for this? share it.', 67.1, 70.0)
-caption('github.com/mohessaid/girth', 68.1, 70.0, y=VERDICT_Y, size=0.042, mono=True)
+caption('star it on GitHub,', 64.5, CLICK + 1.4)
+caption("so it's there later.", CLICK + 0.15, CLICK + 1.4, y=VERDICT_Y, size=0.07, slam=True)
+caption('know someone paying for this? share it.', 67.1, 70.1)
 
 # =============================================================================
 # 11 · The wink (70–75)

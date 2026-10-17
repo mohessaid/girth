@@ -11,6 +11,7 @@
 | five sessions: $0.18 $0.19 $0.17 $0.21 $0.16 vs $0.22 $0.10 $0.09 $0.09 $0.10; totals $0.91 / $0.60; −34% | `examples/compounding/RESULTS.md`, final run (claude-sonnet-5-5, 2026-10-15). Illustrative bar heights use these values. |
 | "$3.28" per commit | `docs/research/2026-10-15-where-the-money-goes.md` §6, 1,417 commits across 13 projects on the author's machine. |
 | "keeper: your cache stays warm." | README, Keeper section. The prompt cache expires after 5 minutes or 1 hour. |
+| the GitHub header: `mohessaid / girth`, "Just-in-time, project-scoped agent skills." | The repo's GitHub description (`gh repo view mohessaid/girth`, 2026-10-17), first clause. No star count is shown. |
 | "this video was made with girth." | `girth search` picked the sources above, `girth validate` recorded `girth-video`, and `girth taste show video` supplied the house rules (chalk on black, subtle wobble, sparse frames). |
 
 All measurements were taken on one machine, and the video says so.

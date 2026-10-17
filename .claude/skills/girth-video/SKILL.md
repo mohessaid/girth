@@ -11,7 +11,9 @@ metadata:
       - path-or-repo: /home/mohessaid/.claude/skills/faceless-explainer
         sections: [Transitions]
       - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-animation
-        sections: [Scene Transitions]
+        sections: [Scene Transitions, Accelerating cadence (geometric hold decay)]
+      - path-or-repo: /home/mohessaid/.claude/skills/embedded-captions
+        sections: [14. Break rhythm once per 30s]
     crafted_for: a silent 60–75 s chalk intro video that makes Girth's core idea clear
     created: 2026-10-17
     last_used: 2026-10-17
@@ -27,6 +29,7 @@ Decide the film before code: write `STORYBOARD.md` and `FACTS.md`. Build the seq
 - **Readable before impact.** The verdict lands 1–2 s after the title is readable. Never both at once.
 - **Every number has a source** in `FACTS.md`. No superlatives.
 - Silent films: on-screen text carries the whole argument; read it aloud at speed to check it fits (~2.6 words per second).
+- Before rendering in full, run a director's pass on pacing: `references/pacing.md`.
 
 ## Transitions <!-- src: product-launch-video#3-cut-the-curve-scene-transitions, faceless-explainer#transitions, hyperframes-animation#scene-transitions -->
 - Cut the curve: the outgoing hero accelerates one way, the cut lands mid-motion, the incoming hero continues the **same direction** and decelerates. Mirrored eases (exit `power4.in`, entry `power4.out`), same distance and duration. Partial travel + fade, never full off-screen moves. Gaps where nothing moves read as dead air.
