@@ -1,0 +1,12 @@
+{
+  "duration": 9,
+  "fps": 30,
+  "panels": [
+    { "panel": "Reference", "file": "spec.md",     "start": 0.0, "end": 1.5 },
+    { "panel": "Data",      "file": "data.json",   "start": 1.5, "end": 3.0 },
+    { "panel": "Story",     "file": "story.md",    "start": 3.0, "end": 4.5 },
+    { "panel": "Motion",    "file": "index.html",  "start": 4.5, "end": 6.0 },
+    { "panel": "Direct",    "file": "timing.json", "start": 6.0, "end": 7.5 },
+    { "panel": "Ship",      "file": "final.mp4",   "start": 7.5, "end": 9.0 }
+  ]
+}

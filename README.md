@@ -20,7 +20,7 @@ Distil only the slice your project needs from the skills you already have — 38
   <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-d97757"></a>
 </p>
 
-<a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="examples/hyperframes/RESULTS.md">Results</a> · <a href="CONTRIBUTING.md">Contributing</a>
+<a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="examples/studio/RESULTS.md">Results</a> · <a href="CONTRIBUTING.md">Contributing</a>
 
 </div>
 
@@ -33,6 +33,17 @@ Status: v0.5, early and measured. Design: `docs/superpowers/specs/`.
 Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
 
 ## Measured so far (one machine)
+
+**Studio: a six-step video workflow, 8 runs per arm** (2026-10-17, claude-sonnet-5-5). The task is a 9-second portrait HyperFrames video that walks through reference → data → story → motion → direct → ship, writing each step's file and then passing check and render. It is graded by a script, not a model:
+
+| Arm | Pass | Cost per run (mean ± 95% CI) | Fresh prompt tokens |
+|---|---|---|---|
+| 39 skills installed (today's default) | 8/8 | $0.206 ± 0.014 | 31.6K ± 2.0K |
+| **Girth (one crafted skill, 3.8 KB)** | **8/8** | **$0.146 ± 0.017 (−29%)** | **18.5K ± 2.0K (−42%)** |
+
+The quality checks found nothing in any of the 16 runs: 0 errors and 0 warnings. Welch's t = 6.4 (p < 0.001), and the one-time craft ($0.19) pays for itself after about 3 sessions. See `examples/studio/RESULTS.md`, with all 16 renders side by side.
+
+<p align="center"><img src="examples/studio/sheet.png" alt="All 16 studio renders at the Motion step: every installed skill on top, Girth below" width="760"></p>
 
 **Five sessions in one domain** (2026-10-15, HyperFrames, claude-sonnet-5-5, the tasks never mention Girth):
 
@@ -68,7 +79,7 @@ See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose
 | Task cost, same task and model | $0.181 | $0.149 (**−17%**) |
 | HyperFrames check on the output | 1 warning | 0 warnings |
 
-These are single runs. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
+The studio result above uses 8 runs per arm. The Lens result uses 3. The rest are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 

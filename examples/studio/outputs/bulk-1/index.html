@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <title>6 steps, one video</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #0b0e14; font-family: sans-serif; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0b0e14; }
+      h1 { position: absolute; top: 120px; left: 0; width: 100%; margin: 0; text-align: center; color: #f2f4f8; font-size: 84px; font-weight: 800; }
+      .row { position: absolute; top: 330px; left: 30px; display: flex; gap: 8px; }
+      .panel { box-sizing: border-box; width: 163px; height: 640px; border: 3px solid #2a3142; border-radius: 16px; background: #171c27; color: #8a93a6; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 36px 0; }
+      .num { font-size: 44px; font-weight: 800; font-family: monospace; }
+      .lbl { font-size: 25px; font-weight: 700; }
+      
+      .tag { position: absolute; top: 1000px; width: 163px; height: 60px; text-align: center; color: #ffb020; font-family: monospace; font-size: 22px; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1080" data-height="1350" data-duration="9">
+      <h1 id="title">6 steps, one video</h1>
+      <div class="row">
+      <div class="panel" id="p0"><span class="num">01</span><span class="lbl">Reference</span></div>
+      <div class="panel" id="p1"><span class="num">02</span><span class="lbl">Data</span></div>
+      <div class="panel" id="p2"><span class="num">03</span><span class="lbl">Story</span></div>
+      <div class="panel" id="p3"><span class="num">04</span><span class="lbl">Motion</span></div>
+      <div class="panel" id="p4"><span class="num">05</span><span class="lbl">Direct</span></div>
+      <div class="panel" id="p5"><span class="num">06</span><span class="lbl">Ship</span></div>
+      </div>
+      <div class="clip tag" id="t0" data-start="0.0" data-duration="1.5" data-track-index="1" style="left:30px">spec.md</div>
+      <div class="clip tag" id="t1" data-start="1.5" data-duration="1.5" data-track-index="2" style="left:201px">data.json</div>
+      <div class="clip tag" id="t2" data-start="3.0" data-duration="1.5" data-track-index="3" style="left:372px">story.md</div>
+      <div class="clip tag" id="t3" data-start="4.5" data-duration="1.5" data-track-index="4" style="left:543px">index.html</div>
+      <div class="clip tag" id="t4" data-start="6.0" data-duration="1.5" data-track-index="5" style="left:714px">timing.json</div>
+      <div class="clip tag" id="t5" data-start="7.5" data-duration="1.5" data-track-index="6" style="left:885px">final.mp4</div>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#title", { y: 30, opacity: 0, duration: 0.5, ease: "power3.out" }, 0);
+      tl.to("#p0", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 0.0);
+      tl.fromTo("#t0", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 0.0);
+      tl.to("#p0", { backgroundColor: "#171c27", color: "#8a93a6", borderColor: "#2a3142", duration: 0.2 }, 1.3);
+      tl.to("#p1", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 1.5);
+      tl.fromTo("#t1", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 1.5);
+      tl.to("#p1", { backgroundColor: "#171c27", color: "#8a93a6", borderColor: "#2a3142", duration: 0.2 }, 2.8);
+      tl.to("#p2", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 3.0);
+      tl.fromTo("#t2", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 3.0);
+      tl.to("#p2", { backgroundColor: "#171c27", color: "#8a93a6", borderColor: "#2a3142", duration: 0.2 }, 4.3);
+      tl.to("#p3", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 4.5);
+      tl.fromTo("#t3", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 4.5);
+      tl.to("#p3", { backgroundColor: "#171c27", color: "#8a93a6", borderColor: "#2a3142", duration: 0.2 }, 5.8);
+      tl.to("#p4", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 6.0);
+      tl.fromTo("#t4", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 6.0);
+      tl.to("#p4", { backgroundColor: "#171c27", color: "#8a93a6", borderColor: "#2a3142", duration: 0.2 }, 7.3);
+      tl.to("#p5", { backgroundColor: "#ffb020", color: "#10131a", borderColor: "#ffb020", duration: 0.2 }, 7.5);
+      tl.fromTo("#t5", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 7.5);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

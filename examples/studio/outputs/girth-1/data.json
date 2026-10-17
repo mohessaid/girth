@@ -1,0 +1,12 @@
+{
+  "numbers": [
+    { "value": "01", "meaning": "step number, Reference", "source": "user brief: panel order Reference, Data, Story, Motion, Direct, Ship" },
+    { "value": "02", "meaning": "step number, Data", "source": "user brief: panel order" },
+    { "value": "03", "meaning": "step number, Story", "source": "user brief: panel order" },
+    { "value": "04", "meaning": "step number, Motion", "source": "user brief: panel order" },
+    { "value": "05", "meaning": "step number, Direct", "source": "user brief: panel order" },
+    { "value": "06", "meaning": "step number, Ship", "source": "user brief: panel order" },
+    { "value": "1.5 s", "meaning": "time each panel is lit", "source": "user brief: lights them one at a time, 1.5 s each" },
+    { "value": "6", "meaning": "step count in the title", "source": "user brief: title \"6 steps, one video\"" }
+  ]
+}

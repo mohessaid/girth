@@ -1,0 +1,11 @@
+{
+  "numbers": [
+    { "value": 6, "shown_as": "title: \"6 steps, one video\"", "source": "spec.md — six panels" },
+    { "value": 1, "shown_as": "panel index 01 (Reference)", "source": "spec.md beat 1" },
+    { "value": 2, "shown_as": "panel index 02 (Data)", "source": "spec.md beat 2" },
+    { "value": 3, "shown_as": "panel index 03 (Story)", "source": "spec.md beat 3" },
+    { "value": 4, "shown_as": "panel index 04 (Motion)", "source": "spec.md beat 4" },
+    { "value": 5, "shown_as": "panel index 05 (Direct)", "source": "spec.md beat 5" },
+    { "value": 6, "shown_as": "panel index 06 (Ship)", "source": "spec.md beat 6" }
+  ]
+}

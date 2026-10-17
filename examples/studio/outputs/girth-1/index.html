@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1350px; overflow: hidden; background: #0a0a0a; }
+      #root { position: relative; width: 1080px; height: 1350px; background: #0a0a0a; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #f4f4f5; }
+      #stage { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; }
+      #title { position: absolute; left: 45px; top: 150px; width: 990px; font-size: 92px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+      #sub { position: absolute; left: 45px; top: 330px; font-size: 30px; color: #6b6b73; }
+      .panel { position: absolute; top: 470px; width: 150px; height: 520px; background: #161618; border: 3px solid #26262a; border-radius: 18px; opacity: 0.4; overflow: hidden; }
+      .num { position: absolute; left: 0; top: 24px; width: 100%; text-align: center; font-size: 44px; font-weight: 700; color: #6b6b73; }
+      .label { position: absolute; left: 0; top: 240px; width: 100%; text-align: center; font-size: 24px; font-weight: 600; color: #6b6b73; }
+      .bar { position: absolute; left: 18px; right: 18px; bottom: 28px; height: 14px; background: #26262a; border-radius: 7px; overflow: hidden; }
+      .fill { width: 100%; height: 100%; background: #ffb020; transform-origin: 0 50%; transform: scaleX(0); }
+      .file { position: absolute; top: 1015px; width: 150px; text-align: center; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 20px; font-weight: 600; color: #ffb020; opacity: 0; white-space: nowrap; }
+      #readout { position: absolute; left: 45px; top: 1180px; font-size: 64px; font-weight: 700; letter-spacing: -0.02em; }
+      #readout span { color: #6b6b73; font-size: 30px; font-weight: 500; margin-left: 14px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="9" data-width="1080" data-height="1350">
+      <div id="stage">
+        <h1 id="title">6 steps, one video</h1>
+        <div id="sub">Each step leaves a file behind</div>
+        <div id="readout">1.5 s<span>per panel</span></div>
+      </div>
+    </div>
+    <script>
+      const P = [
+        { id: "reference", label: "Reference", file: "spec.md", start: 0.0, end: 1.5 },
+        { id: "data", label: "Data", file: "data.json", start: 1.5, end: 3.0 },
+        { id: "story", label: "Story", file: "story.md", start: 3.0, end: 4.5 },
+        { id: "motion", label: "Motion", file: "index.html", start: 4.5, end: 6.0 },
+        { id: "direct", label: "Direct", file: "timing.json", start: 6.0, end: 7.5 },
+        { id: "ship", label: "Ship", file: "final.mp4", start: 7.5, end: 9.0 },
+      ];
+      const stage = document.getElementById("stage");
+      P.forEach((p, i) => {
+        const x = 45 + i * 168;
+        stage.insertAdjacentHTML("beforeend",
+          `<div class="panel" id="p-${p.id}" style="left:${x}px"><div class="num">0${i + 1}</div><div class="label">${p.label}</div><div class="bar"><div class="fill" id="f-${p.id}"></div></div></div>` +
+          `<div class="file" id="file-${p.id}" style="left:${x}px">${p.file}</div>`);
+      });
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#title", { opacity: 0, y: 24, duration: 0.5, ease: "power2.out" }, 0);
+      P.forEach((p, i) => {
+        const last = i === P.length - 1;
+        const q = (s) => `#${s}-${p.id}`;
+        tl.to(q("p"), { opacity: 1, borderColor: "#ffb020", duration: 0.2 }, p.start);
+        tl.to(`${q("p")} .num, ${q("p")} .label`, { color: "#f4f4f5", duration: 0.2 }, p.start);
+        tl.fromTo(q("f"), { scaleX: 0 }, { scaleX: 1, duration: 1.5, ease: "none" }, p.start);
+        tl.fromTo(q("file"), { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.25 }, p.start);
+        if (!last) {
+          tl.to(q("p"), { opacity: 0.4, borderColor: "#26262a", duration: 0.2 }, p.end - 0.2);
+          tl.to(`${q("p")} .num, ${q("p")} .label`, { color: "#6b6b73", duration: 0.2 }, p.end - 0.2);
+          tl.to(q("file"), { opacity: 0, duration: 0.2 }, p.end - 0.2);
+        }
+      });
+      tl.set({}, {}, 9);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+Use girth to craft a project skill for making short motion-design videos with HyperFrames: labelled steps lit one at a time, a written spec, sourced data, story beats, a timing file, then check and render (domain: studio). Search my installed skills.

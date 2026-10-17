@@ -1,0 +1,12 @@
+{
+  "fps": 30,
+  "duration": 9,
+  "panels": [
+    { "id": "reference", "label": "Reference", "file": "spec.md",     "start": 0.0, "end": 1.5 },
+    { "id": "data",      "label": "Data",      "file": "data.json",   "start": 1.5, "end": 3.0 },
+    { "id": "story",     "label": "Story",     "file": "story.md",    "start": 3.0, "end": 4.5 },
+    { "id": "motion",    "label": "Motion",    "file": "index.html",  "start": 4.5, "end": 6.0 },
+    { "id": "direct",    "label": "Direct",    "file": "timing.json", "start": 6.0, "end": 7.5 },
+    { "id": "ship",      "label": "Ship",      "file": "final.mp4",   "start": 7.5, "end": 9.0 }
+  ]
+}
