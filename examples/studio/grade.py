@@ -2,7 +2,9 @@
 
 Usage: grade.py <project-dir> <out.json>
 Pass = check exits 0, the render matches the brief, every hand-off file is valid, and all
-six panel labels are in the composition.
+six panel labels are in the composition. The pass gate is check's exit status; the error and
+warning counts are summed over every section of its report, so a report that also repeats a
+total at the top level would count twice (hyperframes 0.8.169 does not).
 """
 import json
 import re
