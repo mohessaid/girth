@@ -138,8 +138,11 @@ pub fn load_skill(dir: &Path) -> Option<SkillInfo> {
         girth_meta: parsed
             .meta
             .get("metadata")
-            .and_then(|m| m.get("girth"))
-            .is_some_and(Value::is_object),
+            .and_then(Value::as_object)
+            .is_some_and(|m| {
+                m.get("girth").is_some_and(Value::is_object)
+                    || m.keys().any(|k| k.starts_with(CRAFTED_PREFIX))
+            }),
     })
 }
 
@@ -235,6 +238,34 @@ mod tests {
         .unwrap();
         assert!(s.crafted());
         assert_eq!(s.always_on_bytes(), (7 + "café".len()) as u64);
+    }
+
+    #[test]
+    fn flat_spec_metadata_marks_crafted() {
+        let tmp = TempDir::new().unwrap();
+        let s = load_skill(&write_skill(
+            tmp.path(),
+            "girth-x",
+            "name: girth-x\ndescription: d\nmetadata:\n  girth-crafted-for: x\n  author: someone",
+            "",
+            &[],
+        ))
+        .unwrap();
+        assert!(s.crafted());
+    }
+
+    #[test]
+    fn girth_prefix_with_unrelated_metadata_is_not_crafted() {
+        let tmp = TempDir::new().unwrap();
+        let s = load_skill(&write_skill(
+            tmp.path(),
+            "girth-lookalike",
+            "name: girth-lookalike\ndescription: d\nmetadata:\n  author: someone",
+            "",
+            &[],
+        ))
+        .unwrap();
+        assert!(!s.crafted());
     }
 
     #[test]

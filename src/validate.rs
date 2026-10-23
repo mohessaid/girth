@@ -114,13 +114,59 @@ fn is_date(value: Option<&Value>) -> bool {
     (1..=days).contains(&day)
 }
 
+/// The keys Girth writes into `metadata`, flat and string-valued as the Agent Skills spec
+/// requires (a map from string keys to string values).
+const FLAT_KEYS: [&str; 4] = [
+    "girth-sources",
+    "girth-crafted-for",
+    "girth-created",
+    "girth-last-used",
+];
+
 fn check_girth_metadata(metadata: Option<&Value>) -> Vec<String> {
-    let Some(girth) = metadata
+    let metadata = metadata.and_then(Value::as_object);
+    // Girth before 0.10 wrote a nested `metadata.girth` block; it still validates.
+    if let Some(girth) = metadata
         .and_then(|m| m.get("girth"))
         .and_then(Value::as_object)
-    else {
-        return vec!["metadata.girth block is required".into()];
-    };
+    {
+        return check_legacy_girth(girth);
+    }
+    match metadata {
+        Some(m) if FLAT_KEYS.iter().any(|k| m.contains_key(*k)) => check_flat(m),
+        _ => vec![
+            "metadata needs girth-sources, girth-crafted-for, girth-created and girth-last-used"
+                .into(),
+        ],
+    }
+}
+
+fn check_flat(m: &Map<String, Value>) -> Vec<String> {
+    let mut errors: Vec<String> = m
+        .iter()
+        // Girth's own keys follow the spec; others (the skills CLI's boolean `internal`) aren't ours.
+        .filter(|(k, v)| k.starts_with("girth-") && !v.is_string())
+        .map(|(k, _)| format!("metadata.{k} must be a string (Agent Skills spec)"))
+        .collect();
+    match non_empty_str(m.get("girth-sources")) {
+        None => errors.push("metadata.girth-sources is required".into()),
+        Some(list) if list.split(',').any(|s| s.trim().is_empty()) => {
+            errors.push("metadata.girth-sources has an empty entry".into());
+        }
+        Some(_) => {}
+    }
+    if non_empty_str(m.get("girth-crafted-for")).is_none() {
+        errors.push("metadata.girth-crafted-for is required".into());
+    }
+    for key in ["girth-created", "girth-last-used"] {
+        if !is_date(m.get(key)) {
+            errors.push(format!("metadata.{key} must be YYYY-MM-DD"));
+        }
+    }
+    errors
+}
+
+fn check_legacy_girth(girth: &Map<String, Value>) -> Vec<String> {
     let mut errors = check_sources(girth);
     if non_empty_str(girth.get("crafted_for")).is_none() {
         errors.push("metadata.girth.crafted_for is required".into());
@@ -256,8 +302,74 @@ metadata:
     fn missing_metadata() {
         assert_eq!(
             check("name: girth-captions\ndescription: x", ""),
-            ["metadata.girth block is required"]
+            ["metadata needs girth-sources, girth-crafted-for, girth-created and girth-last-used"]
         );
+    }
+
+    /// The Agent Skills spec: `metadata` maps string keys to string values.
+    const FLAT_FM: &str = "name: girth-captions
+description: Caption timing rules for this project's hyperframes videos.
+metadata:
+  girth-sources: \"~/.agents/skills/hyperframes-core, owner/repo\"
+  girth-crafted-for: caption timing for promo video
+  girth-created: \"2026-10-14\"
+  girth-last-used: 2026-10-14
+";
+
+    #[test]
+    fn flat_string_metadata_is_valid() {
+        assert_eq!(check(FLAT_FM, "body\n"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn flat_metadata_tolerates_other_tools_keys() {
+        let fm = FLAT_FM.replace("metadata:\n", "metadata:\n  internal: true\n");
+        assert_eq!(check(&fm, ""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn flat_metadata_violations() {
+        let cases: [(&str, &str, &str); 6] = [
+            (
+                "  girth-sources: \"~/.agents/skills/hyperframes-core, owner/repo\"\n",
+                "",
+                "metadata.girth-sources is required",
+            ),
+            (
+                "~/.agents/skills/hyperframes-core, owner/repo",
+                "~/.agents/skills/hyperframes-core, , owner/repo",
+                "metadata.girth-sources has an empty entry",
+            ),
+            (
+                "  girth-crafted-for: caption timing for promo video\n",
+                "",
+                "metadata.girth-crafted-for is required",
+            ),
+            (
+                "girth-created: \"2026-10-14\"",
+                "girth-created: \"2026-02-30\"",
+                "metadata.girth-created must be YYYY-MM-DD",
+            ),
+            (
+                "girth-last-used: 2026-10-14",
+                "girth-last-used: soon",
+                "metadata.girth-last-used must be YYYY-MM-DD",
+            ),
+            (
+                "  girth-crafted-for: caption timing for promo video\n",
+                "  girth-crafted-for: caption timing for promo video\n  girth-notes: [a, b]\n",
+                "metadata.girth-notes must be a string (Agent Skills spec)",
+            ),
+        ];
+        for (old, new, expected) in cases {
+            let fm = FLAT_FM.replacen(old, new, 1);
+            assert_ne!(fm, FLAT_FM, "{old}");
+            let errors = check(&fm, "");
+            assert!(
+                errors.iter().any(|e| e == expected),
+                "{expected}: {errors:?}"
+            );
+        }
     }
 
     #[test]

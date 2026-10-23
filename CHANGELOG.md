@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- **Crafted skills follow the Agent Skills spec's `metadata` rule** (agentskills.io: a map from string keys to string values). That standard moved to the Linux Foundation's Agentic AI Foundation on 2026-10-22, and more than 70 agent platforms read it. The template now writes flat keys: `girth-sources` (comma-separated), `girth-crafted-for`, `girth-created` and `girth-last-used`. Section provenance stays in the body's `<!-- src: … -->` markers.
+- `girth validate` accepts both the flat form and the nested `metadata.girth` block written before this release, so existing crafted skills stay valid and are still recognised as crafted. In the flat form, a `girth-*` value that isn't a string is an error; other tools' keys, such as the skills CLI's boolean `internal`, are left alone.
+
+### Fixed
+- The repo's `girth-video` skill is now marked `internal`, so the skills CLI doesn't offer it for install.
+
 ## [0.9.0] - 2026-10-16
 
 ### Added

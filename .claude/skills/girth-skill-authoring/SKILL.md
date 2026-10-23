@@ -3,15 +3,10 @@ name: girth-skill-authoring
 description: Use when writing or editing a SKILL.md in this repo, Girth's own skill or a crafted girth-* skill, especially its description or trigger wording.
 metadata:
   internal: true
-  girth:
-    sources:
-      - path-or-repo: ~/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/writing-skills
-        sections: [SKILL.md Structure, Rich Description Field, Keyword Coverage, Token Efficiency (Critical)]
-      - path-or-repo: ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator
-        sections: [How skill triggering works, Writing Style, Writing Patterns]
-    crafted_for: writing Girth's own SKILL.md so it triggers reliably and stays small
-    created: 2026-10-14
-    last_used: 2026-10-14
+  girth-sources: "~/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1/skills/writing-skills, ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
+  girth-crafted-for: "writing Girth's own SKILL.md so it triggers reliably and stays small"
+  girth-created: "2026-10-14"
+  girth-last-used: "2026-10-14"
 ---
 
 # Skill authoring for Girth

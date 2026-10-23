@@ -25,7 +25,7 @@ Write the need as one sentence. Pick a lowercase, hyphenated domain slug broad e
 
 ## 2. Search, cache first
 Run `scripts/girth search "<need>" --json`. Note `output_dir` (where crafted skills live).
-- A `girth-<domain>` hit is a cache hit. If it covers the need, set `last_used` to today, use it, and skip to step 6; if it covers part, extend it (step 4).
+- A `girth-<domain>` hit is a cache hit. If it covers the need, set `girth-last-used` to today, use it, and skip to step 6; if it covers part, extend it (step 4).
 - Skills listed only under "Also installed" are still installed; search finds them.
 - Otherwise read the top candidates' `matched_headings` via `scripts/girth show <path> --heading "<heading>"…` (no args lists headings; then request the ones you need), never whole files.
 
@@ -40,13 +40,10 @@ One skill per domain: if it exists, merge the new slice and sources into it; nev
 name: girth-<domain>
 description: Use when <the situations in this project that need this slice; ≤30 words>
 metadata:
-  girth:
-    sources:
-      - path-or-repo: <skill dir or owner/repo>
-        sections: [<headings you used>]
-    crafted_for: <the need that triggered this>
-    created: <YYYY-MM-DD>
-    last_used: <YYYY-MM-DD>
+  girth-sources: "<skill dir or owner/repo>, <another>"
+  girth-crafted-for: "<the need that triggered this>"
+  girth-created: "<YYYY-MM-DD>"
+  girth-last-used: "<YYYY-MM-DD>"
 ---
 ## <Section heading> <!-- src: <source-skill-name>#<source-heading-slug> -->
 <the distilled rules for this section>

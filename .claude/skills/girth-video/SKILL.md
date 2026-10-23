@@ -2,21 +2,11 @@
 name: girth-video
 description: Use when planning, scripting or building an explainer, launch or intro video for this project, especially a silent one, or choosing scene transitions and on-screen captions.
 metadata:
-  girth:
-    sources:
-      - path-or-repo: /home/mohessaid/.claude/skills/explainer-beat-sheet
-        sections: [Structure (≈2 min = ~170 beats at 84 BPM), Each station, written as, Rules that make it work]
-      - path-or-repo: /home/mohessaid/.claude/skills/product-launch-video
-        sections: [3. Cut the Curve (Scene Transitions), Story design — product launch video]
-      - path-or-repo: /home/mohessaid/.claude/skills/faceless-explainer
-        sections: [Transitions]
-      - path-or-repo: /home/mohessaid/.claude/skills/hyperframes-animation
-        sections: [Scene Transitions, Accelerating cadence (geometric hold decay)]
-      - path-or-repo: /home/mohessaid/.claude/skills/embedded-captions
-        sections: [14. Break rhythm once per 30s]
-    crafted_for: a silent 60–75 s chalk intro video that makes Girth's core idea clear
-    created: 2026-10-17
-    last_used: 2026-10-17
+  internal: true
+  girth-sources: "~/.claude/skills/explainer-beat-sheet, ~/.claude/skills/product-launch-video, ~/.claude/skills/faceless-explainer, ~/.claude/skills/hyperframes-animation, ~/.claude/skills/embedded-captions"
+  girth-crafted-for: "a silent 60–75 s chalk intro video that makes Girth's core idea clear"
+  girth-created: "2026-10-17"
+  girth-last-used: "2026-10-17"
 ---
 ## Story first <!-- src: explainer-beat-sheet#structure-2-min-170-beats-at-84-bpm, product-launch-video#story-design-product-launch-video -->
 Decide the film before code: write `STORYBOARD.md` and `FACTS.md`. Build the sequence around the **promise**, not a feature list. Opening 3–5 s: ONE hook in the viewer's words; the promise lands by beat 2, features after that are its evidence. Arc: Hook · Mechanism (one idea per station, dependency order) · Turn · Proof · Close (pays off the hook).

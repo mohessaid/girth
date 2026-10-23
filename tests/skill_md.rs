@@ -161,3 +161,32 @@ fn only_the_shipped_skill_is_installable_by_the_skills_cli() {
     }
     assert!(seen > 0);
 }
+
+#[test]
+fn crafted_template_meets_the_agent_skills_spec_and_validates() {
+    // agentskills.io: `metadata` is a map from string keys to string values.
+    let text = std::fs::read_to_string(skill_dir().join("SKILL.md")).unwrap();
+    let (_, body) = split_frontmatter(&text);
+    let template = body
+        .split("```markdown")
+        .nth(1)
+        .and_then(|t| t.split("```").next())
+        .expect("crafted-skill template present");
+    let filled = template
+        .replace("<domain>", "captions")
+        .replace("<YYYY-MM-DD>", "2026-10-23")
+        .replace(
+            "<the situations in this project that need this slice; ≤30 words>",
+            "caption timing in promo videos",
+        );
+    let (fm, _) = split_frontmatter(filled.trim_start());
+    let meta = parse_strict(&fm).expect("template frontmatter is strict YAML");
+    let metadata = meta["metadata"].as_object().expect("metadata map");
+    for (k, v) in metadata {
+        assert!(v.is_string(), "metadata.{k} must be a string: {v}");
+    }
+    assert_eq!(
+        girth::validate::validate_text("girth-captions", filled.trim_start()),
+        Vec::<String>::new()
+    );
+}

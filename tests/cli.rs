@@ -148,7 +148,7 @@ fn validate_reports_valid_and_invalid_with_exit_code() {
         .code(1)
         .stdout(predicate::str::contains("VALID girth-captions"))
         .stdout(predicate::str::contains(
-            "INVALID girth-bad: metadata.girth block is required",
+            "INVALID girth-bad: metadata needs girth-sources, girth-crafted-for, girth-created and girth-last-used",
         ));
 }
 
