@@ -116,7 +116,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 ## How it works
 
 1. During a task, the model (or you: "use girth for …") names a need.
-2. `girth search` ranks the skills already on disk and the project's crafted-skill cache, and `girth show` prints only the sections that matter. Nothing outside the project is read file by file.
+2. `girth search` ranks the skills already on disk and the project's crafted-skill cache, and `girth show` prints only the sections that matter, so whole files needn't be read. (In practice models still open the big source files in most crafting sessions; see `examples/trigger/RESULTS.md`.)
 3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.

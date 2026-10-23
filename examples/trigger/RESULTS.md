@@ -20,7 +20,8 @@ The tasks never mention Girth. Each run has no project skills, Girth available t
 
 **Finding 2, open: models read whole source files instead of sections.**
 - Even when they crafted, models `cat`-ed whole installed skill files in 18 of 20 runs. They used `girth show --heading` (which prints only the matched sections) in 3.
-- The cost lands once, in the crafting session, but it is the part of Girth's own flow that isn't lean yet.
-- The likely cause is that `girth search --json` hands back file paths the model then opens directly. That's a design question for the search output, not a wording fix, and it's left for the next iteration.
+- **The size of it** (`measure_reads.py`, both conditions, crafted `girth-*` files excluded): whole-file reads pulled 184 KB in 20 sessions, about **2.3K tokens per session, ≈ 7% of fresh input**. `girth show` pulled 65 KB.
+- **Why:** the files read whole were HyperFrames' own entry skill and its references (`hyperframes/references/*` 8×, `hyperframes` 4×, `hyperframes-cli` 4×). That skill's description begins "Read first to make, edit, animate or render any video with HyperFrames", so the model is following the source skill's instruction, not ignoring Girth's.
+- **Decision:** at 7% of one session, a once-per-domain cost, this doesn't justify changing `search`'s frozen JSON. It is recorded here and will be re-measured if a source pack makes it larger.
 
 **Effect on published results:** `examples/compounding` ran its girth arm with `acceptEdits` and `Bash`. Crafts there succeeded by writing through Bash, which the harness allowed. Its numbers stand as measured. A grant would only make session-1 crafting more reliable.
