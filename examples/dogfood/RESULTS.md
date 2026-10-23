@@ -53,3 +53,17 @@ It was then used for the 8-run A/B in `examples/studio/RESULTS.md`, which showed
 **Crafted (headless, `examples/openmontage/craft.sh`):** `girth-studio`, 3.7 KB, `VALID`, $0.19. It wasn't committed because the source pack is AGPL-3.0.
 
 **Bug found while building it.** The first craft quietly drew from the author's own user-level skills (`paper-ink-explainer`, `explainer-beat-sheet`), because `claude -p` loaded user settings even though `GIRTH_SKILL_ROOTS` pointed only at the pack. Both craft scripts (`openmontage`, `skillsbench`) now pass `--setting-sources project,local`, so a craft can only see the sources the experiment names.
+
+## `girth drift`, first run on this repo (2026-10-23)
+
+```
+$ girth drift .claude/skills/girth-video .claude/skills/girth-skill-authoring
+girth-video: unavailable product-launch-video
+girth-video: unavailable faceless-explainer
+girth-video: unavailable hyperframes-animation
+girth-skill-authoring: up to date
+```
+
+Between 2026-10-17 and 2026-10-23, the author's user skills went from 40 to 26. Three of `girth-video`'s five sources were uninstalled. The crafted skill still carries their distilled slice: that is the point of the cache, and the intro video it guided was finished. But nothing can confirm that slice is still current, and `drift` now says so instead of staying silent.
+
+**Bug found while building it.** `cargo clippy` in the full gate caught a `src.clone()` slice in the new tests. Separately, the gate's run hit a real launcher race: `an_interrupted_download_leaves_nothing_behind` failed under load because `mktemp` ran before the cleanup traps were set. Fixed in the launcher; the test passes 8 of 8 with the CPU saturated.
