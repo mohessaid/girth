@@ -306,6 +306,17 @@ metadata:
         );
     }
 
+    #[test]
+    fn metadata_without_girth_keys_gets_the_one_line_hint() {
+        assert_eq!(
+            check(
+                "name: girth-captions\ndescription: x\nmetadata:\n  author: someone",
+                ""
+            ),
+            ["metadata needs girth-sources, girth-crafted-for, girth-created and girth-last-used"]
+        );
+    }
+
     /// The Agent Skills spec: `metadata` maps string keys to string values.
     const FLAT_FM: &str = "name: girth-captions
 description: Caption timing rules for this project's hyperframes videos.
