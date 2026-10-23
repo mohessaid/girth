@@ -128,3 +128,7 @@ What `taste-launch` checks:
 **Live check without the sandbox (2026-10-23):** one headless craft through the dist plugin (`claude -p`, claude-sonnet-5-5, user settings hidden, isolated `GIRTH_HOME`) for "caption timing rules in short promo videos" ($0.14).
 - The model wrote the flat form unprompted: `girth-sources: "embedded-captions, hyperframes-studio"`, plus `girth-crafted-for`, `girth-created: "2026-10-23"` and `girth-last-used`. The dates were quoted, and there was no nested `girth:` block.
 - The result: `VALID girth-captions (recorded: +6 −0 sections)`.
+
+**Live check of `drift` on a cache hit (2026-10-23):** the same need, project folder and ledger as the craft above, with the rebuilt dist plugin ($0.08).
+- The model ran `scripts/girth drift <dir>` and reused `girth-captions` without writing a second skill (the files are identical).
+- It reported drift's finding to the user: both recorded sources, `embedded-captions` and `hyperframes-studio`, were unavailable. That was true; they were uninstalled between the craft and this run.
