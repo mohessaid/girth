@@ -15,4 +15,4 @@
 **Reading it:**
 - On the one agent tested, both forms are discovered, so skills crafted before the change keep working.
 - The flat form is the one the spec defines (`metadata`: string keys to string values). It is what new crafts write, and what a stricter reader will expect.
-- The `## Record` step in a crafted skill calls Girth's `made` command, which only Claude Code has. Elsewhere the rest of the skill still applies.
+- The `## Record` step in a crafted skill calls Girth's `made` command, which only Claude Code with Girth has. Since 2026-10-23 the template says "If Girth is installed", so other agents skip it instead of failing.

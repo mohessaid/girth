@@ -114,6 +114,8 @@ fn crafted_template_tells_the_skill_to_record_deliverables() {
         .expect("crafted-skill template present");
     assert!(template.contains("## Record"), "{template}");
     assert!(template.contains("`made` command"), "{template}");
+    // Crafted skills load on any Agent Skills platform; only Girth's hosts have the command.
+    assert!(template.contains("If Girth is installed"), "{template}");
 }
 
 #[test]
