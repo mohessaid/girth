@@ -53,3 +53,20 @@ examples/skillsbench/run.sh <skillsbench checkout> /tmp/sb-proof
 python3 examples/skillsbench/summarize.py /tmp/sb-proof
 ```
 The result goes here and in the README, whichever way it comes out.
+
+## Replication: 2 more runs per task (2026-10-23)
+
+The same harness (`run.sh`), crafted skills (`crafted/`) and model (claude-sonnet-5-5), with the curated and girth arms. SkillsBench is pinned to `f860ecf` (2026-10-12), the last commit before the first run; that run didn't record its revision. The runs were sequential, in local Docker. Summaries are in `replicate/r<N>/<arm>/<task>.json`.
+
+| arm | run 1 (2026-10-15) | run 2 | run 3 | output tokens, 3 runs* |
+|---|---|---|---|---|
+| curated | 3/6 | 3/6 | 3/6 | 69,025 |
+| **girth** | 3/6 | 3/6 | 3/6 | **59,653 (−14%)** |
+
+- **Girth matched the curated skills on every task in all three runs** (18 of 18 task-runs had the same outcome). Each task's result was identical across runs too:
+  - pass: `edit-pdf`, `offer-letter-generator`, `pdf-excel-diff`;
+  - fail: `sales-pivot-analysis`, `software-dependency-audit`, `xlsx-recover-data`.
+- It did that with one distilled skill per task: 1.0 skill calls per task, against 1.7–1.8 for the curated arm.
+- Input tokens were about the same (139K vs 141K over three runs). Output tokens were 14% lower.
+
+\*BenchFlow's token counts under subscription login are partial (see above). Read them as relative.

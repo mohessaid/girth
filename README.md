@@ -72,7 +72,7 @@ With v0.6, tasks that need a collapsed MCP server still work, 6 of 6 across two 
 
 See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose a needed skill.
 
-**SkillsBench, 6 tasks** (2026-10-15, claude-sonnet-5-5, one run per arm): Girth's one distilled skill per task **matched the task's curated skills on every task** (3/6 passed in each arm), with 23% fewer output tokens. Self-generated skills tend not to help (SkillsBench); skills distilled from curated sources kept their effect. See `examples/skillsbench/RESULTS.md`.
+**SkillsBench, 6 tasks × 3 runs** (2026-10-15 and 2026-10-23, claude-sonnet-5-5): Girth's one distilled skill per task **matched the task's curated skills on every task in every run** (18 of 18 task-runs; 3/6 passed in each arm, each time), with 14% fewer output tokens. Self-generated skills tend not to help (SkillsBench); skills distilled from curated sources kept their effect. See `examples/skillsbench/RESULTS.md`.
 
 **HyperFrames captions, before and after crafting** (first run 2026-10-14, replicated with 8 runs per arm on 2026-10-23):
 
@@ -83,7 +83,7 @@ See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose
 | Task cost per session (mean of 8) | $0.195 | $0.128 (**−34%**; every girth run cheaper than every bulk run) |
 | HyperFrames check warnings | in 3 of 8 runs | in 0 of 8 runs |
 
-The studio, OpenMontage and HyperFrames results above use 8 runs per arm, compounding uses 4 full repeats and Lens uses 3. SkillsBench is a single run (it needs BenchFlow and Docker), so read it as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
+The studio, OpenMontage and HyperFrames results above use 8 runs per arm, compounding uses 4 full repeats, and SkillsBench and Lens use 3. Every headline result here has now been run more than once. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 
