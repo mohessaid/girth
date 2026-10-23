@@ -20,7 +20,7 @@ while read -r task; do
 
 Task:
 $need" \
-    --plugin-dir "$dist" \
+    --setting-sources "project,local" --plugin-dir "$dist" \
     --settings '{"enabledPlugins":{"girth@girth":false}}' \
     --model "${MODEL:-claude-sonnet-5-5}" \
     --max-budget-usd "${CRAFT_MAX_USD:-1}" \

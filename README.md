@@ -55,6 +55,8 @@ The quality checks found nothing in any of the 16 runs: 0 errors and 0 warnings.
 
 Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
 
+**OpenMontage, a public 49-skill video pack** (2026-10-18, Remotion, 8 runs per arm): all 16 runs passed. Girth's median cost was 19% lower ($0.107 → $0.087), and 7 of 8 girth runs cost less than every bulk run (Mann–Whitney p = 0.007). One girth run was slowed by a concurrent render, so the means differ by only 7%. The saving is smaller than in the studio test because this pack costs a session less. See `examples/openmontage/RESULTS.md`.
+
 **Lens: the same task with and without Lens** (2026-10-15, the author's real setup of 74 skills and 6 MCP servers, claude-sonnet-5-5, 3 runs per arm):
 
 | | Lens off | Skills Lens (v0.5) | Full Lens (v0.6) |
@@ -79,7 +81,7 @@ See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose
 | Task cost, same task and model | $0.181 | $0.149 (**−17%**) |
 | HyperFrames check on the output | 1 warning | 0 warnings |
 
-The studio result above uses 8 runs per arm. The Lens result uses 3. The rest are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
+The studio and OpenMontage results above use 8 runs per arm. The Lens result uses 3. The rest are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 
@@ -116,6 +118,10 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
+
+**Next to a memory plugin** (such as claude-mem): a memory plugin records *what happened* (tool calls, edits, decisions) and brings back what's relevant. Girth keeps *the know-how a project needs*: the slice of your installed skills that the work calls for, plus a ledger of what it costs. They solve different problems, and they work together.
+
+**Next to `/skill-doctor`** (Claude Code 2.1.285+): it shows which loaded skills go unused and what they cost, so you can prune them. That still leaves you a choice between keeping a large skill and paying for it, or deleting it and losing what it knows. Girth removes that choice: it keeps the slice your project uses and leaves the rest out of context.
 
 ## Lens, X-ray & Meter
 

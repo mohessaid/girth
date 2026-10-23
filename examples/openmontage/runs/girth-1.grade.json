@@ -1,0 +1,17 @@
+{
+ "src_files": 3,
+ "tsc_exit": 0,
+ "render": true,
+ "width": 1080,
+ "height": 1350,
+ "fps": 30.0,
+ "duration": 9.0,
+ "render_ok": true,
+ "spec": true,
+ "story": true,
+ "data_sourced": true,
+ "timing": true,
+ "handoff_ok": true,
+ "labels": 6,
+ "pass": true
+}
