@@ -65,6 +65,7 @@ fn body_names_every_helper_and_rule() {
         "scripts/girth taste show",
         "never drop",
         "Also installed",
+        "scripts/girth drift",
     ] {
         assert!(body.contains(needle), "body lacks '{needle}'");
     }

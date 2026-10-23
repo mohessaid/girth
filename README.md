@@ -120,6 +120,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
 4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
+6. On a cache hit, `girth drift` re-hashes the exact source sections the skill was distilled from. It reports any that `changed`, went `missing` (renamed or removed), or whose source is `unavailable` (uninstalled), so a cached slice doesn't silently go stale. Reflowed text and emphasis changes don't count.
 
 **Next to a memory plugin** (such as claude-mem): a memory plugin records *what happened* (tool calls, edits, decisions) and brings back what's relevant. Girth keeps *the know-how a project needs*: the slice of your installed skills that the work calls for, plus a ledger of what it costs. They solve different problems, and they work together.
 
@@ -193,6 +194,7 @@ cargo build --release
 target/release/girth measure                      # what your skills cost in context
 target/release/girth search "caption timing" --json
 target/release/girth validate .claude/skills/girth-captions   # also records to the ledger
+target/release/girth drift .claude/skills/girth-captions      # source sections changed since then? exit 1 if so
 target/release/girth stats                                      # what the ledger says
 target/release/girth share preview                              # exactly what would be shared
 target/release/girth taste add launch-video "End on the logo with the URL."

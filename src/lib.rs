@@ -1,6 +1,7 @@
 //! Girth: just-in-time, project-scoped agent skills.
 
 pub mod config;
+pub mod drift;
 pub mod fetch;
 pub mod frontmatter;
 pub mod keeper;

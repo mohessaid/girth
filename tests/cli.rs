@@ -1145,3 +1145,46 @@ fn meter_record_keeps_the_plan_when_the_bash_output_is_not_well_formed() {
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
     assert_eq!(ledger.lines().count(), 1, "{ledger}");
 }
+
+#[test]
+fn drift_reports_source_sections_that_moved_since_the_craft() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let src = tmp.path().join("src");
+    let source =
+        |body: &str| write_skill(&src, "video-mega", "name: video-mega\ndescription: d", body);
+    source("## Caption timing\nrule\n## Export\nx\n");
+    let body =
+        "## Caption timing <!-- src: video-mega#caption-timing, video-mega#export -->\nrule\n";
+    let crafted = write_skill(tmp.path(), "girth-captions", VALID_FM, body);
+    let unrecorded = write_skill(tmp.path(), "girth-other", VALID_FM, body);
+    let drift = |dirs: &[&std::path::Path]| {
+        girth()
+            .current_dir(tmp.path())
+            .env("GIRTH_HOME", &home)
+            .args(["drift", "--roots"])
+            .arg(&src)
+            .arg("--")
+            .args(dirs)
+            .assert()
+    };
+    girth()
+        .current_dir(tmp.path())
+        .env("GIRTH_HOME", &home)
+        .args(["validate", "--roots"])
+        .arg(&src)
+        .arg("--")
+        .arg(&crafted)
+        .assert()
+        .success();
+    drift(&[&crafted])
+        .success()
+        .stdout("girth-captions: up to date\n");
+    source("## Caption timing\nnew rule\n## Encoding\nx\n");
+    drift(&[&crafted]).code(1).stdout(
+        "girth-captions: changed video-mega#caption-timing\ngirth-captions: missing video-mega#export\n",
+    );
+    drift(&[&unrecorded])
+        .code(1)
+        .stdout("girth-other: no recorded craft here (run girth validate first)\n");
+}

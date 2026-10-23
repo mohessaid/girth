@@ -15,7 +15,7 @@ pub fn last_craft<'a>(records: &'a [Record], project: &str, skill: &str) -> Opti
     )
 }
 
-fn body_sections(skill_md: &Path) -> Option<(String, Vec<Section>)> {
+pub(crate) fn body_sections(skill_md: &Path) -> Option<(String, Vec<Section>)> {
     let bytes = std::fs::read(skill_md).ok()?;
     let (_, body) = split_frontmatter(&String::from_utf8_lossy(&bytes));
     let sections = split_sections(&body);

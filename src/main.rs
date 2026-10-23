@@ -146,6 +146,14 @@ enum Command {
         spec: String,
     },
     /// Check crafted skills against the Girth contract.
+    /// Report source sections that changed since each crafted skill was validated (exit 1 if any)
+    Drift {
+        /// Skill roots holding the sources (default: configured roots).
+        #[arg(long, num_args = 1..)]
+        roots: Vec<String>,
+        #[arg(required = true)]
+        skill_dirs: Vec<PathBuf>,
+    },
     Validate {
         /// Don't record a craft event in the ledger.
         #[arg(long)]
@@ -1017,6 +1025,37 @@ fn main() -> ExitCode {
                     eprintln!("girth: could not record feedback: {e}");
                     ExitCode::from(1)
                 }
+            }
+        }
+        Command::Drift { roots, skill_dirs } => {
+            let installed = discover_skills(&resolve_roots(&roots, &ctx, &mut warnings));
+            let records = ledger::read(&girth_home(&ctx));
+            let project = ctx.cwd.display().to_string();
+            let mut clean = true;
+            for dir in &skill_dirs {
+                let name = dir.file_name().unwrap_or_default().to_string_lossy();
+                let Some(craft) = last_craft(&records, &project, &name) else {
+                    clean = false;
+                    let _ = writeln!(
+                        out,
+                        "{name}: no recorded craft here (run girth validate first)"
+                    );
+                    continue;
+                };
+                let findings = girth::drift::drift(craft, &installed);
+                if findings.is_empty() {
+                    let _ = writeln!(out, "{name}: up to date");
+                }
+                for finding in &findings {
+                    clean = false;
+                    let _ = writeln!(out, "{name}: {finding}");
+                }
+            }
+            warn(&warnings);
+            if clean {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
             }
         }
         Command::Validate {

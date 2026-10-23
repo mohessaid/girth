@@ -4,11 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth drift <skill-dir>…`** reports whether a crafted skill's sources have moved on since it was validated. It re-hashes each source section named by a `<!-- src: skill#slug -->` marker and compares the result with the hash recorded at craft time. Each finding is one line: `changed`, `missing` (the heading was renamed or removed) or `unavailable` (the source is on no configured root). It exits 1 when there's drift. Hashes use normalised text, so reflowed text and emphasis changes don't count. The shipped skill runs it on every cache hit.
+
 ### Changed
 - **Crafted skills follow the Agent Skills spec's `metadata` rule** (agentskills.io: a map from string keys to string values). That standard moved to the Linux Foundation's Agentic AI Foundation on 2026-10-22, and more than 70 agent platforms read it. The template now writes flat keys: `girth-sources` (comma-separated), `girth-crafted-for`, `girth-created` and `girth-last-used`. Section provenance stays in the body's `<!-- src: … -->` markers.
 - `girth validate` accepts both the flat form and the nested `metadata.girth` block written before this release, so existing crafted skills stay valid and are still recognised as crafted. In the flat form, a `girth-*` value that isn't a string is an error; other tools' keys, such as the skills CLI's boolean `internal`, are left alone.
 
 ### Fixed
+- The launcher installs its cleanup traps before it creates the download's temp file. An interrupt in that window used to leave `.girth-download.*` in `bin/`.
 - The repo's `girth-video` skill is now marked `internal`, so the skills CLI doesn't offer it for install.
 
 ## [0.9.0] - 2026-10-16
