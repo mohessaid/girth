@@ -1,0 +1,31 @@
+{
+ "compositions": 5,
+ "passed": 5,
+ "checks": {
+  "s1": {
+   "exit": 0,
+   "errors": 0,
+   "warnings": 0
+  },
+  "s2": {
+   "exit": 0,
+   "errors": 0,
+   "warnings": 0
+  },
+  "s3": {
+   "exit": 0,
+   "errors": 0,
+   "warnings": 1
+  },
+  "s4": {
+   "exit": 0,
+   "errors": 0,
+   "warnings": 0
+  },
+  "s5": {
+   "exit": 0,
+   "errors": 0,
+   "warnings": 0
+  }
+ }
+}

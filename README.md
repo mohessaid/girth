@@ -55,7 +55,7 @@ The quality checks found nothing in any of the 16 runs: 0 errors and 0 warnings.
 | Fresh distillation every session | $0.25 | $0.18–0.22 | $1.061 |
 | **Girth (crafts once, then reuses)** | $0.22 | **$0.09–0.10** | **$0.599 (−34%)** |
 
-Every session in every arm passed the HyperFrames check. See `examples/compounding/RESULTS.md`.
+Replicated three more times on 2026-10-23, with every composition checked by a script: the mean five-session totals were **$0.877 bulk, $1.025 JIT and $0.564 Girth (−36% vs bulk, p = 0.03)**, and all 45 compositions passed. See `examples/compounding/RESULTS.md`.
 
 **OpenMontage, a public 49-skill video pack** (2026-10-18, Remotion, 8 runs per arm): all 16 runs passed. Girth's median cost was 19% lower ($0.107 → $0.087), and 7 of 8 girth runs cost less than every bulk run (Mann–Whitney p = 0.007). One girth run was slowed by a concurrent render, so the means differ by only 7%. The saving is smaller than in the studio test because this pack costs a session less. See `examples/openmontage/RESULTS.md`.
 
@@ -83,7 +83,7 @@ See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose
 | Task cost per session (mean of 8) | $0.195 | $0.128 (**−34%**; every girth run cheaper than every bulk run) |
 | HyperFrames check warnings | in 3 of 8 runs | in 0 of 8 runs |
 
-The studio, OpenMontage and HyperFrames results above use 8 runs per arm, and Lens uses 3. The compounding and SkillsBench results are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
+The studio, OpenMontage and HyperFrames results above use 8 runs per arm, compounding uses 4 full repeats and Lens uses 3. SkillsBench is a single run (it needs BenchFlow and Docker), so read it as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 

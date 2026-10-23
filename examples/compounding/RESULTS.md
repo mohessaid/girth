@@ -57,3 +57,22 @@ examples/compounding/run.sh girth /tmp/cmp
 python3 examples/compounding/summarize.py --table /tmp/cmp
 ```
 Each arm costs about $1 at current prices.
+
+## Replication: 3 more repeats, graded by script (2026-10-23)
+
+`replicate.sh` repeats the whole benchmark three times. Each repeat runs bulk, then jit, then girth, one arm at a time. After each arm, every `s1`–`s5` composition is checked with `hyperframes check --json`, so the result doesn't rely on the session's own report. Usage is in `replicate/r<N>/<arm>/`.
+
+| Arm | r1 | r2 | r3 | **5-session total, mean** | Fresh input per session | Checks passed | Check warnings |
+|---|---|---|---|---|---|---|---|
+| bulk | $0.808 | $0.915 | $0.907 | **$0.877** | 28.6K | 15/15 | 16 |
+| jit | $0.936 | $1.129 | $1.012 | **$1.025** | 31.6K | 15/15 | 8 |
+| **girth** | $0.506 | $0.487 | $0.699 | **$0.564** | **16.0K** | **15/15** | **7** |
+
+- **Girth versus bulk:** −36% over five sessions (Welch t = 4.1, p = 0.03, n = 3). Fresh input per session fell 44%.
+- **Girth versus per-session JIT:** −45% (t = 5.2, p = 0.007).
+- **Cache hits are where the saving comes from:** sessions after the craft cost $0.06–0.10. Over sessions 2–5, girth averaged $0.099 against bulk's $0.176.
+- **Girth doesn't always fire on the first session.** In r3 it didn't trigger in session 1, which worked unaided for $0.13. It crafted in session 2 ($0.245) and reused the skill in sessions 3–5. The tasks never mention Girth, so triggering is Girth's own call. That is why r3's total is the highest of the three.
+- **Quality:**
+  - All 45 compositions passed the scripted check with 0 errors.
+  - Girth's had the fewest warnings (7, against 16 for bulk).
+  - In r1 and r2, Girth wrote bare compositions without running `hyperframes init`. The check accepts them; the first version of the grader only looked for `hyperframes.json`, missed them, and was fixed before these numbers.
