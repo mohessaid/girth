@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Note: .claude/ is protected in headless runs; crafting into .claude/skills works here because Bash is allowed. See examples/trigger/RESULTS.md.
 # Usage: run.sh <bulk|jit|girth> <workdir>
 # Runs the five tasks in tasks/ as five separate headless sessions in one project.
 #   bulk  = every skill in ~/.claude/skills symlinked into the project (status quo)

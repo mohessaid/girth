@@ -122,6 +122,8 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 6. On a cache hit, `girth drift` re-hashes the exact source sections the skill was distilled from. It reports any that `changed`, went `missing` (renamed or removed), or whose source is `unavailable` (uninstalled), so a cached slice doesn't silently go stale. Reflowed text and emphasis changes don't count.
 
+**Headless and CI:** Claude Code protects `.claude/`, so a `claude -p` session can't write a new crafted skill there unless it runs with bypass permissions. Interactive sessions just ask you. In CI, either craft in a throwaway checkout with bypass, or commit the crafted skills and only reuse them. With that permission, Girth fired by itself in 10 of 10 fresh sessions and crafted in 9 (`examples/trigger/RESULTS.md`).
+
 **Next to a memory plugin** (such as claude-mem): a memory plugin records *what happened* (tool calls, edits, decisions) and brings back what's relevant. Girth keeps *the know-how a project needs*: the slice of your installed skills that the work calls for, plus a ledger of what it costs. They solve different problems, and they work together.
 
 **Next to `/skill-doctor`** (Claude Code 2.1.285+): it shows which loaded skills go unused and what they cost, so you can prune them. That still leaves you a choice between keeping a large skill and paying for it, or deleting it and losing what it knows. Girth removes that choice: it keeps the slice your project uses and leaves the rest out of context.
