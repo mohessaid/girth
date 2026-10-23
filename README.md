@@ -28,11 +28,11 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 <p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
 
-Status: v0.5, early and measured. Design: `docs/superpowers/specs/`.
+Status: v0.9, early and measured: every headline result below is re-runnable from `examples/`. Design: `docs/superpowers/specs/`.
 
 Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
 
-Crafted skills follow the open [Agent Skills spec](https://agentskills.io/specification), the standard Anthropic [donated to the Agentic AI Foundation](https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation) on 2026-10-22. More than 70 agent platforms, including ChatGPT, Cursor, GitHub Copilot and VS Code, read it, so any of them can load a skill Girth distils (checked on Codex CLI 0.160: `examples/portability/RESULTS.md`). (Its `## Record` step runs Girth's own command, which needs Claude Code.)
+Crafted skills follow the open [Agent Skills spec](https://agentskills.io/specification), the standard Anthropic [donated to the Agentic AI Foundation](https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation) on 2026-10-22. More than 70 agent platforms, including ChatGPT, Cursor, GitHub Copilot and VS Code, read it, so any of them can pick up a skill Girth distils (Codex CLI 0.160 lists both the current and the legacy form: `examples/portability/RESULTS.md`). (Its `## Record` step runs Girth's own command, which needs Claude Code.)
 
 ## Measured so far (one machine)
 

@@ -43,3 +43,13 @@ Only the matched sections were read, not the full 168 KB.
 It was then used for the 8-run A/B in `examples/studio/RESULTS.md`, which showed −29% cost at equal quality.
 
 **Bug found while building it.** `claude -p` reports only the *last* turn in `usage` and `num_turns`. When a background task finishes after the answer, that last turn is a short follow-up, so per-run token counts would have read near zero. The studio summary uses `modelUsage`, which covers the whole session. `examples/compounding` still reads `usage`, but its 15 runs are unaffected: in each one, `usage` output tokens equal `modelUsage`'s. `examples/hyperframes` was recorded before `modelUsage` existed, and its `num_turns` (8 and 10) cover the whole session.
+
+## OpenMontage example (2026-10-18)
+
+**Need:** "short motion-design videos in Remotion: labelled steps lit one at a time, a written spec, sourced data, story beats, a timing file, then type check and render"
+
+**`girth search`** ran over the 49 OpenMontage Claude Code skills only (`GIRTH_SKILL_ROOTS`, a markdown-only mirror: 1.96 MB). Girth read matched sections of `remotion` (Toolkit Best Practices, Project Timing Conventions, Transition Duration Guidelines) and `remotion-best-practices` (Premounting, `Series`, Frame References Inside Sequences, Spring animations, Calculate Metadata).
+
+**Crafted (headless, `examples/openmontage/craft.sh`):** `girth-studio`, 3.7 KB, `VALID`, $0.19. It wasn't committed because the source pack is AGPL-3.0.
+
+**Bug found while building it.** The first craft quietly drew from the author's own user-level skills (`paper-ink-explainer`, `explainer-beat-sheet`), because `claude -p` loaded user settings even though `GIRTH_SKILL_ROOTS` pointed only at the pack. Both craft scripts (`openmontage`, `skillsbench`) now pass `--setting-sources project,local`, so a craft can only see the sources the experiment names.
