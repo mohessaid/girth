@@ -124,3 +124,7 @@ What `taste-launch` checks:
 - The two cases that passed are the ones that don't need Bash to succeed.
 
 `make evals` now checks the sandbox first (`sandbox-ok`) and points to the AppArmor fix in CONTRIBUTING.md. The suite will be re-run once bwrap works again. Until then, the template change is covered by `tests/skill_md.rs` (the template meets the spec and passes `girth validate`) and the unit tests in `src/validate.rs`.
+
+**Live check without the sandbox (2026-10-23):** one headless craft through the dist plugin (`claude -p`, claude-sonnet-5-5, user settings hidden, isolated `GIRTH_HOME`) for "caption timing rules in short promo videos" ($0.14).
+- The model wrote the flat form unprompted: `girth-sources: "embedded-captions, hyperframes-studio"`, plus `girth-crafted-for`, `girth-created: "2026-10-23"` and `girth-last-used`. The dates were quoted, and there was no nested `girth:` block.
+- The result: `VALID girth-captions (recorded: +6 −0 sections)`.

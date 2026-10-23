@@ -32,7 +32,7 @@ Status: v0.5, early and measured. Design: `docs/superpowers/specs/`.
 
 Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
 
-Crafted skills follow the open [Agent Skills spec](https://agentskills.io/specification), the standard Anthropic [donated to the Agentic AI Foundation](https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation) on 2026-10-22. More than 70 agent platforms, including ChatGPT, Cursor, GitHub Copilot and VS Code, read it, so a skill Girth distils works wherever your other skills do.
+Crafted skills follow the open [Agent Skills spec](https://agentskills.io/specification), the standard Anthropic [donated to the Agentic AI Foundation](https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation) on 2026-10-22. More than 70 agent platforms, including ChatGPT, Cursor, GitHub Copilot and VS Code, read it, so any of them can load a skill Girth distils. (Its `## Record` step runs Girth's own command, which needs Claude Code.)
 
 ## Measured so far (one machine)
 
