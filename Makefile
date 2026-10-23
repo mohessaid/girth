@@ -3,7 +3,7 @@ EVAL_MODEL ?= claude-sonnet-5-5
 EVAL_RUNS ?= 3
 EVAL_MAX_USD ?= 3
 
-.PHONY: check fmt lint test cov mutate build dist validate evals demo modtest
+.PHONY: sandbox-ok check fmt lint test cov mutate build dist validate evals demo modtest
 DIST := target/plugin-dist
 check: fmt lint test cov validate modtest
 fmt: ; cargo fmt --check
@@ -15,6 +15,8 @@ build: ; cargo build --release -q
 validate: ; claude plugin validate .
 modtest: ; claude plugin test
 dist: build ; rm -rf $(DIST) && mkdir -p $(DIST) && cp -R .claude-plugin hooks skills evals $(DIST)/ && rm -rf $(DIST)/evals/results $(DIST)/hooks/tests && mkdir -p $(DIST)/skills/girth/bin && cp target/release/girth $(DIST)/skills/girth/bin/girth
-evals: dist ; cd $(DIST) && PATH=$(SYS_PATH) claude plugin eval . --scaffold --trust-plugin --no-publish --ablation none --runs $(EVAL_RUNS) --threshold 0.66 --model $(EVAL_MODEL) --max-cost-usd $(EVAL_MAX_USD) --allow-tools Write Edit Bash
+# The eval sandbox (bubblewrap) needs user namespaces; Ubuntu 24.04+ AppArmor blocks them unless bwrap has a profile.
+sandbox-ok: ; @bwrap --ro-bind / / --unshare-net true 2>/dev/null || { echo "evals: bubblewrap can't create a sandbox here, so every Bash call would fail. On Ubuntu, give bwrap an AppArmor profile (see CONTRIBUTING.md)."; exit 1; }
+evals: sandbox-ok dist ; cd $(DIST) && PATH=$(SYS_PATH) claude plugin eval . --scaffold --trust-plugin --no-publish --ablation none --runs $(EVAL_RUNS) --threshold 0.66 --model $(EVAL_MODEL) --max-cost-usd $(EVAL_MAX_USD) --allow-tools Write Edit Bash
 # README demo: real girth commands on public skills (no model calls). Needs asciinema 3 and agg.
 demo: build ; asciinema rec --overwrite --headless --window-size 110x30 -c "sh examples/demo/demo.sh" target/demo.cast && agg --font-size 16 --idle-time-limit 2 target/demo.cast assets/demo.gif

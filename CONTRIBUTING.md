@@ -19,6 +19,19 @@ make check     # fmt, clippy -D warnings, tests, coverage >= 90%, plugin validat
 - **Skill text.** When editing any `SKILL.md`, follow `.claude/skills/girth-skill-authoring`: a description says only *when* to use the skill.
 - **Mutation testing.** `make mutate` should stay above 80% caught. Equivalent mutants go in `docs/mutation-notes.md`.
 - **Evals** (`make evals`) spend model credits, so maintainers run them before releases.
+  - They run each case in a bubblewrap sandbox. Ubuntu 24.04 and later block the user namespaces bubblewrap needs (`kernel.apparmor_restrict_unprivileged_userns = 1`), so without a fix every Bash call fails and every crafting case scores near 0.
+  - `make evals` checks for this first. The narrow fix is an AppArmor profile that lets only bwrap create user namespaces:
+    ```sh
+    sudo tee /etc/apparmor.d/bwrap <<'EOF'
+    abi <abi/4.0>,
+    include <tunables/global>
+    profile bwrap /usr/bin/bwrap flags=(unconfined) {
+      userns,
+      include if exists <local/bwrap>
+    }
+    EOF
+    sudo systemctl reload apparmor
+    ```
 
 ## Pull requests
 

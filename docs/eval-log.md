@@ -115,3 +115,12 @@ What `taste-launch` checks:
 - **Live run E** ($0.002): `cargo test --no-such-flag >/dev/null 2>&1`. The tool result was only `Exit code 1`, which matches no summary marker, and the turn recorded `["test_fail"]`. This proves core's `isError` reaches the mod, which the harness can't fake.
   - Run D (same command without the redirect) didn't prove it. RTK rewrote the output to `cargo test: 1 errors, 0 warnings`, which is itself a failure marker.
 - **The mod keeps a turn's last 64 Bash calls,** not its first, because a turn's commit usually comes last (raised in review).
+
+## Unreleased: spec-compliant metadata (2026-10-23), blocked by the sandbox
+
+`make evals` after the switch to flat `girth-*` metadata scored 0.20–0.75 on the five crafting cases and 1.00 on `no-fire-generic` and `no-source` (21 runs, $1.08). **These scores don't measure the change.**
+- The kept trace of `craft-captions` shows why: every Bash call failed before it ran, with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. The model then correctly stopped without writing anything.
+- The cause is the host, not Girth. After a kernel update (6.8.0-147), Ubuntu's `kernel.apparmor_restrict_unprivileged_userns = 1` blocks bubblewrap, so `bwrap --ro-bind / / true` fails outside the eval too.
+- The two cases that passed are the ones that don't need Bash to succeed.
+
+`make evals` now checks the sandbox first (`sandbox-ok`) and points to the AppArmor fix in CONTRIBUTING.md. The suite will be re-run once bwrap works again. Until then, the template change is covered by `tests/skill_md.rs` (the template meets the spec and passes `girth validate`) and the unit tests in `src/validate.rs`.
