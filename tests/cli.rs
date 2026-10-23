@@ -1181,6 +1181,16 @@ fn drift_reports_source_sections_that_moved_since_the_craft() {
         .success()
         .stdout("girth-captions: up to date\n");
     source("## Caption timing\nnew rule\n## Encoding\nx\n");
+    // Re-validating an unchanged crafted skill must not hide the drift.
+    girth()
+        .current_dir(tmp.path())
+        .env("GIRTH_HOME", &home)
+        .args(["validate", "--roots"])
+        .arg(&src)
+        .arg("--")
+        .arg(&crafted)
+        .assert()
+        .success();
     drift(&[&crafted]).code(1).stdout(
         "girth-captions: changed video-mega#caption-timing\ngirth-captions: missing video-mega#export\n",
     );

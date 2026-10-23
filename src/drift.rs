@@ -3,6 +3,9 @@
 //! `girth validate` records, per `<!-- src: skill#slug -->` marker, the hash of the source
 //! section it distilled. Drift re-hashes those sections in the skills installed now and
 //! compares. Report only: re-crafting stays the model's job.
+//!
+//! The baseline moves only when the crafted body changes: revalidating an unchanged skill
+//! keeps the old source hashes (see `record::craft_event`), so drift can't be silenced by it.
 
 use crate::ledger::{Event, SourceUse};
 use crate::record::body_sections;

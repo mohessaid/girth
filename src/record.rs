@@ -83,12 +83,12 @@ pub fn craft_event(
     };
     let current: HashSet<&str> = sections.iter().map(|s| s.hash.as_str()).collect();
     let before: HashSet<&str> = previous_sections.iter().map(|s| s.hash.as_str()).collect();
-    let added = sections
+    let added: Vec<String> = sections
         .iter()
         .filter(|s| !before.contains(s.hash.as_str()))
         .map(|s| s.hash.clone())
         .collect();
-    let removed = previous_sections
+    let removed: Vec<RemovedSection> = previous_sections
         .iter()
         .filter(|s| !current.contains(s.hash.as_str()))
         .map(|s| RemovedSection {
@@ -96,10 +96,16 @@ pub fn craft_event(
             src: s.src.clone(),
         })
         .collect();
-    let sources = referenced_sources(&sections)
-        .into_iter()
-        .map(|(skill, used)| source_use(skill, used, installed))
-        .collect();
+    // A no-op revalidate keeps the previous source hashes: they are what the body was
+    // distilled from, and `girth drift` compares against them. Only an extend re-baselines.
+    let unchanged = previous.is_some() && added.is_empty() && removed.is_empty();
+    let sources = match previous {
+        Some(Event::Craft { sources, .. }) if unchanged => sources.clone(),
+        _ => referenced_sources(&sections)
+            .into_iter()
+            .map(|(skill, used)| source_use(skill, used, installed))
+            .collect(),
+    };
     Event::Craft {
         skill: skill_dir
             .file_name()
@@ -255,6 +261,47 @@ mod tests {
         let second = craft_event(&dir, "/p", &installed, Some(&first));
         let (_, _, added, removed) = parts(&second);
         assert!(added.is_empty() && removed.is_empty());
+    }
+
+    #[test]
+    fn unchanged_body_keeps_the_source_baseline_after_the_source_moves() {
+        let (tmp, dir, installed) = setup("## A <!-- src: video-mega#export -->\nx\n");
+        let first = craft_event(&dir, "/p", &installed, None);
+        write_skill(
+            &tmp.path().join("src"),
+            "video-mega",
+            "name: video-mega\ndescription: d",
+            "## Export\nAV1 now\n",
+            &[],
+        );
+        let moved = discover_skills(&[tmp.path().join("src")]);
+        let second = craft_event(&dir, "/p", &moved, Some(&first));
+        assert_eq!(
+            parts(&second).1,
+            parts(&first).1,
+            "a no-op validate must not re-baseline"
+        );
+    }
+
+    #[test]
+    fn an_extend_rebaselines_the_sources() {
+        let (tmp, dir, installed) = setup("## A <!-- src: video-mega#export -->\nx\n");
+        let first = craft_event(&dir, "/p", &installed, None);
+        write_skill(
+            &tmp.path().join("src"),
+            "video-mega",
+            "name: video-mega\ndescription: d",
+            "## Export\nAV1 now\n",
+            &[],
+        );
+        std::fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: girth-captions\ndescription: d\n---\n## A <!-- src: video-mega#export -->\nAV1\n",
+        )
+        .unwrap();
+        let moved = discover_skills(&[tmp.path().join("src")]);
+        let second = craft_event(&dir, "/p", &moved, Some(&first));
+        assert_ne!(parts(&second).1, parts(&first).1);
     }
 
     #[test]
