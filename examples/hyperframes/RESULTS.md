@@ -50,3 +50,22 @@ Task (`task.md`): build a 6-second HyperFrames composition with word-by-word cap
 ## M1 exit status
 - Always-on reduction ≥ 10×: **met (38×)**.
 - Quality "no worse": **met**, with the pacing caveat above.
+
+## Replication, 8 runs per arm (2026-10-23)
+
+This uses the same task, crafted skill and `claude -p` flags as above, with 40 skills in `~/.claude/skills`.
+- `replicate.sh` alternates the arms one run at a time (bulk 1, girth 1, bulk 2, …), so time-of-day drift hits both arms and two browsers never run at once.
+- Each run is a fresh project with an isolated `GIRTH_HOME`.
+- `grade.py` reads `hyperframes check --json` (exit status, errors and warnings, summed over sections), and `../studio/summarize.py` reads usage from `modelUsage`.
+
+| Arm | Pass | Cost per run (mean ± 95% CI) | Fresh input tok | Output tok | Check warnings |
+|---|---|---|---|---|---|
+| bulk | 8/8 | $0.195 ± $0.013 | 31,194 ± 2,190 | 4,187 ± 556 | 1 in 3 of 8 runs |
+| girth | 8/8 | **$0.128 ± $0.011 (−34%)** | **17,307 ± 1,340 (−45%)** | 4,196 ± 557 | **0 in 8 of 8 runs** |
+
+- **Every girth run cost less than every bulk run:** $0.104–0.144 against $0.178–0.225. Mann–Whitney p < 0.001; Welch's t = 8.9, p < 10⁻⁶.
+- **Output was identical** (4.19K vs 4.20K tokens). The saving is the context the bulk arm carries and pulls in, not less work.
+- **The single run's finding holds:** girth's composition had no check warnings, while bulk had a warning in 3 runs out of 8.
+- **The saving grew** from −17% in the single 2026-10-14 run to −34% over 8 runs. One run per arm hid the size of the effect, not just its direction.
+
+Raw data: `runs/<arm>-<n>.json` and `runs/<arm>-<n>.grade.json`.

@@ -74,16 +74,16 @@ See `examples/lens/RESULTS.md`, including the pilot that showed names alone lose
 
 **SkillsBench, 6 tasks** (2026-10-15, claude-sonnet-5-5, one run per arm): Girth's one distilled skill per task **matched the task's curated skills on every task** (3/6 passed in each arm), with 23% fewer output tokens. Self-generated skills tend not to help (SkillsBench); skills distilled from curated sources kept their effect. See `examples/skillsbench/RESULTS.md`.
 
-**One session, before and after crafting** (2026-10-14):
+**HyperFrames captions, before and after crafting** (first run 2026-10-14, replicated with 8 runs per arm on 2026-10-23):
 
 | | Before | With Girth (bulk skills removed) |
 |---|---|---|
 | Always-on skill cost (39 user skills vs crafted) | 17,022 B ≈ 4.3K tok | 448 B ≈ 112 tok (**38× less**) |
-| Per-session new prompt tokens, HyperFrames task | 35.7K | 22.0K (**−38%**) |
-| Task cost, same task and model | $0.181 | $0.149 (**−17%**) |
-| HyperFrames check on the output | 1 warning | 0 warnings |
+| Fresh prompt tokens per session (mean of 8) | 31.2K | 17.3K (**−45%**) |
+| Task cost per session (mean of 8) | $0.195 | $0.128 (**−34%**; every girth run cheaper than every bulk run) |
+| HyperFrames check warnings | in 3 of 8 runs | in 0 of 8 runs |
 
-The studio and OpenMontage results above use 8 runs per arm. The Lens result uses 3. The rest are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
+The studio, OpenMontage and HyperFrames results above use 8 runs per arm, and Lens uses 3. The compounding and SkillsBench results are single runs, so read them as indicative. See `examples/hyperframes/RESULTS.md` for the full numbers and caveats, and `docs/eval-log.md` for the behavioural eval suite (7 cases, 21 runs, all 1.00).
 
 ## Install
 
