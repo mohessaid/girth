@@ -49,10 +49,12 @@ download() {
   t=$(target) || return 1
   url="$base/v$GIRTH_VERSION"
   mkdir -p "$bin_dir"
+  # Traps first: a signal between mktemp and the trap would leave the temp file behind.
+  tmp="" sums=""
+  trap 'rm -f ${tmp:+"$tmp"} ${sums:+"$sums"}' EXIT
+  trap 'exit 130' INT TERM HUP
   tmp=$(mktemp "$bin_dir/.girth-download.XXXXXX")
   sums="$tmp.sums"
-  trap 'rm -f "$tmp" "$sums"' EXIT
-  trap 'exit 130' INT TERM HUP
   echo "girth: downloading v$GIRTH_VERSION for $t (one time)..." >&2
   fetch "$url/girth-$t" "$tmp" 2>/dev/null || return 1
   fetch "$url/SHA256SUMS" "$sums" 2>/dev/null || return 1
