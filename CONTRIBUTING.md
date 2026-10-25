@@ -22,16 +22,9 @@ make check     # fmt, clippy -D warnings, tests, coverage >= 90%, plugin validat
   - They run each case in a bubblewrap sandbox. Ubuntu 24.04 and later block the user namespaces bubblewrap needs (`kernel.apparmor_restrict_unprivileged_userns = 1`), so without a fix every Bash call fails and every crafting case scores near 0.
   - `make evals` checks for this first. The narrow fix is an AppArmor profile that lets only bwrap create user namespaces:
     ```sh
-    sudo tee /etc/apparmor.d/bwrap <<'EOF'
-    abi <abi/4.0>,
-    include <tunables/global>
-    profile bwrap /usr/bin/bwrap flags=(unconfined) {
-      userns,
-      include if exists <local/bwrap>
-    }
-    EOF
-    sudo systemctl reload apparmor
+    printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap && sudo apparmor_parser -r /etc/apparmor.d/bwrap
     ```
+    Then `make sandbox-ok` should pass.
 
 ## Pull requests
 
