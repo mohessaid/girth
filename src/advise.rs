@@ -441,6 +441,59 @@ mod tests {
     }
 
     #[test]
+    fn only_expensive_subagents_count_and_main_turns_never_do() {
+        let mut cheap = turn(SONNET, 0, 100_000);
+        cheap.agent = true;
+        let main_opus = turn("claude-opus-5-5", 0, 100_000);
+        let a = advise(
+            &[rec(NOW - 90, cheap), rec(NOW - 80, main_opus)],
+            NOW,
+            WEEK,
+            On::default(),
+        );
+        assert!(
+            a.contributors.iter().all(|c| c.kind != "subagents"),
+            "{a:?}"
+        );
+    }
+
+    #[test]
+    fn large_context_is_per_request_and_150k_is_not_large() {
+        let mut spread = turn(SONNET, 400_000, 0);
+        spread.requests = Some(4); // 100K per request
+        let edge = turn(SONNET, LARGE_CONTEXT, 0);
+        let a = advise(
+            &[rec(NOW - 90, spread), rec(NOW - 80, edge)],
+            NOW,
+            WEEK,
+            On::default(),
+        );
+        assert!(a.contributors.iter().all(|c| c.kind != "context"), "{a:?}");
+    }
+
+    #[test]
+    fn window_labels_use_days_only_for_whole_days() {
+        assert_eq!(window_label(7 * 86_400), "7d");
+        assert_eq!(window_label(86_400), "1d");
+        assert_eq!(window_label(36 * 3600), "36h");
+        assert_eq!(window_label(3600), "1h");
+        assert_eq!(window_label(100), "1h");
+    }
+
+    #[test]
+    fn exactly_one_percent_is_shown_and_no_tail_note_without_a_tail() {
+        let records = vec![
+            used(NOW - 100, "big"),
+            rec(NOW - 90, turn(SONNET, 0, 990_000)),
+            used(NOW - 60, "edge"),
+            rec(NOW - 50, turn(SONNET, 0, 10_000)),
+        ];
+        let text = render(&advise(&records, NOW, WEEK, On::default()));
+        assert!(text.contains("edge"), "{text}");
+        assert!(!text.contains("more under 1%"), "{text}");
+    }
+
+    #[test]
     fn brief_is_silent_below_the_threshold() {
         let mut records = vec![
             used(NOW - 100, "rare"),
