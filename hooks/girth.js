@@ -181,6 +181,16 @@ function tail(text) {
   return first >= 0xdc00 && first <= 0xdfff ? cut.slice(1) : cut
 }
 
+// The session id lets `girth advise` follow a skill and a session's age; never fatal.
+async function sessionId($) {
+  try {
+    const id = await $.session.id()
+    return typeof id === 'string' && id !== '' ? id : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     advised = false
@@ -332,6 +342,7 @@ export function register(on) {
     model = usage.model
     const turn = {
       project: await $.session.cwd(),
+      session: await sessionId($),
       model: usage.model,
       input: usage.input_tokens,
       output: usage.output_tokens,

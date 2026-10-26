@@ -64,9 +64,10 @@ test('a binary that cannot run or prints garbage leaves the listing unchanged', 
   expect(b.text).toBe(LISTING + '- c: C.\n')
 })
 
-test('turn.complete records usage, with the Lens byte counts on main-loop turns', async ($, on) => {
+test('turn.complete records usage, with the session and the Lens byte counts on main-loop turns', async ($, on) => {
   const runs: Run[] = []
   on('session.cwd', () => ({ value: '/work/app' }))
+  on('session.id', () => ({ value: 's-1' }))
   on('process.run', ($, e) => {
     runs.push({ argv: e.argv, stdin: e.init?.stdin })
     return { value: { exitCode: 0, stdout: e.argv[1] === 'lens' ? lensOut() : '', stderr: '' } }
@@ -90,6 +91,7 @@ test('turn.complete records usage, with the Lens byte counts on main-loop turns'
   expect(meters[0].argv.slice(1)).toEqual(['meter', 'record'])
   expect(JSON.parse(meters[0].stdin!)).toEqual({
     project: '/work/app',
+    session: 's-1',
     model: 'claude-opus-5-5',
     input: 2,
     output: 7,
@@ -103,7 +105,25 @@ test('turn.complete records usage, with the Lens byte counts on main-loop turns'
   })
   const sub = JSON.parse(meters[1].stdin!)
   expect(sub.agent).toBe(true)
+  expect(sub.session).toBe('s-1')
   expect(sub.lens_before).toBeUndefined()
+})
+
+test('a session id that cannot be read leaves it out and still records the turn', async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('session.id', () => ({ deny: 'unavailable' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const meters = runs.filter((r) => r.argv[1] === 'meter')
+  expect(meters.length).toBe(1)
+  const turn = JSON.parse(meters[0].stdin!)
+  expect(turn.session).toBeUndefined()
+  expect(turn.model).toBe('claude-opus-5-5')
 })
 
 test('a failing meter never disturbs the turn', async ($, on) => {

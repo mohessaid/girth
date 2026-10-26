@@ -306,6 +306,34 @@ fn record_use_reads_hook_json_from_stdin() {
     assert_eq!(lines[0]["kind"], "use");
     assert_eq!(lines[0]["skill"], "girth:girth");
     assert_eq!(lines[0]["project"], "/proj");
+    assert!(lines[0].get("session").is_none() && lines[0].get("agent").is_none());
+}
+
+#[test]
+fn record_use_keeps_the_session_and_whether_a_subagent_ran_it() {
+    let tmp = TempDir::new().unwrap();
+    for input in [
+        r#"{"tool_input":{"skill":"a"},"cwd":"/p","session_id":"s1"}"#,
+        r#"{"tool_input":{"skill":"b"},"cwd":"/p","session_id":"s1","agent_id":"x"}"#,
+        r#"{"tool_input":{"skill":"c"},"cwd":"/p","session_id":""}"#,
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path())
+            .args(["record", "use"])
+            .write_stdin(input)
+            .assert()
+            .success();
+    }
+    let lines = ledger_lines(tmp.path());
+    assert_eq!(
+        (&lines[0]["session"], &lines[0].get("agent")),
+        (&"s1".into(), &None)
+    );
+    assert_eq!(
+        (&lines[1]["session"], &lines[1]["agent"]),
+        (&"s1".into(), &true.into())
+    );
+    assert!(lines[2].get("session").is_none(), "{:?}", lines[2]);
 }
 
 #[test]

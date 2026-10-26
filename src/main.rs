@@ -253,22 +253,42 @@ enum RatingArg {
     Down,
 }
 
-/// (skill, project) from a PostToolUse hook payload.
-fn hook_use(stdin: &str) -> Option<(String, Option<String>)> {
+/// A skill use as a PostToolUse hook reports it.
+struct HookUse {
+    skill: String,
+    cwd: Option<String>,
+    session: Option<String>,
+    agent: bool,
+}
+
+fn hook_use(stdin: &str) -> Option<HookUse> {
     let value: serde_json::Value = serde_json::from_str(stdin).ok()?;
     let skill = value.pointer("/tool_input/skill")?.as_str()?.trim();
-    let cwd = value
-        .get("cwd")
-        .and_then(|c| c.as_str())
-        .map(str::to_string);
-    (!skill.is_empty()).then(|| (skill.to_string(), cwd))
+    let text = |key: &str| {
+        value
+            .get(key)
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+    };
+    (!skill.is_empty()).then(|| HookUse {
+        skill: skill.to_string(),
+        cwd: text("cwd"),
+        session: text("session_id"),
+        agent: text("agent_id").is_some(),
+    })
 }
 
 /// Record a use; for a skill with remembered taste, return the hook JSON that injects it.
 fn record_use(skill: Option<String>, ctx: &Context) -> String {
     use std::io::{IsTerminal, Read};
     let found = match skill {
-        Some(skill) => Some((skill, None)),
+        Some(skill) => Some(HookUse {
+            skill,
+            cwd: None,
+            session: None,
+            agent: false,
+        }),
         None if !std::io::stdin().is_terminal() => {
             let mut input = String::new();
             let _ = std::io::stdin().read_to_string(&mut input);
@@ -276,7 +296,13 @@ fn record_use(skill: Option<String>, ctx: &Context) -> String {
         }
         None => None,
     };
-    let Some((skill, cwd)) = found else {
+    let Some(HookUse {
+        skill,
+        cwd,
+        session,
+        agent,
+    }) = found
+    else {
         return String::new();
     };
     let project = cwd.unwrap_or_else(|| ctx.cwd.display().to_string());
@@ -287,6 +313,8 @@ fn record_use(skill: Option<String>, ctx: &Context) -> String {
         Event::Use {
             skill: skill.clone(),
             project: project.clone(),
+            session,
+            agent,
         },
     );
     // The hook runs on every Skill call: parse only lines that can matter.

@@ -163,7 +163,7 @@ pub fn rewrite(text: &str, inputs: &Inputs) -> Rewrite {
     let mut used_here = HashSet::new();
     let mut used_recently = HashSet::new();
     for record in inputs.records {
-        if let Event::Use { skill, project } = &record.event {
+        if let Event::Use { skill, project, .. } = &record.event {
             if project == inputs.project {
                 used_here.insert(base(skill));
             }
@@ -293,6 +293,8 @@ SKIP only when another provider is used.
             Event::Use {
                 skill: skill.into(),
                 project: project.into(),
+                session: None,
+                agent: false,
             },
         )
     }

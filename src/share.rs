@@ -280,11 +280,12 @@ mod tests {
             }
             let records = vec![
                 record,
-                rec(Event::Use { skill: skill.clone(), project: project.clone() }),
+                rec(Event::Use { skill: skill.clone(), project: project.clone(), session: None, agent: false }),
                 rec(Event::Feedback { skill: skill.clone(), project: project.clone(), rating: Rating::Up, note: Some(note.clone()) }),
                 rec(Event::Seen { names: vec![skill.clone(), note.clone()] }),
                 rec(Event::Turn(crate::ledger::Turn {
                     project: project.clone(), model: heading.clone(), input: 1, output: 1,
+                    session: None,
                     cache_read: 0, cache_write: 0, agent: false, aborted: false,
                     lens_before: None, lens_after: None, requests: None, mcp: vec![skill.clone()],
                     breaks: vec![crate::ledger::Break { lost: 777_001, rewritten: 777_002, idle_s: 777_003 }],

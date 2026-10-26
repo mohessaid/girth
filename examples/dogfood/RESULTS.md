@@ -67,3 +67,17 @@ girth-skill-authoring: up to date
 Between 2026-10-17 and 2026-10-23, the author's user skills went from 40 to 26. Three of `girth-video`'s five sources were uninstalled. The crafted skill still carries their distilled slice: that is the point of the cache, and the intro video it guided was finished. But nothing can confirm that slice is still current, and `drift` now says so instead of staying silent.
 
 **Bug found while building it.** `cargo clippy` in the full gate caught a `src.clone()` slice in the new tests. Separately, the gate's run hit a real launcher race: `an_interrupted_download_leaves_nothing_behind` failed under load because `mktemp` ran before the cleanup traps were set. Fixed in the launcher; the test passes 8 of 8 with the CPU saturated.
+
+## `girth advise` against `/usage` (2026-10-26)
+
+| Cause | `/usage` | `girth advise` (author's ledger) |
+|---|---|---|
+| Large conversations (`/clear`, `/compact`) | 95% (24 h) | 90–98% |
+| Subagents on the main model | 61% (24 h) | 30% (7 d, on 2026-10-25); 21% on 2026-10-26 |
+| `/playwright-cli` | 16% | 0.04% |
+
+**Why the skill row differed (Kestrelle #18).** It was not a hook gap. Every Skill call since the ledger began (2026-10-13), in the main loop and in subagents, has a matching `use` line; the one subagent call after that date matches to the second. The difference is attribution. A loaded skill stays in context for the rest of the session and is re-injected after each compaction: one `playwright-cli` call in a long session appeared 72 times in its transcript. `/usage` charges the skill for that residency. `advise` charged only the turn after the call.
+
+**Change.** The mod now records the session id on every turn, and the Skill hook records it, plus whether a subagent ran the skill, on every use. `advise` charges a skill for every later main turn of its session, and adds *turns 8 h+ into a session* (fix: `/clear` on a task switch).
+
+**Pending.** Ledger lines from before this change have no session id, so they keep the one-turn charge. Re-run the comparison once a week of new sessions has accumulated.

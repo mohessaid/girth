@@ -52,6 +52,12 @@ pub enum Event {
     Use {
         skill: String,
         project: String,
+        /// The Claude Code session it ran in, when the hook said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+        /// Run by a subagent rather than the main loop.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        agent: bool,
     },
     Craft {
         skill: String,
@@ -70,9 +76,7 @@ pub enum Event {
         note: Option<String>,
     },
     /// Skill names Lens saw in a listing for the first time; the first one is the baseline.
-    Seen {
-        names: Vec<String>,
-    },
+    Seen { names: Vec<String> },
     /// One turn's token usage, as Claude Code reported it.
     Turn(Turn),
     /// A keeper ping: a fork that read the cached conversation to keep it warm.
@@ -119,6 +123,9 @@ pub struct Break {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Turn {
     pub project: String,
+    /// The Claude Code session id, when the mod could read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
     pub model: String,
     pub input: u64,
     pub output: u64,
@@ -266,6 +273,8 @@ mod tests {
         Event::Use {
             skill: skill.into(),
             project: "/p".into(),
+            session: None,
+            agent: false,
         }
     }
 
@@ -313,6 +322,7 @@ mod tests {
         };
         let turn = Event::Turn(Turn {
             project: "/p".into(),
+            session: None,
             model: "claude-opus-5-5".into(),
             input: 2,
             output: 7,
@@ -414,9 +424,44 @@ mod tests {
         }
     }
 
+    #[test]
+    fn session_ids_round_trip_and_old_lines_have_none() {
+        let old_use = r#"{"kind":"use","skill":"s","project":"/p"}"#;
+        assert_eq!(
+            serde_json::from_str::<Event>(old_use).unwrap(),
+            use_event("s")
+        );
+        let quiet = serde_json::to_string(&use_event("s")).unwrap();
+        assert!(
+            !quiet.contains("session") && !quiet.contains("agent"),
+            "{quiet}"
+        );
+
+        let used = Event::Use {
+            skill: "s".into(),
+            project: "/p".into(),
+            session: Some("abc".into()),
+            agent: true,
+        };
+        let text = serde_json::to_string(&used).unwrap();
+        assert!(text.contains(r#""session":"abc","agent":true"#), "{text}");
+        assert_eq!(serde_json::from_str::<Event>(&text).unwrap(), used);
+
+        let turn = Event::Turn(Turn {
+            session: Some("abc".into()),
+            ..turn_fixture()
+        });
+        let text = serde_json::to_string(&turn).unwrap();
+        assert!(text.contains(r#""session":"abc""#), "{text}");
+        assert_eq!(serde_json::from_str::<Event>(&text).unwrap(), turn);
+        let quiet = serde_json::to_string(&Event::Turn(turn_fixture())).unwrap();
+        assert!(!quiet.contains("session"), "{quiet}");
+    }
+
     fn turn_fixture() -> Turn {
         Turn {
             project: "/p".into(),
+            session: None,
             model: "claude-opus-5-5".into(),
             input: 2,
             output: 7,

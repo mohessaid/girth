@@ -156,6 +156,8 @@ mod tests {
         let e = Event::Use {
             skill: "girth-x".into(),
             project: "/p".into(),
+            session: None,
+            agent: false,
         };
         assert!(drift(&e, &[]).is_empty());
     }

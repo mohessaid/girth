@@ -2,6 +2,8 @@
 //! things working. Read from the local ledger; costs are list-price estimates, and shares
 //! overlap (a turn that ran two skills counts toward both).
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::Serialize;
 
 use crate::ledger::{Event, Record, Turn};
@@ -13,6 +15,8 @@ pub const BRIEF_SHARE: f64 = 0.15;
 pub const LARGE_CONTEXT: u64 = 150_000;
 /// The `--brief` line is shown at session start; keep it short.
 pub const BRIEF_MAX_CHARS: usize = 120;
+/// Turns taken more than this many seconds after a session's first turn are late.
+pub const LONG_SESSION: u64 = 8 * 3600;
 
 /// Levers that are already on, so their advice is suppressed.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -24,7 +28,7 @@ pub struct On {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Contributor {
-    /// `skill`, `context`, `rewrites` or `subagents`.
+    /// `skill`, `context`, `sessions`, `rewrites` or `subagents`.
     pub kind: &'static str,
     pub label: String,
     /// Share of spend in the window, 0–1.
@@ -89,23 +93,42 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             }
         };
 
-    // Skills: a `use` event charges the next turn of the same project (the turn it ran in).
-    let mut per_skill: std::collections::BTreeMap<&str, (f64, std::collections::BTreeSet<u64>)> =
-        Default::default();
-    for r in records.iter().filter(in_window) {
-        let Event::Use { skill, project } = &r.event else {
+    // Skills. A loaded skill stays in context for the rest of its session, so with a session
+    // id a main-loop use charges every later main turn there (even a use from before the
+    // window), and a subagent's use its next subagent turn. Without one (older ledgers), a
+    // use charges the next turn of the same project. Each turn counts once per skill.
+    let mut per_skill: BTreeMap<&str, (f64, BTreeSet<usize>)> = Default::default();
+    for r in records {
+        let Event::Use {
+            skill,
+            project,
+            session,
+            agent,
+        } = &r.event
+        else {
             continue;
         };
         if skill == "girth" || skill.starts_with("girth:") || skill.starts_with("girth-") {
             continue;
         }
-        if let Some((ts, t)) = turns
-            .iter()
-            .find(|(ts, t)| *ts >= r.ts && &t.project == project)
-        {
-            let entry = per_skill.entry(skill.as_str()).or_default();
-            if entry.1.insert(*ts) {
-                entry.0 += turn_cost(t);
+        let later = turns.iter().enumerate().filter(|(_, (ts, _))| *ts >= r.ts);
+        let charged: Vec<usize> = match session {
+            Some(s) => later
+                .filter(|(_, (_, t))| t.agent == *agent && t.session.as_ref() == Some(s))
+                .take(if *agent { 1 } else { usize::MAX })
+                .map(|(i, _)| i)
+                .collect(),
+            None if in_window(&r) => later
+                .filter(|(_, (_, t))| &t.project == project)
+                .take(1)
+                .map(|(i, _)| i)
+                .collect(),
+            None => Vec::new(),
+        };
+        let entry = per_skill.entry(skill.as_str()).or_default();
+        for i in charged {
+            if entry.1.insert(i) {
+                entry.0 += turn_cost(turns[i].1);
             }
         }
     }
@@ -134,6 +157,37 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         large,
         "/compact <what to keep> at a natural break, or /clear when you switch tasks".into(),
         "the summary keeps what you name; /clear starts clean for unrelated work",
+    );
+
+    // Long sessions: turns taken more than LONG_SESSION after the session's first turn.
+    let mut first: BTreeMap<&str, u64> = BTreeMap::new();
+    for r in records {
+        if let Event::Turn(Turn {
+            session: Some(s), ..
+        }) = &r.event
+        {
+            let f = first.entry(s.as_str()).or_insert(r.ts);
+            *f = (*f).min(r.ts);
+        }
+    }
+    let late: f64 = turns
+        .iter()
+        .filter(|(ts, t)| {
+            t.session
+                .as_deref()
+                .and_then(|s| first.get(s))
+                .is_some_and(|f| ts.saturating_sub(*f) > LONG_SESSION)
+        })
+        .map(|(_, t)| turn_cost(t))
+        .sum();
+    push(
+        &mut out,
+        "sessions",
+        "turns 8h+ into a session".into(),
+        late,
+        "/clear when you switch tasks: a fresh session re-reads only what the new task needs"
+            .into(),
+        "CLAUDE.md, project skills and the ledger carry over; /compact <what to keep> if the work goes on",
     );
 
     // Cache rewrites after idle gaps.
@@ -261,6 +315,7 @@ mod tests {
     fn turn(model: &str, cache_read: u64, output: u64) -> Turn {
         Turn {
             project: "/p".into(),
+            session: None,
             model: model.into(),
             input: 0,
             output,
@@ -292,11 +347,41 @@ mod tests {
             event: Event::Use {
                 skill: skill.into(),
                 project: "/p".into(),
+                session: None,
+                agent: false,
             },
         }
     }
 
     const SONNET: &str = "claude-sonnet-5-5";
+
+    fn in_session(session: &str, agent: bool) -> Turn {
+        Turn {
+            session: Some(session.into()),
+            agent,
+            ..turn(SONNET, 0, 100_000)
+        }
+    }
+
+    fn used_in(ts: u64, skill: &str, session: &str, agent: bool) -> Record {
+        Record {
+            v: 1,
+            ts,
+            event: Event::Use {
+                skill: skill.into(),
+                project: "/p".into(),
+                session: Some(session.into()),
+                agent,
+            },
+        }
+    }
+
+    fn share(a: &Advice, kind: &str) -> f64 {
+        a.contributors
+            .iter()
+            .find(|c| c.kind == kind)
+            .map_or(0.0, |c| c.share)
+    }
 
     #[test]
     fn empty_ledger_has_no_spend_and_no_brief() {
@@ -502,5 +587,73 @@ mod tests {
         records.push(rec(NOW - 50, turn(SONNET, 0, 1_000_000)));
         let a = advise(&records, NOW, WEEK, On::default());
         assert_eq!(brief(&a), None, "{a:?}");
+    }
+
+    #[test]
+    fn a_skill_stays_charged_for_the_rest_of_its_session_once() {
+        // Used twice in s1, before and inside the window: every later s1 turn counts once.
+        let records = vec![
+            rec(NOW - WEEK - 200, in_session("s1", false)),
+            used_in(NOW - WEEK - 100, "playwright-cli", "s1", false),
+            rec(NOW - 90, in_session("s1", false)),
+            used_in(NOW - 80, "playwright-cli", "s1", false),
+            rec(NOW - 70, in_session("s1", false)),
+            rec(NOW - 60, in_session("s2", false)),
+            rec(NOW - 50, in_session("s1", true)),
+        ];
+        let a = advise(&records, NOW, WEEK, On::default());
+        assert!((share(&a, "skill") - 0.5).abs() < 1e-9, "{a:?}");
+    }
+
+    #[test]
+    fn a_subagent_skill_is_charged_for_its_next_subagent_turn_only() {
+        let records = vec![
+            used_in(NOW - 100, "dataviz", "s1", true),
+            rec(NOW - 90, in_session("s1", false)),
+            rec(
+                NOW - 80,
+                Turn {
+                    output: 300_000,
+                    ..in_session("s1", true)
+                },
+            ),
+            rec(NOW - 70, in_session("s1", true)),
+            rec(NOW - 60, in_session("s1", false)),
+        ];
+        // 3 of 6: the subagent turn after the use, not the main turn before it.
+        let a = advise(&records, NOW, WEEK, On::default());
+        assert!((share(&a, "skill") - 0.5).abs() < 1e-9, "{a:?}");
+    }
+
+    #[test]
+    fn turns_more_than_8h_into_a_session_point_at_clear() {
+        let h8 = 8 * 3600;
+        let records = vec![
+            rec(NOW - WEEK - 10, in_session("old", false)),
+            rec(NOW - 90, in_session("old", false)),
+            rec(NOW - 80, in_session("old", false)),
+            rec(NOW - h8 - 100, in_session("s", false)),
+            rec(NOW - 100, in_session("s", false)),
+            rec(NOW - 99, in_session("s", false)),
+            rec(NOW - 50, in_session("t", false)),
+        ];
+        let a = advise(&records, NOW, WEEK, On::default());
+        // Late: both "old" turns and the one 8h+1s into "s"; exactly 8h is not late.
+        assert!((share(&a, "sessions") - 0.5).abs() < 1e-9, "{a:?}");
+        let c = a
+            .contributors
+            .iter()
+            .find(|c| c.kind == "sessions")
+            .unwrap();
+        assert!(c.fix.contains("/clear"), "{c:?}");
+        // Turns without a session id are never part of a long session.
+        let legacy = vec![
+            rec(NOW - WEEK + 10, turn(SONNET, 0, 100_000)),
+            rec(NOW - 10, turn(SONNET, 0, 100_000)),
+        ];
+        assert_eq!(
+            share(&advise(&legacy, NOW, WEEK, On::default()), "sessions"),
+            0.0
+        );
     }
 }

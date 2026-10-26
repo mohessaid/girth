@@ -33,7 +33,7 @@ It reads the ledger and ranks **contributors**: each has a share of spend (`pric
 | Cache rewrites after idle (`breaks`) | keeper or idle compaction | keeper only pings; compaction is opt-in and keeps the named items |
 | Context per turn grows past N (cache_read per turn) | `/compact <what to keep>` at a natural break, or `/clear` on a task switch | the summary keeps the named details |
 | Subagent turns on the main model (`agent`) | `{"agents":{"model":"sonnet"}}` | code edits stay on the main model |
-| Long or overlapping sessions (session id + span, new) | stop idle ones; fewer at once | — |
+| Turns 8 h+ into a session (`Turn.session`, new) | `/clear` on a task switch | CLAUDE.md, project skills and the ledger carry over; `/compact` if the work goes on |
 | MCP servers connected but unused (`mcp`) | Lens collapses them | servers that are used are kept |
 
 - **`--brief`** prints only the top contributor above a threshold (≥ 15% of spend in the window) whose fix isn't already on. If there is none, it prints nothing.
@@ -51,14 +51,16 @@ It reads the ledger and ranks **contributors**: each has a share of spend (`pric
 
 ### 3. New ledger fields (additive, `#[serde(default)]`)
 
-- `Turn.session` (id) and `Turn.skills` (skills invoked in the turn). These are needed for per-skill attribution and the session-span and overlap contributors.
-- Old lines parse unchanged. Before `Turn.skills` has data, per-skill attribution is approximated by matching the existing `Use` events (recorded by the `PostToolUse: Skill` hook) to turns by timestamp. This lets the dogfood run use the author's existing 7-day ledger.
+- `Turn.session`, and `Use.session` plus `Use.agent` from the Skill hook's `session_id` and `agent_id`. `Turn.skills` was dropped: the hook already records every Skill call, in subagents too (checked against transcripts, Kestrelle #18).
+- **Residency:** a loaded skill stays in context, and is re-injected after compaction, for the rest of its session. A main-loop use charges every later main turn of that session, a subagent's use its next subagent turn. This is how `/usage` can show a skill at 16% that ran once.
+- Old lines parse unchanged and fall back to charging the next turn of the same project.
 
 ## Not in scope
 
 - Auto-applying fixes. Girth suggests, and the user or Claude applies.
 - Plan-limit percentages. Claude Code doesn't expose them to plugins. Girth reports its own measured spend and says it is approximate.
 - Sharing. Everything stays local.
+- Overlapping sessions. Running sessions one after another spends the same tokens as running them at once, so "fewer at once" cuts no spend and has no guard. Not a contributor.
 
 ## Tests
 

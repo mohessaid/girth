@@ -114,7 +114,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
                 .position(|r| r.skill == base_name(skill) && r.project == project)
         };
         match &record.event {
-            Event::Use { skill, project } => {
+            Event::Use { skill, project, .. } => {
                 if let Some(i) = row_for(&mut crafted, skill, project) {
                     crafted[i].uses += 1;
                 }
@@ -221,6 +221,8 @@ mod tests {
         rec(Event::Use {
             skill: skill.into(),
             project: project.into(),
+            session: None,
+            agent: false,
         })
     }
 

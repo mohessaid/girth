@@ -173,6 +173,7 @@ mod tests {
             ts: 1,
             event: Event::Turn(Turn {
                 project: project.into(),
+                session: None,
                 model: model.into(),
                 input,
                 output: 10,
