@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
 ### Added
 - **`girth advise [--since 24h|7d] [--brief] [--json]`** ranks what's costing you, from the local ledger, at list prices (shares overlap). It covers skills (charged for the turn they ran in), large conversations, cache rewrites after idle and subagents on an expensive model. Each contributor comes with a fix that names a Girth lever or a Claude Code command, and the guard that shows the fix keeps things working. Text output hides contributors under 1%; `--json` lists them all.
 - **Always in scope:** after the first main answer of each session, the mod shows `girth advise --brief`. That is one line, at most 120 characters, addressed to you, and only when one contributor is at least 15% of spend. It is never an instruction to Claude. The shipped skill gains an intent, *cut usage or costs* (`references/advise.md`): Claude applies one fix at a time, the one you pick, with its guard.
@@ -173,7 +175,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mohessaid/girth/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mohessaid/girth/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mohessaid/girth/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/mohessaid/girth/compare/v0.7.0...v0.7.1
