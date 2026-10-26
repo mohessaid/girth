@@ -391,6 +391,34 @@ test('the doctor line is left out when there is none, and bad meter output chang
   expect((await $.turn.complete(done)).text).toBe('other mod\ngirth: x')
 })
 
+test('girth advise --brief shows once per session, under the first main answer, and only when it says something', async ($, on) => {
+  const advise: string[][] = []
+  const brief = 'girth: 90% of your spend (7d) is large conversations. Ask me to cut it.\n'
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($: any, e: any) => {
+    if (e.argv.includes('advise')) {
+      advise.push(e.argv)
+      return { value: { exitCode: 0, stdout: brief, stderr: '' } }
+    }
+    return { value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 } }), stderr: '' } }
+  })
+  on('turn.complete', () => ({ text: 'a' }))
+  on('command.register', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: true }))
+  on('session.start', () => ({ cwd: '/work/app' }))
+  // A new session gets its one line, whatever earlier sessions showed.
+  await $.session.start({ cwd: '/work/app' })
+  const done = { turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE }
+  // A subagent's turn doesn't use up the session's one line.
+  await $.turn.complete({ ...done, agentId: 'sub' })
+  expect(advise.length).toBe(0)
+  expect((await $.turn.complete(done)).text).toBe('girth: 90% of your spend (7d) is large conversations. Ask me to cut it.')
+  expect(advise[0]).toContain('--brief')
+  // Once per session.
+  expect((await $.turn.complete(done)).text).toBe('a')
+  expect(advise.length).toBe(1)
+})
+
 import { compactor, keeper, ping } from '../girth.js'
 
 const FORK_USAGE = { input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 200_000, cache_creation_input_tokens: 0 }

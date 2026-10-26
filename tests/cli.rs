@@ -1198,3 +1198,48 @@ fn drift_reports_source_sections_that_moved_since_the_craft() {
         .code(1)
         .stdout("girth-other: no recorded craft here (run girth validate first)\n");
 }
+
+#[test]
+fn advise_is_silent_when_empty_and_names_the_top_cost_when_one_dominates() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let advise = |args: &[&str]| {
+        girth()
+            .current_dir(tmp.path())
+            .env("GIRTH_HOME", &home)
+            .arg("advise")
+            .args(args)
+            .assert()
+            .success()
+    };
+    advise(&["--brief"]).stdout("");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    std::fs::create_dir_all(&home).unwrap();
+    let turn = |ts: u64, output: u64| {
+        format!(
+            r#"{{"v":1,"ts":{ts},"kind":"turn","project":"/p","model":"claude-sonnet-5-5","input":0,"output":{output},"cache_read":0,"cache_write":0,"agent":false,"aborted":false}}"#
+        )
+    };
+    let lines = [
+        format!(
+            r#"{{"v":1,"ts":{},"kind":"use","skill":"playwright-cli","project":"/p"}}"#,
+            now - 100
+        ),
+        turn(now - 90, 300_000),
+        turn(now - 50, 10_000),
+    ];
+    std::fs::write(home.join("ledger.jsonl"), lines.join("\n") + "\n").unwrap();
+    advise(&["--brief"])
+        .stdout("girth: 97% of your spend (7d) ran with playwright-cli; I can distil its slice.\n");
+    let full = String::from_utf8(advise(&["--since", "24h"]).get_output().stdout.clone()).unwrap();
+    assert!(
+        full.contains("playwright-cli") && full.contains("keeps working:"),
+        "{full}"
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&advise(&["--json"]).get_output().stdout).unwrap();
+    assert_eq!(json["contributors"][0]["kind"], "skill");
+}

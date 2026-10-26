@@ -5,7 +5,7 @@ description: Use when a task needs specialised domain know-how (library conventi
 
 # Girth: just-in-time project skills
 
-Girth distils large installed skills into small project-scoped ones (a cache: pay once, reuse cheaply) and keeps a local ledger of what gets used, kept and removed.
+Girth distils large installed skills into small project-scoped ones (a cache: pay once, reuse cheaply) and keeps a local ledger of what gets used.
 
 Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run each call as a single command, without `cd` or pipes.
 
@@ -17,6 +17,7 @@ Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run e
 | see what Girth has learned | `references/stats.md` |
 | change or inspect sharing | `references/sharing.md` |
 | remember or forget a preference, or see past choices | `references/taste.md` |
+| cut usage or costs | `references/advise.md` |
 
 Otherwise, craft:
 
@@ -26,7 +27,7 @@ Write the need as one sentence. Pick a lowercase, hyphenated domain slug broad e
 ## 2. Search, cache first
 Run `scripts/girth search "<need>" --json`. Note `output_dir` (where crafted skills live).
 - A `girth-<domain>` hit is a cache hit. Run `scripts/girth drift <dir>`; refresh what it reports. If it covers the need, set `girth-last-used` to today (flatten any nested `girth:` block), use it, and skip to step 6; if it covers part, extend it (step 4).
-- Skills listed only under "Also installed" are installed; search finds them.
+- Skills listed under "Also installed" are installed; search finds them.
 - Otherwise read the top candidates' `matched_headings` via `scripts/girth show <path> --heading "<heading>"…` (no args lists headings), never whole files.
 
 ## 3. Decide
@@ -68,7 +69,7 @@ Distillation rules:
 Run `scripts/girth validate <output_dir>/girth-<domain>` and fix until it prints `VALID` (this also records it).
 
 ## 6. Report and continue
-In one line, say whether you crafted, extended or reused, with sources and body size; then continue the task using the crafted skill.
+In one line, say whether you crafted, extended or reused, with sources and body size; then continue the task with it.
 
 ## Taste (recurring deliverables)
 Before producing a deliverable, run `scripts/girth taste show <domain>` unless taste context already arrived. Apply every house rule; vary each recent key unless a rule, the request or a source skill's confirmed preference pins it, and say what is fresh. When done, run `scripts/girth made <domain> key=value…`. New requests add to rules; never drop them. See `references/taste.md`.

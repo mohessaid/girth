@@ -58,6 +58,9 @@ const MAX_CALLS = 64
 // prompt didn't shrink below 80% of it (compaction or /clear).
 const BREAK_MIN = 5000
 
+// `girth advise --brief`: one line under the session's first main answer, at most.
+let advised = false
+
 const PING_PROMPT = 'Reply with one character: .'
 
 /** One ping: fork the conversation, record the usage; true when the cache was warm. */
@@ -180,6 +183,7 @@ function tail(text) {
 
 export function register(on) {
   on('session.start', async ($, e, next) => {
+    advised = false
     for (const [name, description] of [
       ['girth-meter', 'Show token usage and Lens savings for this project'],
       ['girth-xray', 'Show what the last request was made of'],
@@ -396,14 +400,25 @@ export function register(on) {
       })
       squeeze.start(report.keeper, context)
     }
-    if (typeof report.line === 'string' && e.agentId === undefined) {
-      // next(e) resolves to the answer itself; a different text is another
-      // mod's line under it, which ours follows.
-      const theirs = result?.text && result.text !== e.answer ? result.text : ''
-      const text = theirs ? theirs + '\n' + report.line : report.line
-      return { ...result, text }
+    if (e.agentId !== undefined) return result
+    const lines = typeof report.line === 'string' ? [report.line] : []
+    if (!advised) {
+      advised = true
+      try {
+        const brief = await $.process.run([launcher($), 'advise', '--brief'], { timeoutMs: TIMEOUT_MS })
+        const line = brief.exitCode === 0 ? brief.stdout.trim() : ''
+        // One line of advice or nothing: anything else (a crash, an old binary) is not shown.
+        if (line.startsWith('girth: ') && !line.includes('\n')) lines.push(line)
+      } catch {
+        // Advice is never worth breaking a turn over.
+      }
     }
-    return result
+    if (lines.length === 0) return result
+    // next(e) resolves to the answer itself; a different text is another
+    // mod's line under it, which ours follows.
+    const theirs = result?.text && result.text !== e.answer ? result.text : ''
+    const text = [theirs, ...lines].filter((t) => t !== '').join('\n')
+    return { ...result, text }
   }).catch(async ($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {

@@ -146,6 +146,17 @@ enum Command {
         spec: String,
     },
     /// Check crafted skills against the Girth contract.
+    /// What is costing you, the lever that fixes it, and why the fix keeps things working
+    Advise {
+        /// Window: `24h`, `7d`, or seconds (default 7d).
+        #[arg(long, default_value = "7d")]
+        since: String,
+        /// Only the top contributor, in one line, and only when it is worth saying.
+        #[arg(long)]
+        brief: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// Report source sections that changed since each crafted skill was validated (exit 1 if any)
     Drift {
         /// Skill roots holding the sources (default: configured roots).
@@ -1026,6 +1037,44 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             }
+        }
+        Command::Advise { since, brief, json } => {
+            let window = match since.strip_suffix('d') {
+                Some(d) => d.parse::<u64>().map(|d| d * 86_400),
+                None => match since.strip_suffix('h') {
+                    Some(h) => h.parse::<u64>().map(|h| h * 3600),
+                    None => since.parse::<u64>(),
+                },
+            };
+            let Ok(window) = window else {
+                eprintln!("girth: --since takes 24h, 7d or seconds, got '{since}'");
+                return ExitCode::from(2);
+            };
+            let home = girth_home(&ctx);
+            let keeper = girth::keeper::settings(&ctx.cwd, &home);
+            let on = girth::advise::On {
+                keeper: keeper.enabled,
+                compact_idle: keeper.compact_idle,
+                agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
+            };
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            let advice = girth::advise::advise(&ledger::read(&home), now, window, on);
+            if json {
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    serde_json::to_string(&advice).unwrap_or_default()
+                );
+            } else if brief {
+                if let Some(line) = girth::advise::brief(&advice) {
+                    let _ = writeln!(out, "{line}");
+                }
+            } else {
+                let _ = write!(out, "{}", girth::advise::render(&advice));
+            }
+            ExitCode::SUCCESS
         }
         Command::Drift { roots, skill_dirs } => {
             let installed = discover_skills(&resolve_roots(&roots, &ctx, &mut warnings));

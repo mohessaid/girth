@@ -66,6 +66,7 @@ fn body_names_every_helper_and_rule() {
         "never drop",
         "Also installed",
         "scripts/girth drift",
+        "references/advise.md",
     ] {
         assert!(body.contains(needle), "body lacks '{needle}'");
     }
@@ -85,6 +86,7 @@ fn reference_flows_exist_are_small_and_name_their_command() {
         ("sharing.md", "scripts/girth share"),
         ("taste.md", "scripts/girth taste add"),
         ("remote.md", "scripts/girth fetch"),
+        ("advise.md", "scripts/girth advise"),
     ] {
         let path = skill_dir().join("references").join(file);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("missing {file}"));
