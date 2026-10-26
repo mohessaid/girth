@@ -21,8 +21,8 @@ make check     # fmt, clippy -D warnings, tests, coverage >= 90%, plugin validat
 - **Evals** (`make evals`) spend model credits, so maintainers run them before releases.
   - They run each case in a bubblewrap sandbox. Ubuntu 24.04 and later block the user namespaces bubblewrap needs (`kernel.apparmor_restrict_unprivileged_userns = 1`), so without a fix every Bash call fails and every crafting case scores near 0.
   - `make evals` checks for this first. The narrow fix is an AppArmor profile that lets only bwrap create user namespaces:
-    ```sh
-    printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile bwrap /usr/bin/bwrap flags=(unconfined) {\n  userns,\n  include if exists <local/bwrap>\n}\n' | sudo tee /etc/apparmor.d/bwrap && sudo apparmor_parser -r /etc/apparmor.d/bwrap
+    ```
+    sudo sh scripts/fix-eval-sandbox.sh
     ```
     Then `make sandbox-ok` should pass.
 
