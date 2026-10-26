@@ -132,3 +132,24 @@ What `taste-launch` checks:
 **Live check of `drift` on a cache hit (2026-10-23):** the same need, project folder and ledger as the craft above, with the rebuilt dist plugin ($0.08).
 - The model ran `scripts/girth drift <dir>` and reused `girth-captions` without writing a second skill (the files are identical).
 - It reported drift's finding to the user: both recorded sources, `embedded-captions` and `hyperframes-studio`, were unavailable. That was true; they were uninstalled between the craft and this run.
+
+## 0.10.0 (2026-10-26)
+
+The sandbox was unblocked with `sudo sh scripts/fix-eval-sandbox.sh`. Then `make evals` ran with claude-sonnet-5-5, 3 runs per case, for $1.35 plus $0.66 for a re-run.
+
+| Case | Score |
+|---|---|
+| auto-captions | 1.00 |
+| craft-captions | 1.00 (re-run) |
+| extend-captions | 1.00 (re-run) |
+| no-fire-generic | 1.00 |
+| no-source | 1.00 |
+| taste-launch | 1.00 |
+| tone-copy | 1.00 (re-run) |
+
+**Grader fix: the six `validated` misses in the first pass weren't a product failure.**
+- Every run printed `VALID girth-…`, but the current eval runner seals the sandbox home read-only. Girth therefore printed `could not record to ledger: Read-only file system` on stderr first.
+- In the trace JSON, the joining newline is the two characters `\n`. So `VALID` followed the letter `n`, and the grader's `\bVALID` had no word boundary to match.
+- The pattern is now `(?<!IN)VALID girth-…`, which still rejects `INVALID`.
+
+**Timeouts:** two `extend-captions` runs in the first pass timed out after 600 s. One of them spent $0.00, so it never reached the model. All three runs of the re-run finished normally.

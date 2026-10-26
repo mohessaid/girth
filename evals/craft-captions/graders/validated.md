@@ -1,5 +1,5 @@
 ---
 type: regex
 target: trace
-pattern: '\bVALID girth-captions'
+pattern: '(?<!IN)VALID girth-captions'
 ---
