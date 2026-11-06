@@ -155,6 +155,10 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
+        /// Only turns from this harness (`claude-code`, `codex`); default all, or
+        /// `claude-code` with --brief, which Claude Code shows at session start.
+        #[arg(long)]
+        harness: Option<String>,
     },
     /// Report source sections that changed since each crafted skill was validated (exit 1 if any)
     Drift {
@@ -1099,7 +1103,12 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Command::Advise { since, brief, json } => {
+        Command::Advise {
+            since,
+            brief,
+            json,
+            harness,
+        } => {
             let window = match since.strip_suffix('d') {
                 Some(d) => d.parse::<u64>().map(|d| d * 86_400),
                 None => match since.strip_suffix('h') {
@@ -1117,11 +1126,21 @@ fn main() -> ExitCode {
                 keeper: keeper.enabled,
                 compact_idle: keeper.compact_idle,
                 agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
+                codex: harness.as_deref() == Some("codex"),
             };
+            let harness = harness.or_else(|| brief.then(|| "claude-code".to_string()));
+            let mut records = ledger::read(&home);
+            if let Some(h) = &harness {
+                records.retain(|r| match &r.event {
+                    Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
+                    Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
+                    _ => true,
+                });
+            }
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs());
-            let advice = girth::advise::advise(&ledger::read(&home), now, window, on);
+            let advice = girth::advise::advise(&records, now, window, on);
             if json {
                 let _ = writeln!(
                     out,

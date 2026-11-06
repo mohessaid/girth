@@ -1358,3 +1358,40 @@ fn every_command_has_its_own_summary() {
     assert!(!line("advise").contains("Check crafted skills"));
     assert!(line("import").contains("other harnesses"));
 }
+
+#[test]
+fn advise_filters_by_harness() {
+    let tmp = TempDir::new().unwrap();
+    let g = tmp.path().join("g");
+    girth()
+        .env("GIRTH_HOME", &g)
+        .env("CODEX_HOME", codex_fixture())
+        .arg("import")
+        .assert()
+        .success();
+    let spend = |harness: &str| {
+        let out = girth()
+            .env("GIRTH_HOME", &g)
+            .args([
+                "advise",
+                "--since",
+                "100000d",
+                "--json",
+                "--harness",
+                harness,
+            ])
+            .assert()
+            .success();
+        let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        json["spend"].as_f64().unwrap()
+    };
+    assert!(spend("codex") > 0.0);
+    assert_eq!(spend("claude-code"), 0.0);
+    // The session-start line speaks for Claude Code only.
+    girth()
+        .env("GIRTH_HOME", &g)
+        .args(["advise", "--since", "100000d", "--brief"])
+        .assert()
+        .success()
+        .stdout("");
+}

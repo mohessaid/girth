@@ -24,6 +24,8 @@ pub struct On {
     pub keeper: bool,
     pub compact_idle: bool,
     pub agents_model: bool,
+    /// The advice is for Codex turns: name Codex's commands.
+    pub codex: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -43,6 +45,10 @@ pub struct Advice {
     pub window_s: u64,
     pub spend: f64,
     pub contributors: Vec<Contributor>,
+    /// Turns on models with no known prices; their tokens are not in `spend`.
+    pub unpriced: u64,
+    /// Spend per harness (`claude-code` for turns the mod recorded).
+    pub harnesses: BTreeMap<String, f64>,
 }
 
 /// Estimated dollars for one turn (subagents write the 5-minute cache); 0 for unknown models.
@@ -71,14 +77,30 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         })
         .collect();
     let spend: f64 = turns.iter().map(|(_, t)| turn_cost(t)).sum();
+    let unpriced = turns
+        .iter()
+        .filter(|(_, t)| price::rates(&t.model).is_none())
+        .count() as u64;
+    let mut harnesses: BTreeMap<String, f64> = BTreeMap::new();
+    for (_, t) in &turns {
+        let h = t.harness.as_deref().unwrap_or("claude-code");
+        *harnesses.entry(h.to_string()).or_default() += turn_cost(t);
+    }
     let mut out = Vec::new();
     if spend <= 0.0 {
         return Advice {
             window_s,
             spend,
             contributors: out,
+            unpriced,
+            harnesses,
         };
     }
+    let (clear, memory) = if on.codex {
+        ("/new", "AGENTS.md")
+    } else {
+        ("/clear", "CLAUDE.md")
+    };
     let push =
         |out: &mut Vec<Contributor>, kind, label: String, cost: f64, fix: String, guard: &str| {
             if cost > 0.0 {
@@ -156,8 +178,8 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         "context",
         "large conversations".into(),
         large,
-        "/compact <what to keep> at a natural break, or /clear when you switch tasks".into(),
-        "the summary keeps what you name; /clear starts clean for unrelated work",
+        format!("/compact <what to keep> at a natural break, or {clear} when you switch tasks"),
+        &format!("the summary keeps what you name; {clear} starts clean for unrelated work"),
     );
 
     // Long sessions: turns taken more than LONG_SESSION after the session's first turn.
@@ -186,9 +208,12 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         "sessions",
         "turns 8h+ into a session".into(),
         late,
-        "/clear when you switch tasks: a fresh session re-reads only what the new task needs"
-            .into(),
-        "CLAUDE.md, project skills and the ledger carry over; /compact <what to keep> if the work goes on",
+        format!(
+            "{clear} when you switch tasks: a fresh session re-reads only what the new task needs"
+        ),
+        &format!(
+            "{memory}, project skills and the ledger carry over; /compact <what to keep> if the work goes on"
+        ),
     );
 
     // Cache rewrites after idle gaps.
@@ -240,6 +265,8 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         window_s,
         spend,
         contributors: out,
+        unpriced,
+        harnesses,
     }
 }
 
@@ -255,8 +282,9 @@ pub fn render(advice: &Advice) -> String {
     let when = window_label(advice.window_s);
     if advice.contributors.is_empty() {
         return format!(
-            "girth advise ({when}): ${:.2} estimated, nothing stands out\n",
-            advice.spend
+            "girth advise ({when}): ${:.2} estimated, nothing stands out\n{}",
+            advice.spend,
+            unpriced_note(advice.unpriced)
         );
     }
     let mut s = format!(
@@ -281,7 +309,15 @@ pub fn render(advice: &Advice) -> String {
     if hidden > 0 {
         s += &format!("       ({hidden} more under 1%; --json lists them)\n");
     }
-    s
+    s + &unpriced_note(advice.unpriced)
+}
+
+fn unpriced_note(unpriced: u64) -> String {
+    match unpriced {
+        0 => String::new(),
+        1 => "       (1 turn on a model without known prices is not counted)\n".into(),
+        n => format!("       ({n} turns on models without known prices are not counted)\n"),
+    }
 }
 
 /// The one line for session start, or nothing when no contributor clears `BRIEF_SHARE`.
@@ -385,6 +421,65 @@ mod tests {
             .iter()
             .find(|c| c.kind == kind)
             .map_or(0.0, |c| c.share)
+    }
+
+    #[test]
+    fn unpriced_turns_are_counted() {
+        let records = [
+            rec(10, turn("claude-opus-5-5", 1000, 100)),
+            rec(20, turn("gpt-9-unknown", 1000, 100)),
+            rec(30, turn("gpt-9-unknown", 1000, 100)),
+        ];
+        let advice = advise(&records, 100, 1000, On::default());
+        assert_eq!(advice.unpriced, 2);
+        assert!(render(&advice).contains("2 turns on models without known prices are not counted"));
+        let one = advise(&records[..2], 100, 1000, On::default());
+        assert!(render(&one).contains("1 turn on a model without known prices is not counted"));
+        assert!(
+            !render(&advise(&records[..1], 100, 1000, On::default()))
+                .contains("without known prices")
+        );
+    }
+
+    #[test]
+    fn spend_is_split_by_harness() {
+        let mut codex = turn("gpt-6-astra", 0, 1_000_000);
+        codex.harness = Some("codex".into());
+        let records = [
+            rec(10, turn("claude-opus-5-5", 0, 1_000_000)),
+            rec(20, codex),
+        ];
+        let advice = advise(&records, 100, 1000, On::default());
+        assert_eq!(advice.harnesses["claude-code"], 20.0);
+        assert_eq!(advice.harnesses["codex"], 50.0);
+        assert_eq!(advice.spend, 70.0);
+    }
+
+    #[test]
+    fn codex_advice_names_codex_commands() {
+        let big = turn("gpt-6-astra", 400_000, 0);
+        let on = On {
+            codex: true,
+            ..On::default()
+        };
+        let advice = advise(&[rec(10, big)], 100, 1000, on);
+        let context = advice
+            .contributors
+            .iter()
+            .find(|c| c.kind == "context")
+            .unwrap();
+        assert!(
+            context.fix.contains("/new") && !context.fix.contains("/clear"),
+            "{}",
+            context.fix
+        );
+        let claude = advise(
+            &[rec(10, turn("claude-opus-5-5", 400_000, 0))],
+            100,
+            1000,
+            On::default(),
+        );
+        assert!(claude.contributors[0].fix.contains("/clear"));
     }
 
     #[test]
