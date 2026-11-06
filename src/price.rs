@@ -4,7 +4,10 @@
 //! 2026-10-06) for Claude models (earlier models from its legacy table, with cache reads at
 //! 0.1× and 1-hour writes at 2× input); developers.openai.com/api/docs/pricing (standard
 //! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
-//! cache writes at the 30-minute rate. Cache writes are priced at the 1-hour rate (2× input), the
+//! cache writes at the 30-minute rate; aistudio.google.com/docs/pricing (standard tier,
+//! prompts up to 200K tokens, text input, read 2026-11-06) for the Gemini models Gemini
+//! CLI runs. `gemini-3.1-flash-lite-preview` takes the `gemini-3.1-flash-lite` row, and
+//! `gemini-3-pro-preview`, which the page no longer lists, is left unpriced. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
 //! reports. Subagents write the 5-minute cache (1.25× input): see `five_minute`.
 
@@ -20,7 +23,7 @@ pub struct Rates {
 /// Rates for a model id. Matches the exact id, or the id followed by a
 /// bracketed suffix (`claude-opus-5-5[1m]`).
 pub fn rates(model: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 12] = [
+    const TABLE: [(&str, Rates); 16] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -61,6 +64,11 @@ pub fn rates(model: &str) -> Option<Rates> {
         ("claude-sonnet-4-6", anthropic(3.0, 0.30, 15.0)),
         ("claude-opus-4-6", anthropic(5.0, 0.50, 25.0)),
         ("claude-haiku-4-5", anthropic(1.0, 0.10, 5.0)),
+        // Gemini CLI's models (standard tier, prompts up to 200K tokens, text input).
+        ("gemini-3-flash-preview", google(0.50, 0.05, 3.0)),
+        ("gemini-3.1-flash-lite-preview", google(0.25, 0.025, 1.50)),
+        ("gemini-2.5-pro", google(1.25, 0.125, 10.0)),
+        ("gemini-2.5-flash", google(0.30, 0.03, 2.50)),
         ("gpt-6-astra", openai(10.0, 1.0, 12.5, 50.0)),
         ("gpt-6.1-sol", openai(2.0, 0.10, 2.5, 10.0)),
         ("gpt-6-sol", openai(2.0, 0.20, 2.5, 10.0)),
@@ -78,6 +86,17 @@ const fn anthropic(input: f64, cache_read: f64, output: f64) -> Rates {
         output,
         cache_read,
         cache_write: input * 2.0,
+    }
+}
+
+/// Google's table order: input, context caching, output. Implicit cache writes cost
+/// nothing extra, so a write is priced as plain input.
+const fn google(input: f64, cache_read: f64, output: f64) -> Rates {
+    Rates {
+        input,
+        output,
+        cache_read,
+        cache_write: input,
     }
 }
 
@@ -147,6 +166,24 @@ mod tests {
                 "{id}"
             );
         }
+    }
+
+    #[test]
+    fn gemini_models_gemini_cli_runs_are_priced() {
+        let rows = [
+            ("gemini-3-flash-preview", (0.50, 3.0, 0.05)),
+            ("gemini-3.1-flash-lite-preview", (0.25, 1.50, 0.025)),
+            ("gemini-2.5-pro", (1.25, 10.0, 0.125)),
+            ("gemini-2.5-flash", (0.30, 2.50, 0.03)),
+        ];
+        for (id, want) in rows {
+            let r = rates(id).unwrap();
+            assert_eq!((r.input, r.output, r.cache_read), want, "{id}");
+            // Gemini charges nothing extra to write its implicit cache.
+            assert_eq!(r.cache_write, r.input, "{id}");
+        }
+        // Not on Google's page (2026-11-06), so not guessed.
+        assert_eq!(rates("gemini-3-pro-preview"), None);
     }
 
     #[test]

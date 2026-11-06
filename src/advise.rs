@@ -24,10 +24,20 @@ pub struct On {
     pub keeper: bool,
     pub compact_idle: bool,
     pub agents_model: bool,
-    /// The advice is for Codex turns: name Codex's commands.
-    pub codex: bool,
-    /// The advice is for a harness with `/clear` and `AGENTS.md` (Copilot CLI, OpenCode).
-    pub agents_md: bool,
+    /// The harness the advice is for (`None`: Claude Code), so fixes name its own
+    /// command for a fresh session and its instructions file.
+    pub harness: Option<&'static str>,
+}
+
+/// A harness's command for a fresh session and the instructions file it reads, as its
+/// own docs and command lists name them (2026-11-06).
+fn names(harness: Option<&str>) -> (&'static str, &'static str) {
+    match harness {
+        Some("codex") => ("/new", "AGENTS.md"),
+        Some("copilot" | "opencode") => ("/clear", "AGENTS.md"),
+        Some("gemini") => ("/clear", "GEMINI.md"),
+        _ => ("/clear", "CLAUDE.md"),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -107,13 +117,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             premium_requests,
         };
     }
-    let (clear, memory) = if on.codex {
-        ("/new", "AGENTS.md")
-    } else if on.agents_md {
-        ("/clear", "AGENTS.md")
-    } else {
-        ("/clear", "CLAUDE.md")
-    };
+    let (clear, memory) = names(on.harness);
     let push =
         |out: &mut Vec<Contributor>, kind, label: String, cost: f64, fix: String, guard: &str| {
             if cost > 0.0 {
@@ -513,9 +517,18 @@ mod tests {
     }
 
     #[test]
+    fn each_harness_gets_its_own_names() {
+        assert_eq!(names(None), ("/clear", "CLAUDE.md"));
+        assert_eq!(names(Some("claude-code")), ("/clear", "CLAUDE.md"));
+        assert_eq!(names(Some("codex")), ("/new", "AGENTS.md"));
+        assert_eq!(names(Some("opencode")), ("/clear", "AGENTS.md"));
+        assert_eq!(names(Some("gemini")), ("/clear", "GEMINI.md"));
+    }
+
+    #[test]
     fn copilot_and_opencode_advice_names_agents_md() {
         let on = On {
-            agents_md: true,
+            harness: Some("copilot"),
             ..On::default()
         };
         let mut early = turn("claude-sonnet-4-6", 400_000, 0);
@@ -557,7 +570,7 @@ mod tests {
     fn codex_advice_names_codex_commands() {
         let big = turn("gpt-6-astra", 400_000, 0);
         let on = On {
-            codex: true,
+            harness: Some("codex"),
             ..On::default()
         };
         let advice = advise(&[rec(10, big)], 100, 1000, on);

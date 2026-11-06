@@ -15,6 +15,7 @@ fn girth() -> Command {
     cmd.env("CODEX_HOME", &none)
         .env("COPILOT_HOME", &none)
         .env("XDG_DATA_HOME", &none)
+        .env("GEMINI_CLI_HOME", &none)
         .env("GIRTH_OPENCODE_BIN", none.join("opencode"));
     cmd
 }
@@ -1353,6 +1354,25 @@ fn import_reads_opencode_through_its_own_cli() {
     let ledger = std::fs::read_to_string(tmp.path().join("g/ledger.jsonl")).unwrap();
     assert!(ledger.contains(r#""harness":"opencode""#));
     assert!(ledger.contains(r#""cost_micros":3000"#));
+}
+
+#[test]
+fn import_reads_gemini_cli_sessions() {
+    let tmp = TempDir::new().unwrap();
+    // GEMINI_CLI_HOME stands in for the home folder that holds .gemini.
+    let home = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gemini");
+    for want in [
+        "imported 4 turns from gemini\n",
+        "imported 0 turns from gemini\n",
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path().join("g"))
+            .env("GEMINI_CLI_HOME", &home)
+            .args(["import", "--from", "gemini"])
+            .assert()
+            .success()
+            .stdout(want);
+    }
 }
 
 #[test]

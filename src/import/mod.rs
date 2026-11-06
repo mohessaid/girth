@@ -5,6 +5,7 @@
 
 pub mod codex;
 pub mod copilot;
+pub mod gemini;
 pub mod opencode;
 
 use std::collections::BTreeMap;
@@ -13,6 +14,9 @@ use std::path::{Path, PathBuf};
 use crate::ledger;
 
 pub const OFFSETS_FILE: &str = "import.json";
+
+/// The harnesses `girth import` reads, in the order it reads them.
+pub const SOURCES: [&str; 4] = ["codex", "copilot", "opencode", "gemini"];
 
 type Offsets = BTreeMap<String, BTreeMap<String, usize>>;
 
@@ -118,6 +122,33 @@ pub fn import_copilot(copilot_home: &Path, girth_home: &Path) -> std::io::Result
         }
         if total > 0 {
             seen.insert(key, total);
+        }
+    }
+    save(girth_home, &offsets, added)?;
+    Ok(turns)
+}
+
+/// Append the Gemini CLI turns and skill uses under `<gemini_dir>/tmp` not imported
+/// before; returns how many turns. Each session file keeps the time of its last imported
+/// prompt, since Gemini rewrites older session files whole.
+pub fn import_gemini(gemini_dir: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    let mut offsets = load(girth_home);
+    let seen = offsets.entry("gemini".into()).or_default();
+    let (mut added, mut turns) = (0, 0);
+    for (file, project) in gemini::sessions(gemini_dir) {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let key = file.display().to_string();
+        let cursor = seen.get(&key).copied().unwrap_or(0) as u64;
+        let (events, kept) = gemini::parse(&text, &project, cursor);
+        for (ts, event) in events {
+            turns += usize::from(matches!(event, ledger::Event::Turn(_)));
+            ledger::append_at(girth_home, ts, event)?;
+            added += 1;
+        }
+        if kept > cursor {
+            seen.insert(key, kept as usize);
         }
     }
     save(girth_home, &offsets, added)?;
@@ -365,6 +396,60 @@ mod tests {
         assert_eq!(import_opencode(&failing, &db, &girth).unwrap(), 0);
         let none = tmp.path().join("no-such-opencode");
         assert_eq!(import_opencode(&none, &db, &girth).unwrap(), 0);
+        assert!(!girth.exists());
+    }
+
+    fn gemini_home(tmp: &TempDir) -> PathBuf {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gemini/.gemini");
+        let home = tmp.path().join("gemini");
+        let status = std::process::Command::new("cp")
+            .arg("-R")
+            .arg(&fixture)
+            .arg(&home)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        home
+    }
+
+    #[test]
+    fn gemini_turns_are_imported_once() {
+        let tmp = TempDir::new().unwrap();
+        let (gemini, girth) = (gemini_home(&tmp), tmp.path().join("g"));
+        assert_eq!(import_gemini(&gemini, &girth).unwrap(), 4);
+        assert_eq!(ledger::read(&girth).len(), 5); // 4 turns and 1 skill use
+        assert_eq!(import_gemini(&gemini, &girth).unwrap(), 0);
+        // The open turn is imported once a later prompt closes it.
+        let file = gemini.join("tmp/proj/chats/session-2026-05-06T17-00-ga.json");
+        let mut session: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        session["messages"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!(
+                {"id": "u3", "timestamp": "2026-05-06T17:00:40.000Z", "type": "user"}
+            ));
+        std::fs::write(&file, session.to_string()).unwrap();
+        assert_eq!(import_gemini(&gemini, &girth).unwrap(), 1);
+        assert_eq!(import_gemini(&gemini, &girth).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_gemini_session_with_only_an_open_turn_gets_no_cursor() {
+        let tmp = TempDir::new().unwrap();
+        let (gemini, girth) = (gemini_home(&tmp), tmp.path().join("g"));
+        let open = r#"{"sessionId":"o","messages":[{"id":"u","timestamp":"2026-05-06T18:00:00.000Z","type":"user"},{"id":"g","timestamp":"2026-05-06T18:00:01.000Z","type":"gemini","toolCalls":[{"name":"x"}],"tokens":{"input":1,"output":1,"cached":0}}]}"#;
+        std::fs::write(gemini.join("tmp/proj/chats/session-open.json"), open).unwrap();
+        assert_eq!(import_gemini(&gemini, &girth).unwrap(), 4);
+        let cursors = std::fs::read_to_string(girth.join(OFFSETS_FILE)).unwrap();
+        assert!(!cursors.contains("session-open"), "{cursors}");
+    }
+
+    #[test]
+    fn no_gemini_sessions_writes_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let girth = tmp.path().join("g");
+        assert_eq!(import_gemini(&tmp.path().join("none"), &girth).unwrap(), 0);
         assert!(!girth.exists());
     }
 }

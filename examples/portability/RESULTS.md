@@ -78,6 +78,18 @@ imported 0 turns from opencode
 
 - An independent Python read of `opencode.db` gives $0.283301 over 135 requests and 11 prompts. Girth's ledger gives the same: 11 turns, 135 requests, $0.283301, 0 unpriced, 1 aborted, 4 in subagent sessions, plus 2 skill uses (`career-ops`, `girth`).
 
+**Gemini CLI spend.** `girth import --from gemini` on the author's `~/.gemini` (23 sessions; into a scratch `GIRTH_HOME`):
+
+```
+$ girth import --from gemini
+imported 45 turns from gemini
+$ girth import --from gemini
+imported 0 turns from gemini
+```
+
+- The ledger holds 260 of 270 requests, $1.5537 at Google list prices. 13 turns on `gemini-3-pro-preview` are unpriced, because Google's page no longer lists that model.
+- An independent Python pass over every request gives $1.6449. The 10 requests Girth left out are exactly the open turns in the 3 sessions that end mid-tool-call ($0.0911), which leaves $1.5538, equal to Girth's figure within rounding.
+
 ## Headless check per harness (2026-11-06, `sh examples/portability/run.sh`)
 
 - **Setup:** a throwaway git folder with the shipped `girth` skill (binary bundled) and a crafted `girth-hyperframes` in `.agents/skills`.

@@ -155,7 +155,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -168,9 +168,9 @@ enum Command {
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
-    /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode) to the ledger.
+    /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode, Gemini CLI) to the ledger.
     Import {
-        /// Which harness: `codex`, `copilot`, `opencode` or `all`.
+        /// Which harness: `codex`, `copilot`, `opencode`, `gemini` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1078,9 +1078,11 @@ fn main() -> ExitCode {
             }
         }
         Command::Import { from } => {
-            const SOURCES: [&str; 3] = ["codex", "copilot", "opencode"];
+            use girth::import::SOURCES;
             if from != "all" && !SOURCES.contains(&from.as_str()) {
-                eprintln!("girth: unknown harness: {from} (try codex, copilot, opencode or all)");
+                eprintln!(
+                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini or all)"
+                );
                 return ExitCode::from(2);
             }
             let var = |k: &str| ctx.env.get(k).filter(|v| !v.is_empty()).map(PathBuf::from);
@@ -1095,6 +1097,9 @@ fn main() -> ExitCode {
                     "copilot" => var("COPILOT_HOME")
                         .or_else(|| under_home(".copilot"))
                         .map(|h| girth::import::import_copilot(&h, &g)),
+                    "gemini" => var("GEMINI_CLI_HOME")
+                        .or_else(|| ctx.home.clone())
+                        .map(|h| girth::import::import_gemini(&h.join(".gemini"), &g)),
                     _ => var("XDG_DATA_HOME")
                         .or_else(|| under_home(".local/share"))
                         .map(|d| {
@@ -1137,8 +1142,9 @@ fn main() -> ExitCode {
                 keeper: keeper.enabled,
                 compact_idle: keeper.compact_idle,
                 agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
-                codex: harness.as_deref() == Some("codex"),
-                agents_md: matches!(harness.as_deref(), Some("copilot" | "opencode")),
+                harness: girth::import::SOURCES
+                    .into_iter()
+                    .find(|s| harness.as_deref() == Some(*s)),
             };
             let harness = harness.or_else(|| brief.then(|| "claude-code".to_string()));
             let mut records = ledger::read(&home);

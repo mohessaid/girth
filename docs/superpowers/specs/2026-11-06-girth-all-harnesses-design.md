@@ -45,7 +45,7 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, `token_usage_record` | input, cached_input, cache_write_input, output | `turn_id` | inferred from reads of a `SKILL.md`, marked inferred |
 | Copilot CLI | `~/.copilot/session-state/<id>/events.jsonl`, `session.shutdown` `modelMetrics` (built); `session.usage_record` (1.0.105+, follow-up) | requests, premium requests, input (includes cache), output, cacheRead, cacheWrite | one turn per model per shutdown | `skill.invoked` |
 | OpenCode | `~/.local/share/opencode/opencode.db`, `message.data` | tokens.input, output, cache.read and cache.write, cost, modelID | message | `skill` tool parts |
-| Gemini CLI | `~/.gemini/tmp/<project>/chats/session-*.jsonl` | tokens.input, output, cached (no cache write) | message | `activate_skill` calls |
+| Gemini CLI | `~/.gemini/tmp/<project>/chats/session-*.json` (rewritten whole) and `.jsonl` (later copies replace earlier ones) | tokens.input (includes cached), cached, output, thoughts, tool | one turn per prompt | `activate_skill` calls |
 
 - **Not imported:**
   - Cursor and Amp keep no token data on disk.
