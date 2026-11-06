@@ -91,8 +91,9 @@ pub fn import_codex(codex_home: &Path, girth_home: &Path) -> std::io::Result<usi
 }
 
 /// Append the Copilot CLI turns and skill uses under `<copilot_home>/session-state` not
-/// imported before; returns how many turns. Each session's imported shutdowns are counted,
-/// and a session with fewer shutdowns than recorded is read again from the start.
+/// imported before; returns how many turns. Each session keeps its imported shutdowns, and
+/// under `<file>#records` its imported usage records; a session holding fewer of either
+/// than recorded is read again from the start.
 pub fn import_copilot(copilot_home: &Path, girth_home: &Path) -> std::io::Result<usize> {
     let mut offsets = load(girth_home);
     let mut files: Vec<PathBuf> = std::fs::read_dir(copilot_home.join("session-state"))
@@ -110,18 +111,25 @@ pub fn import_copilot(copilot_home: &Path, girth_home: &Path) -> std::io::Result
             continue;
         };
         let key = file.display().to_string();
-        let recorded = seen.get(&key).copied().unwrap_or(0);
-        let (mut events, total) = copilot::parse(&text, recorded);
-        if total < recorded {
-            events = copilot::parse(&text, 0).0;
+        let records_key = format!("{key}#records");
+        let recorded = copilot::Cursor {
+            shutdowns: seen.get(&key).copied().unwrap_or(0),
+            records: seen.get(&records_key).copied().unwrap_or(0),
+        };
+        let (mut events, mut read) = copilot::parse(&text, recorded);
+        if read.shutdowns < recorded.shutdowns || read.records < recorded.records {
+            (events, read) = copilot::parse(&text, copilot::Cursor::default());
         }
         for (ts, event) in events {
             turns += usize::from(matches!(event, ledger::Event::Turn(_)));
             ledger::append_at(girth_home, ts, event)?;
             added += 1;
         }
-        if total > 0 {
-            seen.insert(key, total);
+        if read.shutdowns > 0 {
+            seen.insert(key, read.shutdowns);
+        }
+        if read.records > 0 {
+            seen.insert(records_key, read.records);
         }
     }
     save(girth_home, &offsets, added)?;
@@ -304,6 +312,49 @@ mod tests {
         let first: String = COPILOT.split_inclusive('\n').take(8).collect();
         std::fs::write(copilot.join("session-state/s1/events.jsonl"), first).unwrap();
         assert_eq!(import_copilot(&copilot, &girth).unwrap(), 1);
+    }
+
+    const RECORDS: &str =
+        include_str!("../../tests/fixtures/copilot/session-state/s2/events.jsonl");
+
+    #[test]
+    fn copilot_records_are_imported_once_with_their_own_cursor() {
+        let tmp = TempDir::new().unwrap();
+        let (copilot, girth) = (copilot_home(&tmp, RECORDS), tmp.path().join("g"));
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5);
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 0);
+        let file = copilot
+            .join("session-state/s1/events.jsonl")
+            .display()
+            .to_string();
+        let cursors = load(&girth);
+        let mine = &cursors["copilot"];
+        assert_eq!((mine[&file], mine[&format!("{file}#records")]), (2, 5));
+    }
+
+    #[test]
+    fn a_copilot_cursor_from_before_records_skips_what_it_counted() {
+        let tmp = TempDir::new().unwrap();
+        let (copilot, girth) = (copilot_home(&tmp, RECORDS), tmp.path().join("g"));
+        // Written by 0.12: both shutdowns imported, records not read.
+        let file = copilot
+            .join("session-state/s1/events.jsonl")
+            .display()
+            .to_string();
+        let old: Offsets = [("copilot".to_string(), [(file, 2)].into())].into();
+        save(&girth, &old, 1).unwrap();
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 1);
+    }
+
+    #[test]
+    fn a_copilot_session_with_fewer_records_is_read_again() {
+        let tmp = TempDir::new().unwrap();
+        let (copilot, girth) = (copilot_home(&tmp, RECORDS), tmp.path().join("g"));
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5);
+        // Same two shutdowns, but the running stretch lost its done turn.
+        let cut: String = RECORDS.split_inclusive('\n').take(16).collect();
+        std::fs::write(copilot.join("session-state/s1/events.jsonl"), cut).unwrap();
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 4);
     }
 
     #[test]

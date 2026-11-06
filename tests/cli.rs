@@ -1386,7 +1386,7 @@ fn copilot_fixture() -> std::path::PathBuf {
 fn import_reads_copilot_sessions_once() {
     let tmp = TempDir::new().unwrap();
     for want in [
-        "imported 5 turns from copilot",
+        "imported 10 turns from copilot",
         "imported 0 turns from copilot",
     ] {
         girth()
@@ -1471,10 +1471,10 @@ fn stats_counts_one_harness_s_skill_uses() {
         let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
         json["top_uses"].clone()
     };
-    // Both imports used `girth` once.
+    // Copilot's two sessions used `girth` once each; Gemini's, once.
     assert_eq!(
         top("copilot"),
-        serde_json::json!([{"skill": "girth", "uses": 1}])
+        serde_json::json!([{"skill": "girth", "uses": 2}])
     );
     assert_eq!(
         top("gemini"),
@@ -1493,7 +1493,7 @@ fn import_from_one_harness_reads_only_that_one() {
         .args(["import", "--from", "copilot"])
         .assert()
         .success()
-        .stdout("imported 5 turns from copilot\n");
+        .stdout("imported 10 turns from copilot\n");
 }
 
 #[test]

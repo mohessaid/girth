@@ -106,7 +106,12 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 ## Follow-up: Copilot per-request import
 
 - **Built (v0.12):** shutdown totals, one turn per model per shutdown. These cover every Copilot version on the author's machine (0.0.394 to 1.0.106).
-- **Not yet built:** Copilot 1.0.105+ also writes `session.usage_record` per request (with `apiCallId` and `accounting.sequence`). Reading those would import a session before it shuts down, and group requests by user prompt. A file holding both must not count a request twice.
+- **Decided (v0.13): per-request records.** Copilot 1.0.105+ also writes `session.usage_record` per request. On the author's machine (Copilot 1.0.106), 3 sessions carry them, and in each the records sum exactly to the session's shutdown totals.
+  - A stretch (the events up to a `session.shutdown`) that holds any record is read from its records, and that shutdown's `modelMetrics` is ignored, so one stretch is never counted both ways. A stretch with no records falls back to its shutdown. The shutdown still feeds the running-totals check for the next stretch.
+  - A turn is one `initiator: "user"` record and the `initiator: "agent"` records after it, one ledger turn per model, at the time of its last record. Prompts and turns need not match: one prompt on the author's machine was answered by agent-initiated requests only.
+  - Token arithmetic is the shutdown path's (`inputTokens` includes cache). `premium` is the sum of each record's `cost`, read like `requests.cost` and rounded. Every record seen is a BYOK request with `cost: 0`; what `cost` holds for a non-BYOK record wasn't seen.
+  - Records after the last shutdown (a live session) are imported once their turn is done: a later user-initiated record exists, or its last record finished for a reason other than `tool_calls`.
+  - **Cursors.** The existing per-file count of imported shutdowns stays. A second count, of records imported, is kept under `<file>#records`, so a count written by 0.12 is never read as a record count. A stretch whose shutdown is already counted is skipped whole, records included; that covers sessions 0.12 imported from shutdowns.
 
 ## Not in scope
 - Porting Lens, Meter, keeper or compaction to other harnesses' hook systems. Codex's `PostModelRequest` hook carries `token_usage`, so a live Codex meter is a possible follow-up once import shows the data is useful.

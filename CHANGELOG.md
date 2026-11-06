@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **Copilot spend per prompt, before the session ends.** Copilot CLI 1.0.105+ logs every request (`session.usage_record`). `girth import --from copilot` now reads those: one turn per prompt (per model), recorded as soon as the prompt's work is done, so a running session counts without waiting for its shutdown. Stretches without records (older Copilot versions) are still read from their shutdown totals, and a stretch is never counted both ways. Sessions already imported by 0.12 are not counted again: the new record cursor sits beside the old one (`<file>#records` in `import.json`).
+
 ## [0.12.0] - 2026-11-06
 
 ### Added

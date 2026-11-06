@@ -68,6 +68,18 @@ girth advise (100000d): $610.09 estimated at list prices; shares overlap
 - An independent Python pass with the same rule gives **$610.09**. The bounds are $278.20 if every shutdown were running totals and $646.27 if every one were fresh.
 - Unpriced: agnes-3.0-flash (BYOK, logged cost 0), deepseek-v4-pro, gpt-5.4, gpt-5.3-codex.
 
+**Copilot per-request records (Unreleased).** Copilot 1.0.105+ logs each request as a `session.usage_record`. 3 sessions here carry them (96 records, all BYOK `agnes-3.0-flash` with logged cost 0), and in each the records sum exactly to the shutdown totals. Read from records, those 3 stretches become 8 per-prompt turns instead of 3 shutdown turns:
+
+```
+$ girth import --from copilot
+imported 102 turns from copilot
+$ girth import --from copilot
+imported 0 turns from copilot
+```
+
+- Spend and premium requests are unchanged: **$610.09** and **611**, as the records sum to their shutdowns.
+- 8 turns, not 9 prompts: one prompt was answered by agent-initiated requests only, so it joined the turn before it.
+
 **OpenCode spend.** `girth import --from opencode` reads OpenCode's database through `opencode db` (into a scratch `GIRTH_HOME`):
 
 ```
