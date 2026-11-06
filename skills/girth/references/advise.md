@@ -6,5 +6,5 @@
 3. Apply **one** fix at a time, and only the one the user picks. Then run its guard:
    - a skill: distil its slice (the craft flow), then `scripts/girth validate` and `scripts/girth drift`;
    - large conversations or turns 8h+ into a session: suggest `/compact <what to keep>` at a natural break, or `/clear` (Codex: `/new`) on a task switch. Never compact or clear without asking;
-   - cache rewrites or subagents: show the exact config line and the file it goes in. Let the user add it.
+   - cache rewrites or subagents (Claude Code only; these levers are Girth's Claude Code mod): show the exact config line and the file it goes in. Let the user add it.
 4. Never uninstall a skill, change settings or end a session yourself.
