@@ -1,7 +1,5 @@
 //! Codex rollouts (`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) as ledger turns.
 
-use std::collections::HashMap;
-
 use serde_json::Value;
 
 use crate::ledger::{Event, Turn};
@@ -11,10 +9,13 @@ use crate::ledger::{Event, Turn};
 ///
 /// Codex's `input_tokens` includes cached and cache-write tokens; the ledger's
 /// `input` is the uncached rest. A line cut short (Codex killed mid-write) is skipped.
+/// Codex runs one turn at a time, so a turn still open when a later one ends was
+/// cut off: it is recorded as aborted, at the time of its last request.
 pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
     let mut session: Option<String> = None;
     let mut session_cwd = String::new();
-    let mut open: HashMap<String, Turn> = HashMap::new();
+    // Open turns in order: id, turn, time of its last request.
+    let mut open: Vec<(String, Turn, u64)> = Vec::new();
     let (mut events, mut offset, mut pos) = (Vec::new(), 0, 0);
     for line in text.split_inclusive('\n') {
         pos += line.len();
@@ -29,7 +30,7 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
                 session_cwd = p["cwd"].as_str().unwrap_or_default().to_string();
             }
             (Some("turn_context"), _) => {
-                let t = open.entry(turn_id).or_insert_with(|| new_turn(&session));
+                let t = &mut entry(&mut open, turn_id, &session).1;
                 t.model = p["model"].as_str().unwrap_or(&t.model).to_string();
                 if let Some(cwd) = p["cwd"].as_str() {
                     t.project = cwd.to_string();
@@ -39,7 +40,12 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
                 let u = &p["usage"];
                 let n = |k: &str| u[k].as_u64().unwrap_or(0);
                 let (cached, write) = (n("cached_input_tokens"), n("cache_write_input_tokens"));
-                let t = open.entry(turn_id).or_insert_with(|| new_turn(&session));
+                let ts = e["timestamp"].as_str().and_then(unix_seconds);
+                let t = entry(&mut open, turn_id, &session);
+                if let Some(ts) = ts {
+                    t.2 = ts;
+                }
+                let t = &mut t.1;
                 t.input += n("input_tokens").saturating_sub(cached + write);
                 t.cache_read += cached;
                 t.cache_write += write;
@@ -47,14 +53,18 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
                 t.requests = Some(t.requests.unwrap_or(0) + 1);
             }
             (Some("event_msg"), Some(kind @ ("task_complete" | "turn_aborted"))) => {
-                if let Some(mut t) = open.remove(&turn_id) {
-                    t.aborted = kind == "turn_aborted";
+                let end = e["timestamp"].as_str().and_then(unix_seconds).unwrap_or(0);
+                let Some(i) = open.iter().position(|(id, ..)| *id == turn_id) else {
+                    continue;
+                };
+                for (id, mut t, last) in open.drain(..=i) {
+                    let ended = id == turn_id;
+                    t.aborted = !ended || kind == "turn_aborted";
                     if t.project.is_empty() {
                         t.project = session_cwd.clone();
                     }
-                    let ts = e["timestamp"].as_str().and_then(unix_seconds).unwrap_or(0);
                     if t.requests.is_some() {
-                        events.push((ts, Event::Turn(t)));
+                        events.push((if ended { end } else { last }, Event::Turn(t)));
                     }
                 }
                 offset = pos;
@@ -63,6 +73,21 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
         }
     }
     (events, offset)
+}
+
+fn entry<'a>(
+    open: &'a mut Vec<(String, Turn, u64)>,
+    id: String,
+    session: &Option<String>,
+) -> &'a mut (String, Turn, u64) {
+    let i = match open.iter().position(|(o, ..)| *o == id) {
+        Some(i) => i,
+        None => {
+            open.push((id, new_turn(session), 0));
+            open.len() - 1
+        }
+    };
+    &mut open[i]
 }
 
 fn new_turn(session: &Option<String>) -> Turn {
@@ -173,6 +198,32 @@ mod tests {
         let more = turns(&rest);
         assert_eq!(more.len(), 1);
         assert_eq!(more[0].1.input, 1000);
+    }
+
+    #[test]
+    fn a_turn_that_never_ended_closes_when_a_later_one_does() {
+        let text = concat!(
+            r#"{"timestamp":"2026-10-25T10:00:00Z","type":"turn_context","payload":{"turn_id":"a","cwd":"/w","model":"gpt-6-sol"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-10-25T10:00:05Z","type":"token_usage_record","payload":{"turn_id":"a","usage":{"input_tokens":10,"output_tokens":1}}}"#,
+            "\n",
+            r#"{"timestamp":"2026-10-25T10:05:00Z","type":"turn_context","payload":{"turn_id":"b","cwd":"/w","model":"gpt-6-sol"}}"#,
+            "\n",
+            r#"{"timestamp":"2026-10-25T10:05:05Z","type":"token_usage_record","payload":{"turn_id":"b","usage":{"input_tokens":20,"output_tokens":2}}}"#,
+            "\n",
+            r#"{"timestamp":"2026-10-25T10:05:09Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"b"}}"#,
+            "\n",
+        );
+        let (events, offset) = parse(text);
+        assert_eq!(offset, text.len());
+        let t = turns(text);
+        assert_eq!(t.len(), 2);
+        assert_eq!(
+            (t[0].0, t[0].1.input, t[0].1.aborted),
+            (1_792_922_405, 10, true)
+        );
+        assert_eq!((t[1].1.input, t[1].1.aborted), (20, false));
+        assert_eq!(events.len(), 2);
     }
 
     #[test]
