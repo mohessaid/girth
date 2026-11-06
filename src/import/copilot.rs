@@ -19,11 +19,13 @@
 //! On the author's 80 non-empty shutdowns, 7 fall to the turn-count tiebreak.
 //!
 //! Copilot 1.0.105+ also writes a `session.usage_record` per request. A stretch holding
-//! any is read from its records instead of its shutdown, so it is never counted both ways:
-//! a turn is one user-initiated request and the agent-initiated ones after it, one ledger
-//! turn per model. Records after the last shutdown (a running session) are imported once
-//! their turn is done: a later user-initiated request exists, or its last request finished
-//! for a reason other than `tool_calls`. A record's `cost` is read as premium requests,
+//! any is read from its records instead of its shutdown, so it is never counted both ways.
+//! A turn starts at a user-initiated request, at the first request after a prompt, or
+//! after a request that ended its turn (it finished for a reason other than `tool_calls`,
+//! or called `task_complete`); there is one ledger turn per model. A turn cut off by the
+//! next one mid-tool-call is recorded as aborted. Records after the last shutdown (a
+//! running session) are imported once their turn is done, so they split into the same
+//! turns as when read after the shutdown. A record's `cost` is read as premium requests,
 //! like a shutdown's `requests.cost`.
 
 use std::collections::BTreeMap;
@@ -157,12 +159,15 @@ struct Record {
     model: String,
     usage: Usage,
     cost: f64,
-    user: bool,
+    /// Sent by the user, or the first request after a prompt.
+    starts: bool,
+    /// The last request of its turn: it finished for a reason other than a tool call, or
+    /// called `task_complete`.
     stopped: bool,
 }
 
 impl Record {
-    fn read(ts: u64, u: &Value) -> Record {
+    fn read(ts: u64, u: &Value, prompted: bool) -> Record {
         Record {
             ts,
             model: u["model"].as_str().unwrap_or_default().to_string(),
@@ -171,10 +176,11 @@ impl Record {
                 ..Usage::tokens(u)
             },
             cost: u["cost"].as_f64().unwrap_or(0.0),
-            user: u["initiator"] == "user",
+            starts: prompted || u["initiator"] == "user",
             stopped: u["finishReason"]
                 .as_str()
-                .is_some_and(|f| f != "tool_calls"),
+                .is_some_and(|f| f != "tool_calls")
+                || u["toolCounts"]["task_complete"].is_u64(),
         }
     }
 }
@@ -198,7 +204,7 @@ fn from_records(
     events: &mut Vec<(u64, Event)>,
 ) -> usize {
     let starts: Vec<usize> = (0..recs.len())
-        .filter(|&i| i == 0 || recs[i].user)
+        .filter(|&i| i == 0 || recs[i].starts || recs[i - 1].stopped)
         .chain([recs.len()])
         .collect();
     let mut done = 0;
@@ -273,7 +279,7 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
                 }
             }
             "session.usage_record" => {
-                recs.push(Record::read(ts, &d["usage"]));
+                recs.push(Record::read(ts, &d["usage"], prompted));
                 prompted = false;
             }
             "skill.invoked" => {
@@ -677,6 +683,56 @@ mod tests {
             [(Some(2), Some(2), 2, true), (Some(1), Some(1), 2, false)]
         );
         assert_eq!(parse(&next, done).1.records, 8);
+    }
+
+    const PROMPT: &str = r#"{"type":"user.message","timestamp":"2026-10-18T11:01:30.000Z","data":{"content":"five"}}"#;
+
+    #[test]
+    fn a_turn_read_live_splits_as_it_would_once_closed() {
+        let base = parse(RECORDS, Cursor::default()).1;
+        let stop = |ts: &str| record(ts, false, "stop");
+        let one = [
+            RECORDS.trim_end().to_string(),
+            stop("2026-10-18T11:02:00.000Z"),
+        ]
+        .join("\n");
+        let two = [one.clone(), stop("2026-10-18T11:03:00.000Z")].join("\n");
+        let (first, mid) = parse(&one, base);
+        let later = turns_from(&two, mid);
+        let at_once = turns_from(&two, base);
+        let n = |got: &[(u64, Turn)]| got.iter().map(|(_, t)| t.requests).collect::<Vec<_>>();
+        // Requests after one that stopped are a turn of their own, read live or not.
+        assert_eq!(first.len(), 2); // the open turn's use, and the turn
+        assert_eq!(n(&later), [Some(1)]);
+        assert_eq!(n(&at_once), [Some(2), Some(1)]);
+    }
+
+    #[test]
+    fn a_prompt_starts_a_turn_even_when_the_agent_answers_it() {
+        let next = [
+            RECORDS.trim_end(),
+            PROMPT,
+            &record("2026-10-18T11:02:00.000Z", false, "stop"),
+        ]
+        .join("\n");
+        let done = parse(RECORDS, Cursor::default()).1;
+        let rows: Vec<_> = turns_from(&next, done)
+            .iter()
+            .map(|(_, t)| (t.requests, t.aborted))
+            .collect();
+        assert_eq!(rows, [(Some(1), true), (Some(1), false)]);
+    }
+
+    #[test]
+    fn task_complete_ends_a_turn() {
+        let done_call = r#"{"type":"session.usage_record","timestamp":"2026-10-18T11:02:00.000Z","data":{"usage":{"model":"claude-haiku-4.5","inputTokens":10,"outputTokens":1,"cost":0.0,"initiator":"agent","finishReason":"tool_calls","toolCounts":{"task_complete":1}}}}"#;
+        let next = [RECORDS.trim_end(), done_call].join("\n");
+        let done = parse(RECORDS, Cursor::default()).1;
+        let rows: Vec<_> = turns_from(&next, done)
+            .iter()
+            .map(|(_, t)| (t.requests, t.aborted))
+            .collect();
+        assert_eq!(rows, [(Some(2), false)]);
     }
 
     #[test]
