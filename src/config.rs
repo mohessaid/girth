@@ -86,13 +86,23 @@ pub fn resolve_roots(cli: &[String], ctx: &Context, warnings: &mut Vec<String>) 
         configured_roots(ctx, warnings).unwrap_or_else(|| {
             let mut defaults: Vec<String> = DEFAULT_ROOTS.iter().map(|r| r.to_string()).collect();
             defaults.extend(plugin_skill_dirs(ctx));
+            defaults.extend(
+                crate::harness::skill_dirs()
+                    .into_iter()
+                    .filter(|d| ctx.to_path(d).is_dir())
+                    .map(str::to_string),
+            );
             defaults
         })
     };
     let mut roots: Vec<PathBuf> = Vec::new();
+    let mut seen: Vec<PathBuf> = Vec::new();
     for item in raw {
         let path = ctx.to_path(&item);
-        if !roots.contains(&path) {
+        // A dir reached through a symlink is searched once.
+        let real = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+        if !seen.contains(&real) {
+            seen.push(real);
             roots.push(path);
         }
     }
@@ -334,6 +344,38 @@ mod tests {
         let mut warnings = vec![];
         assert_eq!(resolve_roots(&[], &ctx(&dir, &[]), &mut warnings).len(), 3);
         assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn existing_harness_dirs_join_defaults() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("home/.codex/skills")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".cursor/skills")).unwrap();
+        let roots = resolve_roots(&[], &ctx(&dir, &[]), &mut vec![]);
+        assert!(roots.contains(&dir.path().join("home/.codex/skills")));
+        assert!(roots.contains(&dir.path().join(".cursor/skills")));
+        assert_eq!(roots.len(), 5);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_harness_dir_is_searched_once() {
+        let dir = TempDir::new().unwrap();
+        let agents = dir.path().join("home/.agents/skills");
+        std::fs::create_dir_all(&agents).unwrap();
+        std::fs::create_dir_all(dir.path().join("home/.config/agents")).unwrap();
+        std::os::unix::fs::symlink(&agents, dir.path().join("home/.config/agents/skills")).unwrap();
+        let roots = resolve_roots(&[], &ctx(&dir, &[]), &mut vec![]);
+        assert_eq!(roots.len(), 3, "{roots:?}");
+        assert!(roots.contains(&agents));
+    }
+
+    #[test]
+    fn explicit_roots_get_no_harness_dirs() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir_all(dir.path().join("home/.codex/skills")).unwrap();
+        let roots = resolve_roots(&s(&["x"]), &ctx(&dir, &[]), &mut vec![]);
+        assert_eq!(roots, vec![dir.path().join("x")]);
     }
 
     #[test]

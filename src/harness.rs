@@ -10,12 +10,17 @@ pub struct Harness {
 
 include!("harness_table.rs");
 
-/// User skill dirs the harnesses read beyond the `skills` CLI's table (checked
-/// on disk or in their docs, 2026-11-06).
-pub const EXTRA_USER_DIRS: [&str; 3] = [
+/// Skill dirs the harnesses read beyond the `skills` CLI's table, checked on
+/// disk or in their docs (2026-11-06): Codex's and the Antigravity CLI's user
+/// dirs, and the project dirs of Cursor, Copilot, OpenCode and Gemini CLI.
+pub const EXTRA_DIRS: [&str; 7] = [
     "~/.codex/skills",
     "~/.gemini/antigravity-cli/skills",
     "~/.config/opencode/skills",
+    ".cursor/skills",
+    ".github/skills",
+    ".opencode/skills",
+    ".gemini/skills",
 ];
 
 /// Every dir a harness reads skills from, first occurrence kept. Project dirs
@@ -27,7 +32,7 @@ pub fn skill_dirs() -> Vec<&'static str> {
         .iter()
         .flat_map(|h| [h.user, h.project.filter(|p| p.starts_with('.'))])
         .flatten()
-        .chain(EXTRA_USER_DIRS);
+        .chain(EXTRA_DIRS);
     for dir in candidates {
         if !dirs.contains(&dir) {
             dirs.push(dir);
@@ -69,6 +74,8 @@ mod tests {
         }
         assert!(dirs.contains(&".agents/skills"));
         assert!(dirs.contains(&"~/.codex/skills"));
+        assert!(dirs.contains(&".cursor/skills"));
+        assert!(dirs.contains(&".github/skills"));
         assert!(dirs.contains(&"~/.astrbot/data/skills"));
     }
 
