@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth import --from copilot`** (and `all`, the default) appends GitHub Copilot CLI spend from `$COPILOT_HOME/session-state` (default `~/.copilot`). There is one turn per model each time a session shuts down, with `harness: "copilot"`, the request count, the premium requests used, and the token counts. Skills the session ran (`skill.invoked`) are recorded as uses. A re-run adds only new shutdowns. Copilot resumes either restart their totals or carry them over, depending on the version; Girth tells the two apart so nothing is counted twice (see `src/import/copilot.rs`).
+- **`girth advise` reports Copilot premium requests** beside the list-price estimate (JSON: `premium_requests`), because Copilot bills by premium request rather than by token. `--harness copilot` names Copilot's `/clear` and `AGENTS.md`.
+- **List prices for Claude Sonnet 4.6, Opus 4.6 and Haiku 4.5**, the models in older Copilot sessions.
+
+### Fixed
+- CLI tests no longer read the machine's own Codex or Copilot logs.
+
 ## [0.11.0] - 2026-11-06
 
 ### Added

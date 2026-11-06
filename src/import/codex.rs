@@ -108,6 +108,7 @@ fn new_turn(session: &Option<String>) -> Turn {
         breaks: vec![],
         outcomes: vec![],
         harness: Some("codex".into()),
+        premium: None,
     }
 }
 

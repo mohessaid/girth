@@ -234,6 +234,7 @@ If the user's request might be served by one of these servers, call ToolSearch.
             ts,
             Event::Turn(Turn {
                 harness: None,
+                premium: None,
                 project: project.into(),
                 session: None,
                 model: "m".into(),

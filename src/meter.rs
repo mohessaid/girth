@@ -174,6 +174,7 @@ mod tests {
             ts: 1,
             event: Event::Turn(Turn {
                 harness: None,
+                premium: None,
                 project: project.into(),
                 session: None,
                 model: model.into(),

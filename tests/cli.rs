@@ -10,6 +10,9 @@ fn girth() -> Command {
     );
     // Tests run inside Claude Code too; the output default must not follow it.
     cmd.env_remove("CLAUDECODE").env_remove("GIRTH_OUTPUT_DIR");
+    // `girth import` must never read this machine's own harness logs.
+    let none = std::env::temp_dir().join("girth-test-no-harness");
+    cmd.env("CODEX_HOME", &none).env("COPILOT_HOME", &none);
     cmd
 }
 
@@ -1296,6 +1299,44 @@ fn advise_is_silent_when_empty_and_names_the_top_cost_when_one_dominates() {
 
 fn codex_fixture() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codex")
+}
+
+fn copilot_fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/copilot")
+}
+
+#[test]
+fn import_reads_copilot_sessions_once() {
+    let tmp = TempDir::new().unwrap();
+    for want in [
+        "imported 5 turns from copilot",
+        "imported 0 turns from copilot",
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path().join("g"))
+            .env("COPILOT_HOME", copilot_fixture())
+            .arg("import")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("imported 0 turns from codex"))
+            .stdout(predicate::str::contains(want));
+    }
+    let ledger = std::fs::read_to_string(tmp.path().join("g/ledger.jsonl")).unwrap();
+    assert!(ledger.contains(r#""harness":"copilot""#));
+    assert!(ledger.contains(r#""premium":3"#));
+}
+
+#[test]
+fn import_from_one_harness_reads_only_that_one() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("g"))
+        .env("COPILOT_HOME", copilot_fixture())
+        .env("CODEX_HOME", codex_fixture())
+        .args(["import", "--from", "copilot"])
+        .assert()
+        .success()
+        .stdout("imported 5 turns from copilot\n");
 }
 
 #[test]

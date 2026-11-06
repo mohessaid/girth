@@ -12,7 +12,7 @@ use girth::skill::CRAFTED_PREFIX;
 use girth::skill::{SkillInfo, discover_skills};
 use girth::taste::{self, TasteEvent, TasteRecord, Tier};
 use girth::validate::validate;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Just-in-time, project-scoped agent skills.
 #[derive(Parser)]
@@ -155,7 +155,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -168,9 +168,9 @@ enum Command {
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
-    /// Append spend from other harnesses' local session logs (Codex) to the ledger.
+    /// Append spend from other harnesses' local session logs (Codex, Copilot CLI) to the ledger.
     Import {
-        /// Which harness: `codex` or `all`.
+        /// Which harness: `codex`, `copilot` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1078,30 +1078,41 @@ fn main() -> ExitCode {
             }
         }
         Command::Import { from } => {
-            if from != "codex" && from != "all" {
-                eprintln!("girth: unknown harness: {from} (try codex or all)");
+            if !["codex", "copilot", "all"].contains(&from.as_str()) {
+                eprintln!("girth: unknown harness: {from} (try codex, copilot or all)");
                 return ExitCode::from(2);
             }
-            let codex_home = ctx
-                .env
-                .get("CODEX_HOME")
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-                .or_else(|| ctx.home.as_ref().map(|h| h.join(".codex")));
-            let Some(codex_home) = codex_home else {
-                let _ = writeln!(out, "imported 0 turns from codex");
-                return ExitCode::SUCCESS;
-            };
-            match girth::import::import_codex(&codex_home, &girth_home(&ctx)) {
-                Ok(n) => {
-                    let _ = writeln!(out, "imported {n} turns from codex");
-                    ExitCode::SUCCESS
+            type Importer = fn(&Path, &Path) -> std::io::Result<usize>;
+            let sources: [(&str, &str, &str, Importer); 2] = [
+                ("codex", "CODEX_HOME", ".codex", girth::import::import_codex),
+                (
+                    "copilot",
+                    "COPILOT_HOME",
+                    ".copilot",
+                    girth::import::import_copilot,
+                ),
+            ];
+            for (name, var, dir, import) in sources {
+                if from != "all" && from != name {
+                    continue;
                 }
-                Err(e) => {
-                    eprintln!("girth: import failed: {e}");
-                    ExitCode::FAILURE
-                }
+                let home = ctx
+                    .env
+                    .get(var)
+                    .filter(|v| !v.is_empty())
+                    .map(PathBuf::from)
+                    .or_else(|| ctx.home.as_ref().map(|h| h.join(dir)));
+                let n = match home.map(|h| import(&h, &girth_home(&ctx))) {
+                    Some(Err(e)) => {
+                        eprintln!("girth: import from {name} failed: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                    Some(Ok(n)) => n,
+                    None => 0,
+                };
+                let _ = writeln!(out, "imported {n} turns from {name}");
             }
+            ExitCode::SUCCESS
         }
         Command::Advise {
             since,
@@ -1127,6 +1138,7 @@ fn main() -> ExitCode {
                 compact_idle: keeper.compact_idle,
                 agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
                 codex: harness.as_deref() == Some("codex"),
+                copilot: harness.as_deref() == Some("copilot"),
             };
             let harness = harness.or_else(|| brief.then(|| "claude-code".to_string()));
             let mut records = ledger::read(&home);

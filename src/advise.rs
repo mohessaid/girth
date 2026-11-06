@@ -26,6 +26,8 @@ pub struct On {
     pub agents_model: bool,
     /// The advice is for Codex turns: name Codex's commands.
     pub codex: bool,
+    /// The advice is for Copilot CLI turns: name its instructions file.
+    pub copilot: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -49,6 +51,9 @@ pub struct Advice {
     pub unpriced: u64,
     /// Spend per harness (`claude-code` for turns the mod recorded).
     pub harnesses: BTreeMap<String, f64>,
+    /// Premium requests on harnesses that bill by request (Copilot); their `spend`
+    /// share is what the tokens would cost at list prices.
+    pub premium_requests: u64,
 }
 
 /// Estimated dollars for one turn (subagents write the 5-minute cache); 0 for unknown models.
@@ -86,6 +91,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         let h = t.harness.as_deref().unwrap_or("claude-code");
         *harnesses.entry(h.to_string()).or_default() += turn_cost(t);
     }
+    let premium_requests = turns.iter().filter_map(|(_, t)| t.premium).sum();
     let mut out = Vec::new();
     if spend <= 0.0 {
         return Advice {
@@ -94,10 +100,13 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             contributors: out,
             unpriced,
             harnesses,
+            premium_requests,
         };
     }
     let (clear, memory) = if on.codex {
         ("/new", "AGENTS.md")
+    } else if on.copilot {
+        ("/clear", "AGENTS.md")
     } else {
         ("/clear", "CLAUDE.md")
     };
@@ -267,6 +276,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         contributors: out,
         unpriced,
         harnesses,
+        premium_requests,
     }
 }
 
@@ -284,7 +294,7 @@ pub fn render(advice: &Advice) -> String {
         return format!(
             "girth advise ({when}): ${:.2} estimated, nothing stands out\n{}",
             advice.spend,
-            unpriced_note(advice.unpriced)
+            notes(advice)
         );
     }
     let mut s = format!(
@@ -309,7 +319,18 @@ pub fn render(advice: &Advice) -> String {
     if hidden > 0 {
         s += &format!("       ({hidden} more under 1%; --json lists them)\n");
     }
-    s + &unpriced_note(advice.unpriced)
+    s + &notes(advice)
+}
+
+fn notes(advice: &Advice) -> String {
+    let mut s = unpriced_note(advice.unpriced);
+    if advice.premium_requests > 0 {
+        s += &format!(
+            "       ({} Copilot premium requests; Copilot's share is at list prices, not what the subscription bills)\n",
+            advice.premium_requests
+        );
+    }
+    s
 }
 
 fn unpriced_note(unpriced: u64) -> String {
@@ -352,6 +373,7 @@ mod tests {
     fn turn(model: &str, cache_read: u64, output: u64) -> Turn {
         Turn {
             harness: None,
+            premium: None,
             project: "/p".into(),
             session: None,
             model: model.into(),
@@ -453,6 +475,59 @@ mod tests {
         assert_eq!(advice.harnesses["claude-code"], 20.0);
         assert_eq!(advice.harnesses["codex"], 50.0);
         assert_eq!(advice.spend, 70.0);
+    }
+
+    #[test]
+    fn copilot_premium_requests_are_reported_beside_list_price() {
+        let mut copilot = turn("claude-sonnet-4-6", 0, 1_000_000);
+        copilot.harness = Some("copilot".into());
+        copilot.premium = Some(12);
+        let mut more = copilot.clone();
+        more.premium = Some(3);
+        let records = [
+            rec(10, copilot),
+            rec(20, more),
+            rec(30, turn("claude-opus-5-5", 0, 1)),
+        ];
+        let advice = advise(&records, 100, 1000, On::default());
+        assert_eq!(advice.premium_requests, 15);
+        let text = render(&advice);
+        assert!(text.contains("15 Copilot premium requests"), "{text}");
+        assert!(
+            text.contains("list prices, not what the subscription bills"),
+            "{text}"
+        );
+        let none = advise(
+            &[rec(30, turn("claude-opus-5-5", 0, 1))],
+            100,
+            1000,
+            On::default(),
+        );
+        assert_eq!(none.premium_requests, 0);
+        assert!(!render(&none).contains("premium"));
+    }
+
+    #[test]
+    fn copilot_advice_names_copilot_files() {
+        let on = On {
+            copilot: true,
+            ..On::default()
+        };
+        let mut early = turn("claude-sonnet-4-6", 400_000, 0);
+        early.session = Some("s".into());
+        let late = early.clone();
+        let records = [rec(10, early), rec(10 + 9 * 3600, late)];
+        let advice = advise(&records, 10 + 9 * 3600, 86_400, on);
+        let text: String = advice
+            .contributors
+            .iter()
+            .map(|c| format!("{} {}\n", c.fix, c.guard))
+            .collect();
+        assert!(
+            text.contains("/clear") && text.contains("AGENTS.md"),
+            "{text}"
+        );
+        assert!(!text.contains("CLAUDE.md"), "{text}");
     }
 
     #[test]

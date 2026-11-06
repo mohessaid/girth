@@ -43,7 +43,7 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 | Harness | Source (verified on this machine) | Per request | Turn grouping | Skill use |
 |---|---|---|---|---|
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, `token_usage_record` | input, cached_input, cache_write_input, output | `turn_id` | inferred from reads of a `SKILL.md`, marked inferred |
-| Copilot CLI | `~/.copilot/session-state/<id>/events.jsonl`, `session.usage_record` | input, output, cacheRead, cacheWrite, cost, model | one turn per request | `skill.invoked` |
+| Copilot CLI | `~/.copilot/session-state/<id>/events.jsonl`, `session.shutdown` `modelMetrics` (built); `session.usage_record` (1.0.105+, follow-up) | requests, premium requests, input (includes cache), output, cacheRead, cacheWrite | one turn per model per shutdown | `skill.invoked` |
 | OpenCode | `~/.local/share/opencode/opencode.db`, `message.data` | tokens.input, output, cache.read and cache.write, cost, modelID | message | `skill` tool parts |
 | Gemini CLI | `~/.gemini/tmp/<project>/chats/session-*.jsonl` | tokens.input, output, cached (no cache write) | message | `activate_skill` calls |
 
@@ -52,7 +52,7 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
   - Antigravity's logs are opaque protobuf.
   - Goose keeps per-session totals only.
 - **Prices:**
-  - Use the log's own `cost` when present (Copilot, OpenCode).
+  - Use the log's own `cost` when present and nonzero (OpenCode). Copilot's `cost` is 0 for BYOK, and its `requests.cost` counts premium requests, not dollars. Girth prices Copilot's tokens at list prices and reports premium requests beside them, because that is what Copilot bills.
   - Otherwise take rates from the provider's official pricing page, cited in `price.rs`.
   - For an unpriced model, the turn keeps its tokens, and `advise` labels its share "price unknown" rather than guessing.
 - `advise` and `stats` gain a `--harness <id>` filter, and their JSON gains a per-harness split under a new key. Existing keys are unchanged (frozen).
@@ -93,6 +93,11 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 - **Before choosing, check:**
   - Claude Code follows a symlinked skill dir. Plugin installs suggest so, but this needs checking for project skills.
   - Links survive `git` on Windows checkouts.
+
+## Follow-up: Copilot per-request import
+
+- **Built (v0.12):** shutdown totals, one turn per model per shutdown. These cover every Copilot version on the author's machine (0.0.394 to 1.0.106).
+- **Not yet built:** Copilot 1.0.105+ also writes `session.usage_record` per request (with `apiCallId` and `accounting.sequence`). Reading those would import a session before it shuts down, and group requests by user prompt. A file holding both must not count a request twice.
 
 ## Not in scope
 - Porting Lens, Meter, keeper or compaction to other harnesses' hook systems. Codex's `PostModelRequest` hook carries `token_usage`, so a live Codex meter is a possible follow-up once import shows the data is useful.

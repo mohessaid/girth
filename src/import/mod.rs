@@ -4,6 +4,7 @@
 //! re-run appends only what is new. Logs are read, never changed.
 
 pub mod codex;
+pub mod copilot;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -32,14 +33,27 @@ fn rollouts(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+fn load(girth_home: &Path) -> Offsets {
+    std::fs::read_to_string(girth_home.join(OFFSETS_FILE))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+fn save(girth_home: &Path, offsets: &Offsets, added: usize) -> std::io::Result<()> {
+    let path = girth_home.join(OFFSETS_FILE);
+    if added > 0 || path.exists() {
+        std::fs::create_dir_all(girth_home)?;
+        let text = serde_json::to_string_pretty(offsets).map_err(std::io::Error::other)?;
+        std::fs::write(&path, text)?;
+    }
+    Ok(())
+}
+
 /// Append the Codex turns under `<codex_home>/sessions` not imported before;
 /// returns how many. A file shorter than its recorded offset is read again from the start.
 pub fn import_codex(codex_home: &Path, girth_home: &Path) -> std::io::Result<usize> {
-    let offsets_path = girth_home.join(OFFSETS_FILE);
-    let mut offsets: Offsets = std::fs::read_to_string(&offsets_path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
+    let mut offsets = load(girth_home);
     let mut files = Vec::new();
     rollouts(&codex_home.join("sessions"), &mut files);
     files.sort();
@@ -67,12 +81,46 @@ pub fn import_codex(codex_home: &Path, girth_home: &Path) -> std::io::Result<usi
             seen.insert(key, start + consumed);
         }
     }
-    if added > 0 || offsets_path.exists() {
-        std::fs::create_dir_all(girth_home)?;
-        let text = serde_json::to_string_pretty(&offsets).map_err(std::io::Error::other)?;
-        std::fs::write(&offsets_path, text)?;
-    }
+    save(girth_home, &offsets, added)?;
     Ok(added)
+}
+
+/// Append the Copilot CLI turns and skill uses under `<copilot_home>/session-state` not
+/// imported before; returns how many turns. Each session's imported shutdowns are counted,
+/// and a session with fewer shutdowns than recorded is read again from the start.
+pub fn import_copilot(copilot_home: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    let mut offsets = load(girth_home);
+    let mut files: Vec<PathBuf> = std::fs::read_dir(copilot_home.join("session-state"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path().join("events.jsonl"))
+        .filter(|p| p.is_file())
+        .collect();
+    files.sort();
+    let seen = offsets.entry("copilot".into()).or_default();
+    let (mut added, mut turns) = (0, 0);
+    for file in files {
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let key = file.display().to_string();
+        let recorded = seen.get(&key).copied().unwrap_or(0);
+        let (mut events, total) = copilot::parse(&text, recorded);
+        if total < recorded {
+            events = copilot::parse(&text, 0).0;
+        }
+        for (ts, event) in events {
+            turns += usize::from(matches!(event, ledger::Event::Turn(_)));
+            ledger::append_at(girth_home, ts, event)?;
+            added += 1;
+        }
+        if total > 0 {
+            seen.insert(key, total);
+        }
+    }
+    save(girth_home, &offsets, added)?;
+    Ok(turns)
 }
 
 #[cfg(test)]
@@ -137,6 +185,80 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let girth = tmp.path().join("g");
         assert_eq!(import_codex(&tmp.path().join("none"), &girth).unwrap(), 0);
+        assert!(!girth.exists());
+    }
+
+    const COPILOT: &str =
+        include_str!("../../tests/fixtures/copilot/session-state/s1/events.jsonl");
+
+    fn copilot_home(tmp: &TempDir, text: &str) -> PathBuf {
+        let home = tmp.path().join("copilot");
+        let dir = home.join("session-state/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("events.jsonl"), text).unwrap();
+        // Only session-state/<id>/events.jsonl files are sessions.
+        std::fs::write(home.join("session-state/events.jsonl"), COPILOT).unwrap();
+        std::fs::create_dir_all(home.join("session-state/s2")).unwrap();
+        std::fs::write(home.join("session-state/s2/other.jsonl"), COPILOT).unwrap();
+        home
+    }
+
+    #[test]
+    fn copilot_shutdowns_are_imported_once() {
+        let tmp = TempDir::new().unwrap();
+        let (copilot, girth) = (copilot_home(&tmp, COPILOT), tmp.path().join("g"));
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5);
+        assert_eq!(ledger::read(&girth).len(), 6); // 5 turns and 1 skill use
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 0);
+        let more = format!(
+            "{COPILOT}\n{}\n",
+            r#"{"type":"session.shutdown","timestamp":"2026-07-09T10:00:00.000Z","data":{"modelMetrics":{"claude-sonnet-4.6":{"requests":{"count":1,"cost":1},"usage":{"inputTokens":10,"outputTokens":1,"cacheReadTokens":0,"cacheWriteTokens":0}}}}}"#
+        );
+        std::fs::write(copilot.join("session-state/s1/events.jsonl"), more).unwrap();
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 1);
+        // The open stretch's skill use came with its shutdown.
+        assert_eq!(ledger::read(&girth).len(), 8);
+    }
+
+    #[test]
+    fn a_copilot_session_with_fewer_shutdowns_is_read_again() {
+        let tmp = TempDir::new().unwrap();
+        let (copilot, girth) = (copilot_home(&tmp, COPILOT), tmp.path().join("g"));
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5);
+        let first: String = COPILOT.split_inclusive('\n').take(8).collect();
+        std::fs::write(copilot.join("session-state/s1/events.jsonl"), first).unwrap();
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 1);
+    }
+
+    #[test]
+    fn copilot_and_codex_keep_separate_cursors() {
+        let tmp = TempDir::new().unwrap();
+        let girth = tmp.path().join("g");
+        let copilot = copilot_home(&tmp, COPILOT);
+        let codex = codex_home(&tmp, FIXTURE);
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5);
+        assert_eq!(import_codex(&codex, &girth).unwrap(), 3);
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 0);
+        assert_eq!(import_codex(&codex, &girth).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_copilot_session_not_yet_shut_down_gets_no_cursor() {
+        let tmp = TempDir::new().unwrap();
+        let open: String = COPILOT.split_inclusive('\n').take(4).collect();
+        let (copilot, girth) = (copilot_home(&tmp, &open), tmp.path().join("g"));
+        std::fs::create_dir_all(copilot.join("session-state/s3")).unwrap();
+        std::fs::write(copilot.join("session-state/s3/events.jsonl"), COPILOT).unwrap();
+        assert_eq!(import_copilot(&copilot, &girth).unwrap(), 5); // all from s3
+        let cursors = std::fs::read_to_string(girth.join(OFFSETS_FILE)).unwrap();
+        assert!(!cursors.contains("s1"), "{cursors}");
+    }
+
+    #[test]
+    fn no_copilot_sessions_writes_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let girth = tmp.path().join("g");
+        assert_eq!(import_copilot(&tmp.path().join("none"), &girth).unwrap(), 0);
         assert!(!girth.exists());
     }
 }

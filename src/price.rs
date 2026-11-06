@@ -1,7 +1,8 @@
 //! Per-model API prices, for cost estimates from recorded token counts.
 //!
 //! Sources: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
-//! 2026-10-06) for Claude models; developers.openai.com/api/docs/pricing (standard
+//! 2026-10-06) for Claude models (earlier models from its legacy table, with cache reads at
+//! 0.1× and 1-hour writes at 2× input); developers.openai.com/api/docs/pricing (standard
 //! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
 //! cache writes at the 30-minute rate. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
@@ -19,7 +20,7 @@ pub struct Rates {
 /// Rates for a model id. Matches the exact id, or the id followed by a
 /// bracketed suffix (`claude-opus-5-5[1m]`).
 pub fn rates(model: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 9] = [
+    const TABLE: [(&str, Rates); 12] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -56,6 +57,10 @@ pub fn rates(model: &str) -> Option<Rates> {
                 cache_write: 20.0,
             },
         ),
+        // Earlier models GitHub Copilot CLI sessions ran (Copilot logs them as `claude-sonnet-4.6`).
+        ("claude-sonnet-4-6", anthropic(3.0, 0.30, 15.0)),
+        ("claude-opus-4-6", anthropic(5.0, 0.50, 25.0)),
+        ("claude-haiku-4-5", anthropic(1.0, 0.10, 5.0)),
         ("gpt-6-astra", openai(10.0, 1.0, 12.5, 50.0)),
         ("gpt-6.1-sol", openai(2.0, 0.10, 2.5, 10.0)),
         ("gpt-6-sol", openai(2.0, 0.20, 2.5, 10.0)),
@@ -64,6 +69,16 @@ pub fn rates(model: &str) -> Option<Rates> {
     ];
     let id = model.split('[').next().unwrap_or(model);
     TABLE.iter().find(|(name, _)| *name == id).map(|(_, r)| *r)
+}
+
+/// Anthropic's earlier models: input, cache read (0.1× input), output; 1-hour writes at 2× input.
+const fn anthropic(input: f64, cache_read: f64, output: f64) -> Rates {
+    Rates {
+        input,
+        output,
+        cache_read,
+        cache_write: input * 2.0,
+    }
 }
 
 /// OpenAI's table order: input, cached input, cache write, output.
@@ -115,6 +130,23 @@ mod tests {
         assert_eq!(rates("gpt-6-sol").unwrap().cache_read, 0.20);
         assert_eq!(rates("gpt-6-luna").unwrap().cache_write, 0.125);
         assert_eq!(rates("gpt-6.1-sol").unwrap().output, 10.0);
+    }
+
+    #[test]
+    fn earlier_claude_models_copilot_runs_are_priced() {
+        let rows = [
+            ("claude-sonnet-4-6", (3.0, 15.0, 0.30, 6.0)),
+            ("claude-opus-4-6", (5.0, 25.0, 0.50, 10.0)),
+            ("claude-haiku-4-5", (1.0, 5.0, 0.10, 2.0)),
+        ];
+        for (id, want) in rows {
+            let r = rates(id).unwrap();
+            assert_eq!(
+                (r.input, r.output, r.cache_read, r.cache_write),
+                want,
+                "{id}"
+            );
+        }
     }
 
     #[test]

@@ -157,6 +157,9 @@ pub struct Turn {
     /// The harness the turn ran in, for imported turns; absent means Claude Code.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness: Option<String>,
+    /// Premium requests the turn used, for harnesses that bill by request (Copilot).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub premium: Option<u64>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -372,6 +375,7 @@ mod tests {
         };
         let turn = Event::Turn(Turn {
             harness: None,
+            premium: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),
@@ -513,6 +517,7 @@ mod tests {
     fn turn_fixture() -> Turn {
         Turn {
             harness: None,
+            premium: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),

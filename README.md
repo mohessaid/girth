@@ -137,13 +137,13 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 
 - **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`).
 - **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead.
-- **Counts what other harnesses spend.** `girth import` reads Codex's local session logs, and `girth advise --harness codex` ranks them with Codex's own fixes (`/new`, `/compact`). On the author's machine, it imported 140 Codex turns, and its total matched an independent sum of every usage record to the cent ($173.00 at OpenAI list prices).
+- **Counts what other harnesses spend.** `girth import` reads Codex's and GitHub Copilot CLI's local session logs, and `girth advise --harness codex` (or `copilot`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent: 140 Codex turns, $173.00 at OpenAI list prices; 97 Copilot session stretches, $610.09 at Anthropic list prices. Copilot bills premium requests, not tokens, so `advise` reports those beside the list-price figure (611 here).
 
 | Harness | Finds its skills | Crafts into a dir it reads | Spend import | [Checked with a real run](examples/portability/RESULTS.md) |
 |---|---|---|---|---|
 | Claude Code | ✓ | `.claude/skills` | native (the mod) | ✓ |
 | Codex CLI 0.164 | ✓ | `.agents/skills` | ✓ `girth import` | ✓ |
-| GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | planned (its log has per-request usage) | ✓ |
+| GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | ✓ `girth import` (per session stretch, with premium requests) | ✓ |
 | OpenCode 1.17 | ✓ | `.agents/skills` | planned (its log has per-request usage) | ✓ |
 | Antigravity CLI 1.5 | ✓ | `.agents/skills` | — (logs are opaque) | ✓ |
 | Gemini CLI, Cursor, Amp, Goose | ✓ | `.agents/skills` | Gemini CLI planned; the rest keep no usable token data | not yet |

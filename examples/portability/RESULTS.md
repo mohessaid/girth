@@ -47,6 +47,26 @@ girth advise (60d): $173.00 estimated at list prices; shares overlap
 - The first build gave $170.14. The $2.87 gap was 4 turns that never logged an end event; they are now recorded as aborted once a later turn ends.
 - Across both harnesses over 60 days, `advise --json` splits spend as `claude-code` $3,549 and `codex` $173.
 
+**Copilot CLI spend.** `girth import --from copilot` on the author's `~/.copilot` (58 sessions, 96 shutdowns; into a scratch `GIRTH_HOME`):
+
+```
+$ girth import --from copilot
+imported 97 turns from copilot
+$ girth import --from copilot
+imported 0 turns from copilot
+$ girth advise --since 100000d --harness copilot
+girth advise (100000d): $610.09 estimated at list prices; shares overlap
+  43%  turns 8h+ into a session  ($261.10)
+  14%  webapp-testing  ($85.47)
+       (19 turns on models without known prices are not counted)
+       (611 Copilot premium requests; Copilot's share is at list prices, not what the subscription bills)
+```
+
+- Copilot logs per-model totals at each shutdown. A resumed session's next shutdown holds either a fresh count or the running totals, depending on the CLI version; one session here has both. The first draft of the rule read one fresh count as running totals (about $70 too little). Model-tagged assistant messages settled that case: 312 Sonnet and 48 gpt-5.4 messages in that stretch.
+- 16 shutdowns are empty. Of the other 80, rules settle 67 structurally (39 first, 24 where a model went down, 4 carried over unchanged), message tags settle 6, and turn counts settle 7.
+- An independent Python pass with the same rule gives **$610.09**. The bounds are $278.20 if every shutdown were running totals and $646.27 if every one were fresh.
+- Unpriced: agnes-3.0-flash (BYOK, logged cost 0), deepseek-v4-pro, gpt-5.4, gpt-5.3-codex.
+
 ## Headless check per harness (2026-11-06, `sh examples/portability/run.sh`)
 
 - **Setup:** a throwaway git folder with the shipped `girth` skill (binary bundled) and a crafted `girth-hyperframes` in `.agents/skills`.
