@@ -145,7 +145,6 @@ enum Command {
         /// owner/repo or owner/repo/sub/path.
         spec: String,
     },
-    /// Check crafted skills against the Girth contract.
     /// What is costing you, the lever that fixes it, and why the fix keeps things working
     Advise {
         /// Window: `24h`, `7d`, or seconds (default 7d).
@@ -165,6 +164,13 @@ enum Command {
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
+    /// Append spend from other harnesses' local session logs (Codex) to the ledger.
+    Import {
+        /// Which harness: `codex` or `all`.
+        #[arg(long, default_value = "all")]
+        from: String,
+    },
+    /// Check crafted skills against the Girth contract.
     Validate {
         /// Don't record a craft event in the ledger.
         #[arg(long)]
@@ -1064,6 +1070,32 @@ fn main() -> ExitCode {
                 Err(e) => {
                     eprintln!("girth: could not record feedback: {e}");
                     ExitCode::from(1)
+                }
+            }
+        }
+        Command::Import { from } => {
+            if from != "codex" && from != "all" {
+                eprintln!("girth: unknown harness: {from} (try codex or all)");
+                return ExitCode::from(2);
+            }
+            let codex_home = ctx
+                .env
+                .get("CODEX_HOME")
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .or_else(|| ctx.home.as_ref().map(|h| h.join(".codex")));
+            let Some(codex_home) = codex_home else {
+                let _ = writeln!(out, "imported 0 turns from codex");
+                return ExitCode::SUCCESS;
+            };
+            match girth::import::import_codex(&codex_home, &girth_home(&ctx)) {
+                Ok(n) => {
+                    let _ = writeln!(out, "imported {n} turns from codex");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("girth: import failed: {e}");
+                    ExitCode::FAILURE
                 }
             }
         }

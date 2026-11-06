@@ -1293,3 +1293,68 @@ fn advise_is_silent_when_empty_and_names_the_top_cost_when_one_dominates() {
         serde_json::from_slice(&advise(&["--json"]).get_output().stdout).unwrap();
     assert_eq!(json["contributors"][0]["kind"], "skill");
 }
+
+fn codex_fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codex")
+}
+
+#[test]
+fn import_then_reimport_adds_nothing() {
+    let tmp = TempDir::new().unwrap();
+    let codex = tmp.path().join("codex");
+    let copy = std::process::Command::new("cp")
+        .arg("-R")
+        .arg(codex_fixture())
+        .arg(&codex)
+        .status()
+        .unwrap();
+    assert!(copy.success());
+    for want in ["imported 3 turns from codex", "imported 0 turns from codex"] {
+        girth()
+            .env("GIRTH_HOME", tmp.path().join("g"))
+            .env("CODEX_HOME", &codex)
+            .arg("import")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(want));
+    }
+    let ledger = std::fs::read_to_string(tmp.path().join("g/ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 3);
+    assert!(ledger.contains(r#""harness":"codex""#));
+}
+
+#[test]
+fn import_without_codex_is_quiet() {
+    let tmp = TempDir::new().unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("g"))
+        .env("CODEX_HOME", tmp.path().join("none"))
+        .args(["import", "--from", "codex"])
+        .assert()
+        .success()
+        .stdout("imported 0 turns from codex\n");
+}
+
+#[test]
+fn import_rejects_an_unknown_harness() {
+    girth()
+        .args(["import", "--from", "nope"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("unknown harness: nope"));
+}
+
+#[test]
+fn every_command_has_its_own_summary() {
+    let help = girth().arg("--help").assert().success();
+    let text = String::from_utf8_lossy(&help.get_output().stdout).to_string();
+    let line = |cmd: &str| {
+        text.lines()
+            .find(|l| l.trim_start().starts_with(&format!("{cmd} ")))
+            .unwrap_or_else(|| panic!("no help line for {cmd}:\n{text}"))
+            .to_string()
+    };
+    assert!(line("validate").contains("Check crafted skills"));
+    assert!(!line("advise").contains("Check crafted skills"));
+    assert!(line("import").contains("other harnesses"));
+}
