@@ -233,6 +233,7 @@ If the user's request might be served by one of these servers, call ToolSearch.
         rec(
             ts,
             Event::Turn(Turn {
+                harness: None,
                 project: project.into(),
                 session: None,
                 model: "m".into(),

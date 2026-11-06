@@ -315,6 +315,7 @@ fn record_use(skill: Option<String>, ctx: &Context) -> String {
             project: project.clone(),
             session,
             agent,
+            harness: None,
         },
     );
     // The hook runs on every Skill call: parse only lines that can matter.

@@ -291,6 +291,7 @@ SKIP only when another provider is used.
         rec(
             ts,
             Event::Use {
+                harness: None,
                 skill: skill.into(),
                 project: project.into(),
                 session: None,

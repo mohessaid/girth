@@ -154,6 +154,7 @@ mod tests {
     #[test]
     fn non_craft_events_have_no_drift() {
         let e = Event::Use {
+            harness: None,
             skill: "girth-x".into(),
             project: "/p".into(),
             session: None,

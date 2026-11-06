@@ -58,6 +58,9 @@ pub enum Event {
         /// Run by a subagent rather than the main loop.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         agent: bool,
+        /// The harness the skill ran in, for imported uses; absent means Claude Code.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        harness: Option<String>,
     },
     Craft {
         skill: String,
@@ -151,6 +154,9 @@ pub struct Turn {
     /// What the turn's Bash calls achieved. Labels only, never command text.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outcomes: Vec<crate::outcome::Outcome>,
+    /// The harness the turn ran in, for imported turns; absent means Claude Code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<String>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -189,10 +195,15 @@ pub fn now() -> u64 {
 
 /// Append one event as a single line.
 pub fn append(home: &Path, event: Event) -> std::io::Result<()> {
+    append_at(home, now(), event)
+}
+
+/// Append one event that happened at `ts` (an imported one, say).
+pub fn append_at(home: &Path, ts: u64, event: Event) -> std::io::Result<()> {
     std::fs::create_dir_all(home)?;
     let record = Record {
         v: SCHEMA_VERSION,
-        ts: now(),
+        ts,
         event,
     };
     append_json_line(&home.join(LEDGER_FILE), &record)
@@ -271,11 +282,50 @@ mod tests {
 
     fn use_event(skill: &str) -> Event {
         Event::Use {
+            harness: None,
             skill: skill.into(),
             project: "/p".into(),
             session: None,
             agent: false,
         }
+    }
+
+    #[test]
+    fn old_lines_parse_without_harness() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join(LEDGER_FILE),
+            concat!(
+                r#"{"v":1,"ts":1,"kind":"turn","project":"/p","model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"agent":false,"aborted":false}"#,
+                "\n",
+                r#"{"v":1,"ts":2,"kind":"use","skill":"s","project":"/p"}"#,
+                "\n"
+            ),
+        )
+        .unwrap();
+        let records = read(tmp.path());
+        assert!(matches!(&records[0].event, Event::Turn(t) if t.harness.is_none()));
+        assert!(matches!(
+            &records[1].event,
+            Event::Use { harness: None, .. }
+        ));
+    }
+
+    #[test]
+    fn append_at_keeps_the_timestamp_and_the_harness() {
+        let tmp = TempDir::new().unwrap();
+        let event = Event::Use {
+            skill: "s".into(),
+            project: "/p".into(),
+            session: None,
+            agent: false,
+            harness: Some("codex".into()),
+        };
+        append_at(tmp.path(), 42, event.clone()).unwrap();
+        let records = read(tmp.path());
+        assert_eq!((records[0].ts, &records[0].event), (42, &event));
+        let text = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(text.contains(r#""harness":"codex""#));
     }
 
     #[test]
@@ -321,6 +371,7 @@ mod tests {
             names: vec!["a".into(), "plug:b".into()],
         };
         let turn = Event::Turn(Turn {
+            harness: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),
@@ -438,6 +489,7 @@ mod tests {
         );
 
         let used = Event::Use {
+            harness: None,
             skill: "s".into(),
             project: "/p".into(),
             session: Some("abc".into()),
@@ -460,6 +512,7 @@ mod tests {
 
     fn turn_fixture() -> Turn {
         Turn {
+            harness: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),

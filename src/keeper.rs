@@ -281,6 +281,7 @@ mod tests {
 
     fn turn(model: &str, breaks: &[(u64, u64, u64)]) -> Turn {
         Turn {
+            harness: None,
             project: "/p".into(),
             session: None,
             model: model.into(),

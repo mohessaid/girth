@@ -219,6 +219,7 @@ mod tests {
 
     fn use_(skill: &str, project: &str) -> Record {
         rec(Event::Use {
+            harness: None,
             skill: skill.into(),
             project: project.into(),
             session: None,

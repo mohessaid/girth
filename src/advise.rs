@@ -100,6 +100,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     let mut per_skill: BTreeMap<&str, (f64, BTreeSet<usize>)> = Default::default();
     for r in records {
         let Event::Use {
+            harness: _,
             skill,
             project,
             session,
@@ -314,6 +315,7 @@ mod tests {
 
     fn turn(model: &str, cache_read: u64, output: u64) -> Turn {
         Turn {
+            harness: None,
             project: "/p".into(),
             session: None,
             model: model.into(),
@@ -345,6 +347,7 @@ mod tests {
             v: 1,
             ts,
             event: Event::Use {
+                harness: None,
                 skill: skill.into(),
                 project: "/p".into(),
                 session: None,
@@ -372,6 +375,7 @@ mod tests {
                 project: "/p".into(),
                 session: Some(session.into()),
                 agent,
+                harness: None,
             },
         }
     }
