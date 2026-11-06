@@ -740,6 +740,30 @@ fn home_cmd(home: &std::path::Path) -> Command {
 }
 
 #[test]
+fn meter_record_keeps_context_and_large_tool_output() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let turn = r#"{"project":"/w","session":"s","model":"claude-sonnet-5-5","input":2,"output":7,"cache_read":8605,"cache_write":40000,"agent":false,"aborted":false,"requests":4,"context":48607,"tool_output":{"Bash":30000}}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert!(ledger.contains(r#""context":48607"#), "{ledger}");
+    assert!(
+        ledger.contains(r#""tool_output":{"Bash":30000}"#),
+        "{ledger}"
+    );
+    home_cmd(&home)
+        .args(["advise", "--since", "1d"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("large Bash output"))
+        .stdout(predicate::str::contains("| tail -n 40"));
+}
+
+#[test]
 fn meter_record_appends_a_turn_and_stats_reports_it() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");
@@ -824,7 +848,8 @@ fn meter_record_plans_the_keeper_and_names_cache_breaks() {
     );
     let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
     assert!(ledger.contains(r#""breaks":[{"lost":460000"#), "{ledger}");
-    assert!(!ledger.contains("context"), "{ledger}");
+    // The context size is kept: a smaller one later marks a compaction or a clear.
+    assert!(ledger.contains(r#""context":450002"#), "{ledger}");
     // Off by env, by config, and for a subagent's turn; the test interval override.
     let off = home_cmd(&home)
         .env("GIRTH_KEEPER", "off")

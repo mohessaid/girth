@@ -153,6 +153,8 @@ fn turn(requests: &[&Value], project: &str, session: &Option<String>) -> Turn {
         harness: Some(HARNESS.into()),
         premium: None,
         cost_micros: None,
+        context: None,
+        tool_output: Default::default(),
     }
 }
 

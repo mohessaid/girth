@@ -110,6 +110,8 @@ fn new_turn(session: &Option<String>) -> Turn {
         harness: Some("codex".into()),
         premium: None,
         cost_micros: None,
+        context: None,
+        tool_output: Default::default(),
     }
 }
 

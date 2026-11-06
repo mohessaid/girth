@@ -52,8 +52,12 @@ let agentSettings = null
 // Outcomes: each loop's Bash calls this turn ('' is the main loop), for the
 // binary to classify. Only its labels reach the ledger.
 const bash = new Map()
+// Estimated tokens of large Bash results this turn, per loop (agentId; '' is the main loop).
+const large = new Map()
 const OUTPUT_TAIL = 4000
 const MAX_CALLS = 64
+// A Bash result this long (2,000 tokens at 4 characters each) is a large one.
+const LARGE_OUTPUT_CHARS = 8000
 // A break re-wrote at least this much (and 20% of what was cached), and the
 // prompt didn't shrink below 80% of it (compaction or /clear).
 const BREAK_MIN = 5000
@@ -265,6 +269,10 @@ export function register(on) {
             typeof result?.text === 'string'
               ? result.text
               : [r?.stdout, r?.stderr].filter((t) => typeof t === 'string' && t !== '').join('\n')
+          if (output.length >= LARGE_OUTPUT_CHARS) {
+            const key = e.agentId ?? ''
+            large.set(key, (large.get(key) ?? 0) + Math.ceil(output.length / 4))
+          }
           calls.push({
             command: String(e.command),
             output: tail(output),
@@ -337,6 +345,8 @@ export function register(on) {
     const result = await next(e)
     const calls = bash.get(e.agentId ?? '')
     bash.delete(e.agentId ?? '')
+    const big = large.get(e.agentId ?? '')
+    large.delete(e.agentId ?? '')
     const usage = e.usage
     if (!usage) return result
     model = usage.model
@@ -369,6 +379,7 @@ export function register(on) {
       servers.clear()
     }
     if (calls) turn.bash = calls
+    if (big) turn.tool_output = { Bash: big }
     const found = breaks.get(e.turnId)
     breaks.delete(e.turnId)
     if (found) turn.breaks = found

@@ -385,6 +385,8 @@ fn turn(model: &str, u: &Usage, cwd: &str, session: &Option<String>) -> Turn {
         harness: Some(HARNESS.into()),
         premium: Some(u.premium),
         cost_micros: None,
+        context: None,
+        tool_output: Default::default(),
     }
 }
 

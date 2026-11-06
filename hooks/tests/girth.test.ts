@@ -763,6 +763,27 @@ test('Bash calls go to the meter with their turn, and their results pass through
   expect(records[3].bash).toBeUndefined()
 })
 
+test('large Bash results go to the meter as estimated tokens, per loop', async ($, on) => {
+  const records: any[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  // 8,000 characters is 2,000 estimated tokens, the line; 7,999 is under it.
+  on('tool.call', ($, e) => ({ result: { stdout: 'y'.repeat(Number(e.command)), stderr: '', interrupted: false } }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.tool.call({ tool: 'Bash', command: '7999' })
+  await $.tool.call({ tool: 'Bash', command: '8000' })
+  await $.tool.call({ tool: 'Bash', command: '12001' })
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.tool.call({ tool: 'Bash', command: '100' })
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // The full output counts, not the tail kept for outcomes.
+  expect(records[0].tool_output).toEqual({ Bash: 2000 + 3001 })
+  expect(records[1].tool_output).toBeUndefined()
+})
+
 test('the last 64 Bash calls of a turn go to the meter', async ($, on) => {
   const records: any[] = []
   on('session.cwd', () => ({ value: '/work/app' }))

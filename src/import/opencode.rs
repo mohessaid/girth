@@ -162,6 +162,8 @@ fn turn(session: &str, agent: bool, dir: &str, requests: &[Value]) -> Turn {
         harness: Some(HARNESS.into()),
         premium: None,
         cost_micros: priced.then(|| costs.iter().map(|c| (c * 1e6).round() as u64).sum()),
+        context: None,
+        tool_output: Default::default(),
     }
 }
 

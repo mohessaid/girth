@@ -285,6 +285,8 @@ mod tests {
             harness: None,
             premium: None,
             cost_micros: None,
+            context: None,
+            tool_output: Default::default(),
             project: "/p".into(),
             session: None,
             model: model.into(),

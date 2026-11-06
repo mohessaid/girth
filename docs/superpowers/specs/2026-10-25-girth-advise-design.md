@@ -35,6 +35,7 @@ It reads the ledger and ranks **contributors**: each has a share of spend (`pric
 | Subagent turns on the main model (`agent`) | `{"agents":{"model":"sonnet"}}` | code edits stay on the main model |
 | Turns 8 h+ into a session (`Turn.session`, new) | `/clear` on a task switch | CLAUDE.md, project skills and the ledger carry over; `/compact` if the work goes on |
 | MCP servers connected but unused (`mcp`) | Lens collapses them | servers that are used are kept |
+| Large Bash output (`tool_output`, added 2026-11-06) | end the command with `\| tail -n 40` or `\| head`, or use a shell-output filter such as RTK | `tail` keeps the summary and errors at the end; a filter keeps errors and summaries |
 
 - **`--brief`** prints only the top contributor above a threshold (≥ 15% of spend in the window) whose fix isn't already on. If there is none, it prints nothing.
 - **Frozen-interface rule:** a new command and new JSON. Nothing existing changes.
@@ -54,6 +55,16 @@ It reads the ledger and ranks **contributors**: each has a share of spend (`pric
 - `Turn.session`, and `Use.session` plus `Use.agent` from the Skill hook's `session_id` and `agent_id`. `Turn.skills` was dropped: the hook already records every Skill call, in subagents too (checked against transcripts, Kestrelle #18).
 - **Residency:** a loaded skill stays in context, and is re-injected after compaction, for the rest of its session. A main-loop use charges every later main turn of that session, a subagent's use its next subagent turn. This is how `/usage` can show a skill at 16% that ran once.
 - Old lines parse unchanged and fall back to charging the next turn of the same project.
+
+## Addendum (2026-11-06): large tool output
+
+Evidence: `examples/context/RESULTS.md`. Tool traffic is most of what a conversation re-reads even with a shell filter on, so the share of *all* tool output says nothing a user can act on. What a filter or `| tail` fixes is single large results.
+
+- **Measured:** in the mod's `tool.call`, each Bash result's full text (stdout and stderr, before the outcome tail is cut) at 4 characters per token, an estimate. A result of 2,000 estimated tokens or more counts as large. A turn records the sum as `tool_output: {"Bash": tokens}` (a map, so other tools can be added). Non-Bash results are not measured: their shape isn't documented to mods, and half of the author's `Read` results are images, which a length can't price.
+- **Also recorded:** `context`, the last request's input tokens (with cache), on main-loop turns. The meter already received it; it is now kept.
+- **Cost model:** a large result is written to the cache once and re-read by every later request until the conversation shrinks. Inside its own turn, half the turn's requests are counted (where in the turn it came isn't recorded). Then every later turn of the same session and loop (main or subagent), up to the first main turn whose `context` is smaller than the turn before's: a `/compact`, an idle compaction or a `/clear` that kept the session id. Subagent results are counted within their turn only. Without a session id, only the turn itself. This is the weighting `examples/context/analyze-tails.py` used.
+- **Fix text covers both setups.** Whether a mod sees a Bash command before or after another hook (such as RTK's) rewrites it wasn't verified, so the fix names `| tail`, `| head` and a filter rather than detecting one.
+- **Calibration, once real data exists:** with RTK on, the author's large results are about 4% of tool re-reads, so the contributor should stay under the 15% `--brief` threshold there. If it fires on that machine, the model overcounts.
 
 ## Not in scope
 

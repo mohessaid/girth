@@ -42,7 +42,7 @@ fn names(harness: Option<&str>) -> (&'static str, &'static str) {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Contributor {
-    /// `skill`, `context`, `sessions`, `rewrites` or `subagents`.
+    /// `skill`, `context`, `sessions`, `rewrites`, `subagents` or `tool_output`.
     pub kind: &'static str,
     pub label: String,
     /// Share of spend in the window, 0–1.
@@ -277,6 +277,50 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         );
     }
 
+    // Large Bash output: written to the cache once, then re-read by every later request
+    // until the conversation shrinks. Half its own turn's requests carry it (where in the
+    // turn it came isn't recorded); on the main loop, so does every later main turn of
+    // its session up to the first whose context is smaller than the one before.
+    let large_output: f64 = turns
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (_, t))| {
+            let tokens: u64 = t.tool_output.values().sum();
+            if tokens == 0 {
+                return None;
+            }
+            let r = price::rates(&t.model)?;
+            let r = if t.agent { r.five_minute() } else { r };
+            let mut carried = t.requests.unwrap_or(1) as f64 / 2.0;
+            if let (Some(s), false) = (&t.session, t.agent) {
+                let mut before = t.context;
+                let rest = turns[i + 1..]
+                    .iter()
+                    .filter(|(_, l)| !l.agent && l.session.as_ref() == Some(s));
+                for (_, later) in rest {
+                    if let (Some(b), Some(c)) = (before, later.context) {
+                        if c < b {
+                            break;
+                        }
+                    }
+                    before = later.context.or(before);
+                    carried += later.requests.unwrap_or(1) as f64;
+                }
+            }
+            let read = tokens as f64 * carried * r.cache_read / 1e6;
+            Some(price::cost(r, 0, 0, 0, tokens) + read)
+        })
+        .sum();
+    push(
+        &mut out,
+        "tool_output",
+        "large Bash output".into(),
+        large_output,
+        "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK"
+            .into(),
+        "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
+    );
+
     out.sort_by(|a, b| b.share.total_cmp(&a.share));
     Advice {
         window_s,
@@ -383,6 +427,8 @@ mod tests {
             harness: None,
             premium: None,
             cost_micros: None,
+            context: None,
+            tool_output: Default::default(),
             project: "/p".into(),
             session: None,
             model: model.into(),
@@ -452,6 +498,118 @@ mod tests {
             .iter()
             .find(|c| c.kind == kind)
             .map_or(0.0, |c| c.share)
+    }
+
+    fn bash_out(session: Option<&str>, requests: u64, tokens: u64, context: u64) -> Turn {
+        Turn {
+            session: session.map(str::to_string),
+            requests: Some(requests),
+            context: Some(context),
+            tool_output: [("Bash".to_string(), tokens)]
+                .into_iter()
+                .filter(|(_, n)| *n > 0)
+                .collect(),
+            ..turn(SONNET, 0, 100_000)
+        }
+    }
+
+    fn tool_output(a: &Advice) -> Option<&Contributor> {
+        a.contributors.iter().find(|c| c.kind == "tool_output")
+    }
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn large_bash_output_is_charged_until_the_conversation_shrinks() {
+        let s = Some("s");
+        let records = [
+            // 10,000 tokens of large output; half of its 4 requests carry it.
+            rec(10, bash_out(s, 4, 10_000, 50_000)),
+            // A subagent's turn carries its own context, not the main loop's.
+            rec(
+                15,
+                Turn {
+                    agent: true,
+                    ..bash_out(s, 9, 0, 0)
+                },
+            ),
+            // The same size is no shrink.
+            rec(20, bash_out(s, 3, 0, 50_000)),
+            // Smaller than the turn before: compacted or cleared, so the output is gone.
+            rec(30, bash_out(s, 5, 0, 20_000)),
+            rec(40, bash_out(s, 6, 0, 90_000)),
+            rec(50, bash_out(Some("other"), 7, 0, 90_000)),
+        ];
+        let advice = advise(&records, 100, 1000, On::default());
+        let c = tool_output(&advice).expect("a large-output contributor");
+        let r = price::rates(SONNET).unwrap();
+        let want = price::cost(r, 0, 0, 10_000 * (2 + 3), 10_000);
+        assert!(close(c.cost, want), "{} vs {want}", c.cost);
+        assert_eq!(c.label, "large Bash output");
+        assert!(
+            c.fix.contains("| tail") && c.fix.contains("filter"),
+            "{}",
+            c.fix
+        );
+        assert!(c.guard.contains("errors"), "{}", c.guard);
+    }
+
+    #[test]
+    fn large_output_without_a_session_is_charged_within_its_turn() {
+        let records = [
+            rec(10, bash_out(None, 3, 8_000, 50_000)),
+            rec(20, bash_out(None, 9, 0, 60_000)),
+        ];
+        let c = advise(&records, 100, 1000, On::default());
+        let r = price::rates(SONNET).unwrap();
+        let want = price::cost(r, 0, 0, 12_000, 8_000); // 8,000 × 1.5 requests
+        assert!(close(tool_output(&c).unwrap().cost, want));
+    }
+
+    #[test]
+    fn a_subagent_s_large_output_stays_in_its_turn() {
+        let agent = |tokens| Turn {
+            agent: true,
+            context: None,
+            ..bash_out(Some("s"), 4, tokens, 0)
+        };
+        let records = [
+            rec(10, agent(6_000)),
+            rec(20, agent(0)),
+            rec(30, bash_out(Some("s"), 5, 0, 1)),
+        ];
+        let c = advise(&records, 100, 1000, On::default());
+        let r = price::rates(SONNET).unwrap().five_minute();
+        let want = price::cost(r, 0, 0, 12_000, 6_000);
+        assert!(close(tool_output(&c).unwrap().cost, want));
+    }
+
+    #[test]
+    fn a_turn_without_its_context_does_not_end_the_carry() {
+        let s = Some("s");
+        let unknown = Turn {
+            context: None,
+            ..bash_out(s, 2, 0, 0)
+        };
+        let records = [
+            rec(10, bash_out(s, 2, 4_000, 50_000)),
+            rec(20, unknown),
+            rec(30, bash_out(s, 2, 0, 40_000)),
+            rec(40, bash_out(s, 2, 0, 30_000)),
+        ];
+        let c = advise(&records, 100, 1000, On::default());
+        let r = price::rates(SONNET).unwrap();
+        // Its own turn (1), the unknown one (2), then 40,000 < 50,000 stops it.
+        let want = price::cost(r, 0, 0, 4_000 * 3, 4_000);
+        assert!(close(tool_output(&c).unwrap().cost, want));
+    }
+
+    #[test]
+    fn no_large_output_means_no_such_contributor() {
+        let records = [rec(10, bash_out(Some("s"), 4, 0, 50_000))];
+        assert!(tool_output(&advise(&records, 100, 1000, On::default())).is_none());
     }
 
     #[test]

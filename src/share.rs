@@ -287,6 +287,8 @@ mod tests {
                     harness: None,
                     premium: None,
                     cost_micros: None,
+                    context: None,
+                    tool_output: Default::default(),
                     project: project.clone(), model: heading.clone(), input: 1, output: 1,
                     session: None,
                     cache_read: 0, cache_write: 0, agent: false, aborted: false,

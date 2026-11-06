@@ -164,6 +164,13 @@ pub struct Turn {
     /// when it priced every request (OpenCode). Preferred over list prices.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_micros: Option<u64>,
+    /// Input tokens (with cache) of the turn's last request, on main-loop turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<u64>,
+    /// Estimated tokens of large tool results (2,000 or more each), per tool. Only Bash
+    /// results are measured, at 4 characters per token.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tool_output: BTreeMap<String, u64>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -381,6 +388,8 @@ mod tests {
             harness: None,
             premium: None,
             cost_micros: None,
+            context: None,
+            tool_output: Default::default(),
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),
@@ -524,6 +533,8 @@ mod tests {
             harness: None,
             premium: None,
             cost_micros: None,
+            context: None,
+            tool_output: Default::default(),
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),
