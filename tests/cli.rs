@@ -1449,6 +1449,41 @@ fn import_reads_gemini_cli_sessions() {
 }
 
 #[test]
+fn stats_counts_one_harness_s_skill_uses() {
+    let tmp = TempDir::new().unwrap();
+    let g = tmp.path().join("g");
+    girth()
+        .env("GIRTH_HOME", &g)
+        .env("COPILOT_HOME", copilot_fixture())
+        .env(
+            "GEMINI_CLI_HOME",
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gemini"),
+        )
+        .arg("import")
+        .assert()
+        .success();
+    let top = |harness: &str| {
+        let out = girth()
+            .env("GIRTH_HOME", &g)
+            .args(["stats", "--json", "--harness", harness])
+            .assert()
+            .success();
+        let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        json["top_uses"].clone()
+    };
+    // Both imports used `girth` once.
+    assert_eq!(
+        top("copilot"),
+        serde_json::json!([{"skill": "girth", "uses": 1}])
+    );
+    assert_eq!(
+        top("gemini"),
+        serde_json::json!([{"skill": "girth", "uses": 1}])
+    );
+    assert_eq!(top("claude-code"), serde_json::json!([]));
+}
+
+#[test]
 fn import_from_one_harness_reads_only_that_one() {
     let tmp = TempDir::new().unwrap();
     girth()

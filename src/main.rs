@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use girth::config::{Context, resolve_output_dir, resolve_roots};
-use girth::ledger::{self, Event, Rating, Sharing, girth_home};
+use girth::ledger::{self, Event, Rating, Record, Sharing, girth_home};
 use girth::measure::{format_table, measure, thousands};
 use girth::record::{craft_event, last_craft};
 use girth::search::{HitJson, rank};
@@ -83,6 +83,10 @@ enum Command {
         /// Limit the meter to one project dir.
         #[arg(long)]
         project: Option<String>,
+        /// Only skill uses and turns from this harness (`claude-code`, `codex`, `copilot`,
+        /// `opencode`, `gemini`); default all.
+        #[arg(long)]
+        harness: Option<String>,
     },
     /// What one request was made of: reads the mod's snapshot JSON from stdin.
     Xray {
@@ -690,15 +694,29 @@ fn run_lens(
     ExitCode::SUCCESS
 }
 
+/// Keep turns and skill uses from harness `h` (`claude-code` for the mod's own records);
+/// crafts, ratings and other events belong to no harness and stay.
+fn only_harness(records: &mut Vec<Record>, h: &str) {
+    records.retain(|r| match &r.event {
+        Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
+        Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
+        _ => true,
+    });
+}
+
 fn run_stats(
     json: bool,
     meter: bool,
     project: Option<String>,
+    harness: Option<&str>,
     ctx: &Context,
     out: &mut String,
 ) -> ExitCode {
     let home = girth_home(ctx);
-    let records = ledger::read(&home);
+    let mut records = ledger::read(&home);
+    if let Some(h) = harness {
+        only_harness(&mut records, h);
+    }
     let summary = girth::meter::summarise(&records, project.as_deref());
     let keeper = girth::keeper::summarise(&records, project.as_deref());
     let keeper_text = girth::keeper::render(&keeper);
@@ -1046,7 +1064,8 @@ fn main() -> ExitCode {
             json,
             meter,
             project,
-        } => run_stats(json, meter, project, &ctx, &mut out),
+            harness,
+        } => run_stats(json, meter, project, harness.as_deref(), &ctx, &mut out),
         Command::Feedback {
             skill,
             rating,
@@ -1149,11 +1168,7 @@ fn main() -> ExitCode {
             let harness = harness.or_else(|| brief.then(|| "claude-code".to_string()));
             let mut records = ledger::read(&home);
             if let Some(h) = &harness {
-                records.retain(|r| match &r.event {
-                    Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
-                    Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
-                    _ => true,
-                });
+                only_harness(&mut records, h);
             }
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
