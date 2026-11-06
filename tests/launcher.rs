@@ -251,3 +251,32 @@ fn an_interrupted_download_leaves_nothing_behind() {
     child.wait().unwrap();
     assert_eq!(leftovers(), 0, "temp files left in {}", bin_dir.display());
 }
+
+#[test]
+fn skills_cli_install_through_a_symlink_downloads_the_binary() {
+    // `npx skills add` installs into ~/.agents/skills and links other harnesses' dirs to it.
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    install(&home.join(".agents"));
+    std::fs::create_dir_all(home.join(".codex/skills")).unwrap();
+    std::os::unix::fs::symlink(
+        home.join(".agents/skills/girth"),
+        home.join(".codex/skills/girth"),
+    )
+    .unwrap();
+    let base = fake_release(&tmp.path().join("release"), None);
+    let out = run(
+        &home.join(".codex/skills/girth/scripts/girth"),
+        &[
+            ("GIRTH_DOWNLOAD_BASE", &base),
+            ("HOME", home.to_str().unwrap()),
+        ],
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "downloaded --flag\n",
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(home.join(".agents/skills/girth/bin/girth").is_file());
+}
