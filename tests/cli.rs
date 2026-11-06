@@ -8,6 +8,8 @@ fn girth() -> Command {
         "GIRTH_HOME",
         std::env::temp_dir().join(format!("girth-test-home-{}", std::process::id())),
     );
+    // Tests run inside Claude Code too; the output default must not follow it.
+    cmd.env_remove("CLAUDECODE").env_remove("GIRTH_OUTPUT_DIR");
     cmd
 }
 
@@ -53,6 +55,26 @@ fn measure_table_and_lenient_warning() {
         .stderr(predicate::str::contains(
             "girth: recovered invalid YAML frontmatter leniently in 1 skill(s): a",
         ));
+}
+
+#[test]
+fn search_prints_output_dir_for_harness() {
+    let tmp = TempDir::new().unwrap();
+    let vendor = tmp.path().join("vendor");
+    std::fs::create_dir_all(&vendor).unwrap();
+    for (claudecode, dir) in [(None, ".agents/skills"), (Some("1"), ".claude/skills")] {
+        let mut cmd = girth();
+        cmd.current_dir(tmp.path())
+            .args(["search", "captions", "--roots"])
+            .arg(&vendor);
+        if let Some(v) = claudecode {
+            cmd.env("CLAUDECODE", v);
+        }
+        cmd.assert().stdout(predicate::str::contains(format!(
+            "output_dir: {}",
+            tmp.path().join(dir).display()
+        )));
+    }
 }
 
 #[test]

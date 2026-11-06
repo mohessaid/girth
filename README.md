@@ -118,7 +118,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 1. During a task, the model (or you: "use girth for …") names a need.
 2. `girth search` ranks the skills already on disk and the project's crafted-skill cache, and `girth show` prints only the sections that matter, so whole files needn't be read. (In practice models still open the big source files in most crafting sessions; see `examples/trigger/RESULTS.md`.)
 3. If nothing local fits, `girth fetch owner/repo` makes a shallow, read-only copy of a public skill repo to search. Fetched content is treated as data and never executed.
-4. The model distils only that slice into `.claude/skills/girth-<domain>/SKILL.md`. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
+4. The model distils only that slice into `<output_dir>/girth-<domain>/SKILL.md`: `.claude/skills` under Claude Code, `.agents/skills` under any other harness. Rules are kept verbatim, tone guidance is never compressed, and the body is ≤ 3 KB.
 5. `girth validate` enforces the contract. The next time the domain comes up, the crafted skill is a cache hit.
 6. On a cache hit, `girth drift` re-hashes the exact source sections the skill was distilled from. It reports any that `changed`, went `missing` (renamed or removed), or whose source is `unavailable` (uninstalled), so a cached slice doesn't silently go stale. Reflowed text and emphasis changes don't count.
 
@@ -213,7 +213,9 @@ Skill roots resolve in this order:
 1. `--roots`
 2. `GIRTH_SKILL_ROOTS` (colon-separated, POSIX style)
 3. `.girth/config.json` (`{"roots": [...], "output": "..."}`)
-4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`, and the `skills` folders of installed Claude Code plugins
+4. The defaults: `~/.claude/skills`, `~/.agents/skills`, `.claude/skills`, and the `skills` folders of installed Claude Code plugins, plus every other harness's skill folders that exist (79 harnesses from the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), resynced with `sh scripts/sync-harnesses.sh`). A folder reached through a symlink is searched once.
+
+Crafted skills go to `--output`, then `GIRTH_OUTPUT_DIR`, then config `output`, then `.claude/skills` under Claude Code (`CLAUDECODE=1`) or `.agents/skills` elsewhere.
 
 ## Development
 

@@ -9,7 +9,10 @@ pub const ROOTS_ENV: &str = "GIRTH_SKILL_ROOTS";
 pub const OUTPUT_ENV: &str = "GIRTH_OUTPUT_DIR";
 pub const CONFIG_PATH: &str = ".girth/config.json";
 pub const DEFAULT_ROOTS: [&str; 3] = ["~/.claude/skills", "~/.agents/skills", ".claude/skills"];
-pub const DEFAULT_OUTPUT: &str = ".claude/skills";
+/// Where crafted skills go by default: Claude Code reads project skills only from
+/// `.claude/skills`; every other harness reads `.agents/skills`.
+pub const CLAUDE_OUTPUT: &str = ".claude/skills";
+pub const AGENTS_OUTPUT: &str = ".agents/skills";
 
 /// Process context the resolvers read: cwd, home and environment.
 #[derive(Debug, Clone, Default)]
@@ -157,7 +160,8 @@ fn configured_roots(ctx: &Context, warnings: &mut Vec<String>) -> Option<Vec<Str
     }
 }
 
-/// Crafted-skill dir: `--output`, then `GIRTH_OUTPUT_DIR`, then config `output`, then default.
+/// Crafted-skill dir: `--output`, then `GIRTH_OUTPUT_DIR`, then config `output`,
+/// then the running harness's project skill dir.
 pub fn resolve_output_dir(cli: Option<&str>, ctx: &Context, warnings: &mut Vec<String>) -> PathBuf {
     let raw = match cli
         .filter(|c| !c.is_empty())
@@ -169,7 +173,11 @@ pub fn resolve_output_dir(cli: Option<&str>, ctx: &Context, warnings: &mut Vec<S
             .get("output")
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
-            .unwrap_or(DEFAULT_OUTPUT)
+            .unwrap_or(if ctx.var("CLAUDECODE") == Some("1") {
+                CLAUDE_OUTPUT
+            } else {
+                AGENTS_OUTPUT
+            })
             .to_string(),
     };
     ctx.to_path(&raw)
@@ -379,9 +387,24 @@ mod tests {
     }
 
     #[test]
+    fn output_default_follows_harness() {
+        let dir = TempDir::new().unwrap();
+        for (env, want) in [
+            (vec![], ".agents/skills"),
+            (vec![("CLAUDECODE", "1")], ".claude/skills"),
+            (vec![("CLAUDECODE", "0")], ".agents/skills"),
+        ] {
+            assert_eq!(
+                resolve_output_dir(None, &ctx(&dir, &env), &mut vec![]),
+                dir.path().join(want)
+            );
+        }
+    }
+
+    #[test]
     fn output_dir_resolution_order() {
         let dir = TempDir::new().unwrap();
-        let none = ctx(&dir, &[]);
+        let none = ctx(&dir, &[("CLAUDECODE", "1")]);
         assert_eq!(
             resolve_output_dir(None, &none, &mut vec![]),
             dir.path().join(".claude/skills")
