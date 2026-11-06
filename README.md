@@ -109,6 +109,24 @@ npx skills add mohessaid/girth
 
 The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Claude Code 2.1.287 or later, a small mod (`hooks/girth.js`) for Lens and Meter. A skills-CLI install registers neither, so those parts are plugin-only.
 
+### Every harness
+
+Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/specification) skill, so it is not tied to Claude Code:
+
+- **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`).
+- **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead.
+- **Counts what other harnesses spend.** `girth import` reads Codex's local session logs, and `girth advise --harness codex` ranks them with Codex's own fixes (`/new`, `/compact`). On the author's machine, it imported 140 Codex turns, and its total matched an independent sum of every usage record to the cent ($173.00 at OpenAI list prices).
+
+| Harness | Finds its skills | Crafts into a dir it reads | Spend import | Checked with a real run |
+|---|---|---|---|---|
+| Claude Code | ✓ | `.claude/skills` | native (the mod) | ✓ |
+| Codex CLI | ✓ | `.agents/skills` | ✓ `girth import` | ✓ lists crafted skills ([portability](examples/portability/RESULTS.md)) |
+| Copilot CLI, OpenCode, Gemini CLI | ✓ | `.agents/skills` | planned (their logs carry per-request usage) | not yet |
+| Cursor, Antigravity, Amp, Goose | ✓ | `.agents/skills` | — (no usable token data on disk) | not yet |
+| The other 70 or so harnesses in the `skills` table | ✓ | per their table row | — | not yet |
+
+Lens, Meter, the keeper and idle compaction use Claude Code's mods API, so they work only in Claude Code.
+
 **Updating.** Claude Code auto-updates only its official marketplaces. To keep Girth current, open `/plugin` → **Marketplaces** → `girth` → **Enable auto-update**, or run `claude plugin update girth@girth`. A session that's already open keeps the version it loaded until you run `/reload-plugins`. Your ledger and taste live in `~/.girth`, shared by every session and version.
 
 You don't need Rust. The first time the skill runs, it downloads (one time, about 2 MB, with a timeout) the prebuilt `girth` binary for your platform from [Releases](https://github.com/mohessaid/girth/releases) and verifies it against `SHA256SUMS` before running it. Builds exist for Linux x86_64 and ARM64 (static musl) and macOS (Intel and Apple Silicon). To use your own build, set `GIRTH_BIN`.

@@ -88,7 +88,10 @@ mod tests {
         let dir = tmp.path().join("codex/sessions/2026/10/25");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("rollout-x.jsonl"), text).unwrap();
+        // Only rollout-*.jsonl files are sessions.
         std::fs::write(dir.join("notes.txt"), FIXTURE).unwrap();
+        std::fs::write(dir.join("history.jsonl"), FIXTURE).unwrap();
+        std::fs::write(dir.join("rollout-y.txt"), FIXTURE).unwrap();
         tmp.path().join("codex")
     }
 
@@ -116,6 +119,17 @@ mod tests {
         let short: String = FIXTURE.split_inclusive('\n').take(6).collect();
         std::fs::write(codex.join("sessions/2026/10/25/rollout-x.jsonl"), &short).unwrap();
         assert_eq!(import_codex(&codex, &girth).unwrap(), 1);
+    }
+
+    #[test]
+    fn a_file_with_only_an_open_turn_gets_no_offset() {
+        let tmp = TempDir::new().unwrap();
+        let open: String = FIXTURE.split_inclusive('\n').skip(13).collect();
+        let (codex, girth) = (codex_home(&tmp, &open), tmp.path().join("g"));
+        std::fs::write(codex.join("sessions/2026/10/25/rollout-z.jsonl"), FIXTURE).unwrap();
+        assert_eq!(import_codex(&codex, &girth).unwrap(), 3); // all from rollout-z
+        let offsets = std::fs::read_to_string(girth.join(OFFSETS_FILE)).unwrap();
+        assert!(!offsets.contains("rollout-x.jsonl"), "{offsets}");
     }
 
     #[test]
