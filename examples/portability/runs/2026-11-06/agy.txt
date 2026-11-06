@@ -1,0 +1,13 @@
+### Available Skills Starting with "girth"
+
+- [`girth`](file:///tmp/girth-portability/.agents/skills/girth/SKILL.md)
+- [`girth-hyperframes`](file:///tmp/girth-portability/.agents/skills/girth-hyperframes/SKILL.md)
+
+---
+
+### Output Directory
+
+```text
+output_dir: /tmp/girth-portability/.agents/skills
+```
+exit 0

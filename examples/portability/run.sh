@@ -20,7 +20,8 @@ run() { # name, command...
   name=$1; shift
   command -v "$1" >/dev/null 2>&1 || { echo "$name: not installed" | tee "$out/$name.txt"; return; }
   echo "== $name"
-  (cd "$work" && timeout 300 "$@" "$ask") > "$out/$name.txt" 2>&1
+  # A harness started from inside Claude Code inherits CLAUDECODE=1; a normal shell has none.
+  (cd "$work" && env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT timeout 300 "$@" "$ask") > "$out/$name.txt" 2>&1
   echo "exit $?" >> "$out/$name.txt"
   grep -o 'girth-hyperframes\|output_dir: [^ ]*' "$out/$name.txt" | sort -u
 }
@@ -30,8 +31,8 @@ for h in ${*:-codex copilot opencode agy cursor-agent gemini}; do
     codex) run codex codex exec --sandbox read-only --skip-git-repo-check ;;
     copilot) run copilot copilot --allow-all-tools -p ;;
     opencode) run opencode opencode run ;;
-    agy) run agy agy -p ;;
+    agy) run agy agy --dangerously-skip-permissions -p ;; # throwaway dir; headless agy cannot ask
     cursor-agent) run cursor-agent cursor-agent -p ;;
-    gemini) run gemini gemini -p ;;
+    gemini) GEMINI_CLI_TRUST_WORKSPACE=true run gemini gemini -p ;; # the throwaway dir is untrusted
   esac
 done

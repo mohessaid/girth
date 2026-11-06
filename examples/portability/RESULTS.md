@@ -46,3 +46,22 @@ girth advise (60d): $173.00 estimated at list prices; shares overlap
 - An independent Python sum over all 4,544 `token_usage_record` lines, at the same OpenAI list prices, gives **$173.00**.
 - The first build gave $170.14. The $2.87 gap was 4 turns that never logged an end event; they are now recorded as aborted once a later turn ends.
 - Across both harnesses over 60 days, `advise --json` splits spend as `claude-code` $3,549 and `codex` $173.
+
+## Headless check per harness (2026-11-06, `sh examples/portability/run.sh`)
+
+- **Setup:** a throwaway git folder with the shipped `girth` skill (binary bundled) and a crafted `girth-hyperframes` in `.agents/skills`.
+- **The task:** list every `girth*` skill, then use the girth skill to run `search` for "video captions" and print `output_dir`. One read-only prompt per harness, each on its own provider's credits.
+- **Transcripts:** `examples/portability/runs/2026-11-06/`.
+
+| Harness | Version | Lists `girth` and `girth-hyperframes` | Ran `girth search` through the skill | `output_dir` |
+|---|---|---|---|---|
+| Codex CLI | 0.164.0 | ✓ | ✓ | `.agents/skills` |
+| GitHub Copilot CLI | 1.0.106 | ✓ (via its `skill` tool) | ✓ | `.agents/skills` |
+| OpenCode | 1.17.11 | ✓ | ✓ | `.agents/skills` |
+| Antigravity CLI (`agy`) | 1.5.2 | ✓ | ✓ (needed `--dangerously-skip-permissions`: headless `agy` cannot ask) | `.agents/skills` |
+| Gemini CLI | 0.65.0 | not run: Google no longer serves it to individual accounts ("migrate to Antigravity") | | |
+| Cursor agent | 2026.04.17 | not run: needs `agent login` | | |
+
+**Two things found.**
+- **A harness started from a Claude Code shell inherits `CLAUDECODE=1`,** so Girth wrote to `.claude/skills` there. The first Codex run did exactly that. A harness started from a normal terminal gets `.agents/skills`. The script now clears `CLAUDECODE`, as a normal terminal would.
+- **Gemini CLI warned that `~/.agents/skills/figma` overrides `~/.gemini/skills/figma`.** The same skill installed for two harnesses is common, which is why Girth's discovery searches each folder only once.

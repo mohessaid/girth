@@ -1,0 +1,47 @@
+Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google
+    at throwIneligibleOrProjectIdError (file:///home/mohessaid/.nvm/versions/node/v24.21.0/lib/node_modules/@google/gemini-cli/bundle/chunk-DKZARV6U.js:312319:11)
+    at _doSetupUser (file:///home/mohessaid/.nvm/versions/node/v24.21.0/lib/node_modules/@google/gemini-cli/bundle/chunk-DKZARV6U.js:312308:5)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  ineligibleTiers: [
+    {
+      reasonCode: 'UNSUPPORTED_CLIENT',
+      reasonMessage: 'This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google',
+      tierId: 'free-tier',
+      tierName: 'Gemini Code Assist for individuals'
+    }
+  ]
+}
+[ExtensionManager] Error loading agent from caveman: Failed to load agent from /home/mohessaid/.gemini/extensions/caveman/agents/AGENTS.md: Invalid agent definition: Missing mandatory YAML frontmatter. Agent Markdown files MUST start with YAML frontmatter enclosed in triple-dashes "---" (e.g., ---
+name: my-agent
+---).
+[ExtensionManager] Error loading agent from caveman: Failed to load agent from /home/mohessaid/.gemini/extensions/caveman/agents/CLAUDE.md: Invalid agent definition: Missing mandatory YAML frontmatter. Agent Markdown files MUST start with YAML frontmatter enclosed in triple-dashes "---" (e.g., ---
+name: my-agent
+---).
+[ExtensionManager] Error loading agent from caveman: Failed to load agent from /home/mohessaid/.gemini/extensions/caveman/agents/cavecrew-builder.md: Validation failed: Agent Definition:
+tools.0: Invalid tool name
+tools.1: Invalid tool name
+tools.2: Invalid tool name
+tools.3: Invalid tool name
+tools.4: Invalid tool name
+[ExtensionManager] Error loading agent from caveman: Failed to load agent from /home/mohessaid/.gemini/extensions/caveman/agents/cavecrew-investigator.md: Validation failed: Agent Definition:
+tools.0: Invalid tool name
+tools.1: Invalid tool name
+tools.2: Invalid tool name
+tools.3: Invalid tool name
+[ExtensionManager] Error loading agent from caveman: Failed to load agent from /home/mohessaid/.gemini/extensions/caveman/agents/cavecrew-reviewer.md: Validation failed: Agent Definition:
+tools.0: Invalid tool name
+tools.1: Invalid tool name
+tools.2: Invalid tool name
+Skill conflict detected: "remotion-to-hyperframes" from "/home/mohessaid/.agents/skills/remotion-to-hyperframes/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/remotion-to-hyperframes/SKILL.md".
+Skill conflict detected: "remotion-best-practices" from "/home/mohessaid/.agents/skills/remotion-best-practices/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/remotion-best-practices/SKILL.md".
+Skill conflict detected: "media-use" from "/home/mohessaid/.agents/skills/media-use/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/media-use/SKILL.md".
+Skill conflict detected: "hyperframes-registry" from "/home/mohessaid/.agents/skills/hyperframes-registry/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/hyperframes-registry/SKILL.md".
+Skill conflict detected: "hyperframes-cli" from "/home/mohessaid/.agents/skills/hyperframes-cli/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/hyperframes-cli/SKILL.md".
+Skill conflict detected: "hyperframes" from "/home/mohessaid/.agents/skills/hyperframes/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/hyperframes/SKILL.md".
+Skill conflict detected: "find-skills" from "/home/mohessaid/.agents/skills/find-skills/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/find-skills/SKILL.md".
+Skill conflict detected: "figma" from "/home/mohessaid/.agents/skills/figma/SKILL.md" is overriding the same skill from "/home/mohessaid/.gemini/skills/figma/SKILL.md".
+An unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google
+    at throwIneligibleOrProjectIdError (file:///home/mohessaid/.nvm/versions/node/v24.21.0/lib/node_modules/@google/gemini-cli/bundle/chunk-DKZARV6U.js:312319:11)
+    at _doSetupUser (file:///home/mohessaid/.nvm/versions/node/v24.21.0/lib/node_modules/@google/gemini-cli/bundle/chunk-DKZARV6U.js:312308:5)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+exit 1

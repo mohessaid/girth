@@ -18,6 +18,13 @@ Distil only the slice your project needs from the skills you already have — 38
   <a href="docs/mutation-notes.md"><img alt="Mutation score" src="https://img.shields.io/badge/mutation-99.5%25-brightgreen"></a>
   <a href="docs/eval-log.md"><img alt="Evals" src="https://img.shields.io/badge/evals-7%2F7%20passing-brightgreen"></a>
   <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-d97757"></a>
+  <br>
+  <a href="https://agentskills.io/specification"><img alt="Agent Skills format" src="https://img.shields.io/badge/Agent%20Skills-spec-0a7ea4"></a>
+  <a href="examples/portability/RESULTS.md"><img alt="Works with Codex CLI" src="https://img.shields.io/badge/works%20with-Codex%20CLI-412991?logo=openai"></a>
+  <a href="examples/portability/RESULTS.md"><img alt="Works with GitHub Copilot CLI" src="https://img.shields.io/badge/works%20with-Copilot%20CLI-24292f?logo=githubcopilot"></a>
+  <a href="examples/portability/RESULTS.md"><img alt="Works with OpenCode" src="https://img.shields.io/badge/works%20with-OpenCode-111111"></a>
+  <a href="examples/portability/RESULTS.md"><img alt="Works with Antigravity CLI" src="https://img.shields.io/badge/works%20with-Antigravity%20CLI-4285f4?logo=google"></a>
+  <a href="#every-harness"><img alt="Finds skills for 79 harnesses" src="https://img.shields.io/badge/skill%20folders-79%20harnesses-6e7781"></a>
 </p>
 
 <a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="examples/studio/RESULTS.md">Results</a> · <a href="CONTRIBUTING.md">Contributing</a>
@@ -117,12 +124,14 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 - **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead.
 - **Counts what other harnesses spend.** `girth import` reads Codex's local session logs, and `girth advise --harness codex` ranks them with Codex's own fixes (`/new`, `/compact`). On the author's machine, it imported 140 Codex turns, and its total matched an independent sum of every usage record to the cent ($173.00 at OpenAI list prices).
 
-| Harness | Finds its skills | Crafts into a dir it reads | Spend import | Checked with a real run |
+| Harness | Finds its skills | Crafts into a dir it reads | Spend import | [Checked with a real run](examples/portability/RESULTS.md) |
 |---|---|---|---|---|
 | Claude Code | ✓ | `.claude/skills` | native (the mod) | ✓ |
-| Codex CLI | ✓ | `.agents/skills` | ✓ `girth import` | ✓ lists crafted skills ([portability](examples/portability/RESULTS.md)) |
-| Copilot CLI, OpenCode, Gemini CLI | ✓ | `.agents/skills` | planned (their logs carry per-request usage) | not yet |
-| Cursor, Antigravity, Amp, Goose | ✓ | `.agents/skills` | — (no usable token data on disk) | not yet |
+| Codex CLI 0.164 | ✓ | `.agents/skills` | ✓ `girth import` | ✓ |
+| GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | planned (its log has per-request usage) | ✓ |
+| OpenCode 1.17 | ✓ | `.agents/skills` | planned (its log has per-request usage) | ✓ |
+| Antigravity CLI 1.5 | ✓ | `.agents/skills` | — (logs are opaque) | ✓ |
+| Gemini CLI, Cursor, Amp, Goose | ✓ | `.agents/skills` | Gemini CLI planned; the rest keep no usable token data | not yet |
 | The other 70 or so harnesses in the `skills` table | ✓ | per their table row | — | not yet |
 
 Lens, Meter, the keeper and idle compaction use Claude Code's mods API, so they work only in Claude Code.

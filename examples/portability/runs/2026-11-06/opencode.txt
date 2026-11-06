@@ -1,0 +1,245 @@
+[0m
+> build · deepseek-v4-pro
+[0m
+[0m→ [0mSkill "girth"
+Skills starting with "girth": `girth`, `girth-hyperframes`.
+
+Now run girth search command.
+[0m
+[0m$ [0m/tmp/girth-portability/.agents/skills/girth/scripts/girth search "video captions" --json
+{
+  "hits": [
+    {
+      "crafted": false,
+      "description": "Read first to make, edit, animate or render any video with HyperFrames (HTML rendered to video), including launch films, explainers, music videos, charts, maps, vertical clips, title cards, captions and overlays. Holds the render contract, the work loop and what each kind of video needs.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "assets/frame-presets/biennale-yellow/FRAME.md",
+          "heading": "Biennale Yellow — Frame (video / frame layer)"
+        },
+        {
+          "file": "assets/frame-presets/blockframe/FRAME.md",
+          "heading": "BlockFrame — Frame (video / frame layer)"
+        },
+        {
+          "file": "assets/frame-presets/blue-professional/FRAME.md",
+          "heading": "Blue Professional — Frame (video / frame layer)"
+        },
+        {
+          "file": "assets/frame-presets/bold-poster/FRAME.md",
+          "heading": "Bold Poster — Frame (video / frame layer)"
+        },
+        {
+          "file": "assets/frame-presets/broadside/FRAME.md",
+          "heading": "Broadside — Frame (video / frame layer)"
+        }
+      ],
+      "name": "hyperframes",
+      "path": "/home/mohessaid/.claude/skills/hyperframes",
+      "score": 6,
+      "skill_md_bytes": 7167,
+      "total_md_bytes": 341809
+    },
+    {
+      "crafted": false,
+      "description": "Understand, generate, and edit footage with Diffusion Studio via the `dapi` CLI: analyze video/audio/images, generate them with AI, and compose video compositions. Use for any media analysis, media generation, or video editing task.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "SKILL.md",
+          "heading": "Video editing"
+        },
+        {
+          "file": "references/examples/video-editing/podcast-clip.md",
+          "heading": "9. Captions"
+        },
+        {
+          "file": "references/examples/video-editing/talking-head.md",
+          "heading": "7. Captions (optional)"
+        },
+        {
+          "file": "references/jsx/captions.md",
+          "heading": "Captions"
+        },
+        {
+          "file": "references/jsx/video.md",
+          "heading": "`<video>`"
+        }
+      ],
+      "name": "editor",
+      "path": "/home/mohessaid/.agents/skills/editor",
+      "score": 4,
+      "skill_md_bytes": 7139,
+      "total_md_bytes": 98953
+    },
+    {
+      "crafted": false,
+      "description": "Transcribe media files or download existing subtitles. Use when the user wants a transcript, \"understand\" a video/audio, or needs captions.",
+      "exact": false,
+      "matched_headings": [],
+      "name": "media-transcriber",
+      "path": "/home/mohessaid/.gemini/skills/media-transcriber",
+      "score": 4,
+      "skill_md_bytes": 933,
+      "total_md_bytes": 933
+    },
+    {
+      "crafted": false,
+      "description": "Get or make any media for a HyperFrames video - music, sound effects, images, icons, logos, voiceover, avatar and generated video, transcripts, cutouts, colour grades and looks - with HeyGen or free local tools, and mix placed audio. Also for footage that looks dark, flat or dull, or should be stylized or hidden.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "audio/references/captions/authoring.md",
+          "heading": "Captions"
+        },
+        {
+          "file": "audio/references/captions/motion.md",
+          "heading": "Audio-Reactive Captions (Mandatory for Music)"
+        },
+        {
+          "file": "audio/references/tts-to-captions.md",
+          "heading": "TTS → Captions"
+        },
+        {
+          "file": "audio/references/tts.md",
+          "heading": "Narrating a HyperFrames docs video"
+        },
+        {
+          "file": "references/audio.md",
+          "heading": "Audio engine — voiceover, music, SFX, captions, transcription"
+        }
+      ],
+      "name": "media-use",
+      "path": "/home/mohessaid/.claude/skills/media-use",
+      "score": 4,
+      "skill_md_bytes": 5120,
+      "total_md_bytes": 184316
+    },
+    {
+      "crafted": false,
+      "description": "Use when a code-rendered explainer video needs a spoken voiceover / narration / TTS, when scene lengths must follow the narration, when animations must land on a spoken word, or when burned-in captions from word timings are wanted. Works offline (local Kokoro TTS + whisper word timestamps).",
+      "exact": false,
+      "matched_headings": [],
+      "name": "narrated-explainer-voiceover",
+      "path": "/home/mohessaid/.claude/skills/narrated-explainer-voiceover",
+      "score": 4,
+      "skill_md_bytes": 2898,
+      "total_md_bytes": 2898
+    },
+    {
+      "crafted": false,
+      "description": "Best practices for Remotion - Video creation in React",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "rules/display-captions.md",
+          "heading": "Display captions alongside video content"
+        },
+        {
+          "file": "SKILL.md",
+          "heading": "Captions"
+        },
+        {
+          "file": "rules/calculate-metadata.md",
+          "heading": "Setting duration based on a video"
+        },
+        {
+          "file": "rules/calculate-metadata.md",
+          "heading": "Matching dimensions of a video"
+        },
+        {
+          "file": "rules/can-decode.md",
+          "heading": "Checking if a video can be decoded"
+        }
+      ],
+      "name": "remotion-best-practices",
+      "path": "/home/mohessaid/.claude/skills/remotion-best-practices",
+      "score": 4,
+      "skill_md_bytes": 4097,
+      "total_md_bytes": 105523
+    },
+    {
+      "crafted": true,
+      "description": "Use when building a short HyperFrames promo with a word-by-word highlighted caption track (karaoke-style), including captions sub-composition wiring, seek-safe state changes and the final check/render gates.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "SKILL.md",
+          "heading": "HyperFrames promo + word-highlight captions"
+        }
+      ],
+      "name": "girth-hyperframes",
+      "path": "/tmp/girth-portability/.agents/skills/girth-hyperframes",
+      "score": 3,
+      "skill_md_bytes": 3569,
+      "total_md_bytes": 7044
+    },
+    {
+      "crafted": false,
+      "description": "Build and publish a Gradio demo on Hugging Face Spaces for a user-provided LoRA. Use when someone asks to create, generate, ship, or publish a Space, demo, Gradio app, or playground for a LoRA — including LoRAs for Qwen-Image, Qwen-Image-Edit, LTX-Video, Wan, FLUX, SDXL, or other diffusion base models. Also triggers when someone describes a LoRA they trained or hosts on the Hub and wants to share it. Covers picking the right base pipeline and `diffusers` inference recipe, designing a UI tailored to the LoRA's task and inputs (Union/multi-task control, edit, video, image, etc.), respecting model-card recommendations (trigger words, steps, guidance, LoRA scale, example inputs), and shipping to ZeroGPU hardware as a private Space by default.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "references/tasks.md",
+          "heading": "Text-to-video (T2V)"
+        },
+        {
+          "file": "references/tasks.md",
+          "heading": "Image-to-video (I2V)"
+        },
+        {
+          "file": "references/tasks.md",
+          "heading": "Video-to-video (V2V)"
+        }
+      ],
+      "name": "huggingface-lora-space-builder",
+      "path": "/home/mohessaid/.claude/plugins/cache/claude-plugins-official/huggingface-skills/1.0.35/skills/huggingface-lora-space-builder",
+      "score": 3,
+      "skill_md_bytes": 33828,
+      "total_md_bytes": 118643
+    },
+    {
+      "crafted": false,
+      "description": "Download audio and video from various online platforms (YouTube, Twitter, TikTok, etc.) using yt-dlp. Use when the user provides a URL and wants to download or \"get\" the file.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "SKILL.md",
+          "heading": "Download Video"
+        }
+      ],
+      "name": "media-downloader",
+      "path": "/home/mohessaid/.gemini/skills/media-downloader",
+      "score": 3,
+      "skill_md_bytes": 689,
+      "total_md_bytes": 689
+    },
+    {
+      "crafted": false,
+      "description": "Bring existing video code or footage into HyperFrames and verify it frame by frame against the original - Remotion first, also Motion Canvas, Lottie, Three.js, p5.js, canvas or plain HTML/CSS animation, or renders from Manim, After Effects or Blender. Use to port, convert, migrate or reuse work made with another tool.",
+      "exact": false,
+      "matched_headings": [
+        {
+          "file": "references/media.md",
+          "heading": "Media translation: Audio, Video, Img, IFrame, staticFile"
+        },
+        {
+          "file": "references/media.md",
+          "heading": "`<Video>` and `<OffthreadVideo>`"
+        }
+      ],
+      "name": "remotion-to-hyperframes",
+      "path": "/home/mohessaid/.claude/skills/remotion-to-hyperframes",
+      "score": 3,
+      "skill_md_bytes": 4864,
+      "total_md_bytes": 84514
+    }
+  ],
+  "output_dir": "/tmp/girth-portability/.agents/skills"
+}
+[0m
+Skills starting with "girth": `girth`, `girth-hyperframes`.
+
+`output_dir`: `/tmp/girth-portability/.agents/skills`
+exit 0
