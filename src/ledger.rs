@@ -160,6 +160,10 @@ pub struct Turn {
     /// Premium requests the turn used, for harnesses that bill by request (Copilot).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub premium: Option<u64>,
+    /// What the harness's own log says the turn cost, in millionths of a US dollar,
+    /// when it priced every request (OpenCode). Preferred over list prices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_micros: Option<u64>,
 }
 
 /// One ledger line: schema version, unix timestamp, event.
@@ -376,6 +380,7 @@ mod tests {
         let turn = Event::Turn(Turn {
             harness: None,
             premium: None,
+            cost_micros: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),
@@ -518,6 +523,7 @@ mod tests {
         Turn {
             harness: None,
             premium: None,
+            cost_micros: None,
             project: "/p".into(),
             session: None,
             model: "claude-opus-5-5".into(),

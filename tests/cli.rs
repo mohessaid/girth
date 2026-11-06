@@ -12,7 +12,10 @@ fn girth() -> Command {
     cmd.env_remove("CLAUDECODE").env_remove("GIRTH_OUTPUT_DIR");
     // `girth import` must never read this machine's own harness logs.
     let none = std::env::temp_dir().join("girth-test-no-harness");
-    cmd.env("CODEX_HOME", &none).env("COPILOT_HOME", &none);
+    cmd.env("CODEX_HOME", &none)
+        .env("COPILOT_HOME", &none)
+        .env("XDG_DATA_HOME", &none)
+        .env("GIRTH_OPENCODE_BIN", none.join("opencode"));
     cmd
 }
 
@@ -1324,6 +1327,32 @@ fn import_reads_copilot_sessions_once() {
     let ledger = std::fs::read_to_string(tmp.path().join("g/ledger.jsonl")).unwrap();
     assert!(ledger.contains(r#""harness":"copilot""#));
     assert!(ledger.contains(r#""premium":3"#));
+}
+
+#[test]
+fn import_reads_opencode_through_its_own_cli() {
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data");
+    std::fs::create_dir_all(data.join("opencode")).unwrap();
+    std::fs::write(data.join("opencode/opencode.db"), "").unwrap();
+    let bin =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/opencode/opencode");
+    for want in [
+        "imported 4 turns from opencode\n",
+        "imported 0 turns from opencode\n",
+    ] {
+        girth()
+            .env("GIRTH_HOME", tmp.path().join("g"))
+            .env("XDG_DATA_HOME", &data)
+            .env("GIRTH_OPENCODE_BIN", &bin)
+            .args(["import", "--from", "opencode"])
+            .assert()
+            .success()
+            .stdout(want);
+    }
+    let ledger = std::fs::read_to_string(tmp.path().join("g/ledger.jsonl")).unwrap();
+    assert!(ledger.contains(r#""harness":"opencode""#));
+    assert!(ledger.contains(r#""cost_micros":3000"#));
 }
 
 #[test]

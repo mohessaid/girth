@@ -12,7 +12,7 @@ use girth::skill::CRAFTED_PREFIX;
 use girth::skill::{SkillInfo, discover_skills};
 use girth::taste::{self, TasteEvent, TasteRecord, Tier};
 use girth::validate::validate;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Just-in-time, project-scoped agent skills.
 #[derive(Parser)]
@@ -155,7 +155,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`, `copilot`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -168,9 +168,9 @@ enum Command {
         #[arg(required = true)]
         skill_dirs: Vec<PathBuf>,
     },
-    /// Append spend from other harnesses' local session logs (Codex, Copilot CLI) to the ledger.
+    /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode) to the ledger.
     Import {
-        /// Which harness: `codex`, `copilot` or `all`.
+        /// Which harness: `codex`, `copilot`, `opencode` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1078,31 +1078,31 @@ fn main() -> ExitCode {
             }
         }
         Command::Import { from } => {
-            if !["codex", "copilot", "all"].contains(&from.as_str()) {
-                eprintln!("girth: unknown harness: {from} (try codex, copilot or all)");
+            const SOURCES: [&str; 3] = ["codex", "copilot", "opencode"];
+            if from != "all" && !SOURCES.contains(&from.as_str()) {
+                eprintln!("girth: unknown harness: {from} (try codex, copilot, opencode or all)");
                 return ExitCode::from(2);
             }
-            type Importer = fn(&Path, &Path) -> std::io::Result<usize>;
-            let sources: [(&str, &str, &str, Importer); 2] = [
-                ("codex", "CODEX_HOME", ".codex", girth::import::import_codex),
-                (
-                    "copilot",
-                    "COPILOT_HOME",
-                    ".copilot",
-                    girth::import::import_copilot,
-                ),
-            ];
-            for (name, var, dir, import) in sources {
-                if from != "all" && from != name {
-                    continue;
-                }
-                let home = ctx
-                    .env
-                    .get(var)
-                    .filter(|v| !v.is_empty())
-                    .map(PathBuf::from)
-                    .or_else(|| ctx.home.as_ref().map(|h| h.join(dir)));
-                let n = match home.map(|h| import(&h, &girth_home(&ctx))) {
+            let var = |k: &str| ctx.env.get(k).filter(|v| !v.is_empty()).map(PathBuf::from);
+            let under_home = |p: &str| ctx.home.as_ref().map(|h| h.join(p));
+            let opencode_bin = var("GIRTH_OPENCODE_BIN").unwrap_or_else(|| "opencode".into());
+            for name in SOURCES.into_iter().filter(|n| from == "all" || from == *n) {
+                let g = girth_home(&ctx);
+                let result = match name {
+                    "codex" => var("CODEX_HOME")
+                        .or_else(|| under_home(".codex"))
+                        .map(|h| girth::import::import_codex(&h, &g)),
+                    "copilot" => var("COPILOT_HOME")
+                        .or_else(|| under_home(".copilot"))
+                        .map(|h| girth::import::import_copilot(&h, &g)),
+                    _ => var("XDG_DATA_HOME")
+                        .or_else(|| under_home(".local/share"))
+                        .map(|d| {
+                            let db = d.join("opencode/opencode.db");
+                            girth::import::import_opencode(&opencode_bin, &db, &g)
+                        }),
+                };
+                let n = match result {
                     Some(Err(e)) => {
                         eprintln!("girth: import from {name} failed: {e}");
                         return ExitCode::FAILURE;
@@ -1138,7 +1138,7 @@ fn main() -> ExitCode {
                 compact_idle: keeper.compact_idle,
                 agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
                 codex: harness.as_deref() == Some("codex"),
-                copilot: harness.as_deref() == Some("copilot"),
+                agents_md: matches!(harness.as_deref(), Some("copilot" | "opencode")),
             };
             let harness = harness.or_else(|| brief.then(|| "claude-code".to_string()));
             let mut records = ledger::read(&home);

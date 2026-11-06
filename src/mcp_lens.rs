@@ -235,6 +235,7 @@ If the user's request might be served by one of these servers, call ToolSearch.
             Event::Turn(Turn {
                 harness: None,
                 premium: None,
+                cost_micros: None,
                 project: project.into(),
                 session: None,
                 model: "m".into(),

@@ -67,6 +67,17 @@ girth advise (100000d): $610.09 estimated at list prices; shares overlap
 - An independent Python pass with the same rule gives **$610.09**. The bounds are $278.20 if every shutdown were running totals and $646.27 if every one were fresh.
 - Unpriced: agnes-3.0-flash (BYOK, logged cost 0), deepseek-v4-pro, gpt-5.4, gpt-5.3-codex.
 
+**OpenCode spend.** `girth import --from opencode` reads OpenCode's database through `opencode db` (into a scratch `GIRTH_HOME`):
+
+```
+$ girth import --from opencode
+imported 11 turns from opencode
+$ girth import --from opencode
+imported 0 turns from opencode
+```
+
+- An independent Python read of `opencode.db` gives $0.283301 over 135 requests and 11 prompts. Girth's ledger gives the same: 11 turns, 135 requests, $0.283301, 0 unpriced, 1 aborted, 4 in subagent sessions, plus 2 skill uses (`career-ops`, `girth`).
+
 ## Headless check per harness (2026-11-06, `sh examples/portability/run.sh`)
 
 - **Setup:** a throwaway git folder with the shipped `girth` skill (binary bundled) and a crafted `girth-hyperframes` in `.agents/skills`.

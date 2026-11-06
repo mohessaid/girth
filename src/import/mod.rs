@@ -5,6 +5,7 @@
 
 pub mod codex;
 pub mod copilot;
+pub mod opencode;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -119,6 +120,50 @@ pub fn import_copilot(copilot_home: &Path, girth_home: &Path) -> std::io::Result
             seen.insert(key, total);
         }
     }
+    save(girth_home, &offsets, added)?;
+    Ok(turns)
+}
+
+/// Append the OpenCode turns and skill uses in `db` not imported before, read by running
+/// `<bin> db` (OpenCode resolves its own database); returns how many turns. Nothing runs
+/// when `db` doesn't exist, so Girth never creates OpenCode's state. An OpenCode that
+/// can't be run, or has no `db` command, is noted on stderr and imports nothing.
+pub fn import_opencode(bin: &Path, db: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    if !db.is_file() {
+        return Ok(0);
+    }
+    let run = std::process::Command::new(bin)
+        .args(["db", "--pure", "--format", "json", opencode::QUERY])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
+    let rows = match run {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
+        Ok(out) => {
+            eprintln!(
+                "girth: skipped OpenCode: `opencode db` exited with {}",
+                out.status
+            );
+            return Ok(0);
+        }
+        Err(e) => {
+            eprintln!(
+                "girth: skipped OpenCode: could not run {}: {e}",
+                bin.display()
+            );
+            return Ok(0);
+        }
+    };
+    let mut offsets = load(girth_home);
+    let seen = offsets.entry("opencode".into()).or_default();
+    let (events, kept) = opencode::parse(&rows, seen);
+    let (mut added, mut turns) = (0, 0);
+    for (ts, event) in events {
+        turns += usize::from(matches!(event, ledger::Event::Turn(_)));
+        ledger::append_at(girth_home, ts, event)?;
+        added += 1;
+    }
+    seen.extend(kept);
     save(girth_home, &offsets, added)?;
     Ok(turns)
 }
@@ -259,6 +304,67 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let girth = tmp.path().join("g");
         assert_eq!(import_copilot(&tmp.path().join("none"), &girth).unwrap(), 0);
+        assert!(!girth.exists());
+    }
+
+    fn opencode_fixture() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/opencode/opencode")
+    }
+
+    #[test]
+    fn opencode_turns_are_imported_once() {
+        let tmp = TempDir::new().unwrap();
+        let (db, girth) = (tmp.path().join("opencode.db"), tmp.path().join("g"));
+        std::fs::write(&db, "").unwrap();
+        assert_eq!(
+            import_opencode(&opencode_fixture(), &db, &girth).unwrap(),
+            4
+        );
+        assert_eq!(ledger::read(&girth).len(), 5); // 4 turns and 1 skill use
+        assert_eq!(
+            import_opencode(&opencode_fixture(), &db, &girth).unwrap(),
+            0
+        );
+        assert_eq!(ledger::read(&girth).len(), 5);
+    }
+
+    #[test]
+    fn opencode_is_not_run_without_its_database() {
+        let tmp = TempDir::new().unwrap();
+        let girth = tmp.path().join("g");
+        // The stand-in would import 4 turns if it ran.
+        let db = tmp.path().join("missing.db");
+        assert_eq!(
+            import_opencode(&opencode_fixture(), &db, &girth).unwrap(),
+            0
+        );
+        assert!(!girth.exists());
+    }
+
+    #[test]
+    fn an_opencode_that_fails_or_is_missing_imports_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let (db, girth) = (tmp.path().join("opencode.db"), tmp.path().join("g"));
+        std::fs::write(&db, "").unwrap();
+        assert_eq!(
+            import_opencode(Path::new("/bin/false"), &db, &girth).unwrap(),
+            0
+        );
+        // Rows on stdout don't count when the command failed.
+        let failing = tmp.path().join("failing-opencode");
+        let script = format!(
+            "#!/bin/sh\n{} \"$@\"\nexit 1\n",
+            opencode_fixture().display()
+        );
+        std::fs::write(&failing, script).unwrap();
+        std::fs::set_permissions(
+            &failing,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .unwrap();
+        assert_eq!(import_opencode(&failing, &db, &girth).unwrap(), 0);
+        let none = tmp.path().join("no-such-opencode");
+        assert_eq!(import_opencode(&none, &db, &girth).unwrap(), 0);
         assert!(!girth.exists());
     }
 }

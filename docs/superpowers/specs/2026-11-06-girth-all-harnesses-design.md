@@ -57,7 +57,7 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
   - For an unpriced model, the turn keeps its tokens, and `advise` labels its share "price unknown" rather than guessing.
 - `advise` and `stats` gain a `--harness <id>` filter, and their JSON gains a per-harness split under a new key. Existing keys are unchanged (frozen).
 - Codex is built first (richest data, logs on disk here), then Copilot CLI, OpenCode and Gemini CLI.
-- OpenCode needs SQLite. Use `rusqlite` with `bundled`, only after `cargo deny` passes and the musl release targets build.
+- OpenCode keeps SQLite. **Changed (v0.12):** Girth runs `opencode db --pure --format json <query>` instead of linking `rusqlite`. That means no C dependency for the musl targets, and OpenCode resolves its own database and schema. It runs only when the database already exists, so Girth never creates OpenCode's state.
 
 ### 4. Shipped skill
 - SKILL.md and its references mark the Claude-only steps ("In Claude Code, …"). Elsewhere, the skill tells Claude to run `girth import` before `advise`.

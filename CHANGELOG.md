@@ -6,11 +6,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 - **`girth import --from copilot`** (and `all`, the default) appends GitHub Copilot CLI spend from `$COPILOT_HOME/session-state` (default `~/.copilot`). There is one turn per model each time a session shuts down, with `harness: "copilot"`, the request count, the premium requests used, and the token counts. Skills the session ran (`skill.invoked`) are recorded as uses. A re-run adds only new shutdowns. Copilot resumes either restart their totals or carry them over, depending on the version; Girth tells the two apart so nothing is counted twice (see `src/import/copilot.rs`).
+- **`girth import --from opencode`** appends OpenCode turns, one per prompt, read through OpenCode's own `opencode db --pure` (so Girth links no SQLite code). It runs only when `$XDG_DATA_HOME/opencode/opencode.db` (default `~/.local/share/opencode`) already exists; `GIRTH_OPENCODE_BIN` names another binary. Each turn keeps OpenCode's own per-request cost (`cost_micros`), which `advise` uses in place of list prices. A turn is recorded as aborted when it logged an error or was cut off by the next prompt. `skill` tool calls are recorded as uses. An OpenCode that can't be run imports nothing and says so on stderr.
 - **`girth advise` reports Copilot premium requests** beside the list-price estimate (JSON: `premium_requests`), because Copilot bills by premium request rather than by token. `--harness copilot` names Copilot's `/clear` and `AGENTS.md`.
 - **List prices for Claude Sonnet 4.6, Opus 4.6 and Haiku 4.5**, the models in older Copilot sessions.
 
 ### Fixed
-- CLI tests no longer read the machine's own Codex or Copilot logs.
+- CLI tests no longer read the machine's own Codex, Copilot or OpenCode data.
+- The keeper's warm-return count no longer counts another harness's imported turn in the same folder as Claude Code coming back.
 
 ## [0.11.0] - 2026-11-06
 

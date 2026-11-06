@@ -212,6 +212,7 @@ fn turn(model: &str, u: &Usage, cwd: &str, session: &Option<String>) -> Turn {
         outcomes: vec![],
         harness: Some(HARNESS.into()),
         premium: Some(u.premium),
+        cost_micros: None,
     }
 }
 

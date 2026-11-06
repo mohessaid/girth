@@ -1,0 +1,119 @@
+[
+  {
+    "kind": "m",
+    "id": "u1",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727241000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1782727241000},\"agent\":\"build\",\"model\":{\"providerID\":\"deepseek\",\"modelID\":\"deepseek-v4-pro\"}}"
+  },
+  {
+    "kind": "m",
+    "id": "a1",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727241100,
+    "data": "{\"parentID\":\"u1\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0.001,\"tokens\":{\"total\":165,\"input\":100,\"output\":10,\"reasoning\":5,\"cache\":{\"write\":0,\"read\":50}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727241100,\"completed\":1782727241500},\"finish\":\"tool-calls\"}"
+  },
+  {
+    "kind": "s",
+    "id": "prt_career-ops",
+    "session": "sesA",
+    "parent": null,
+    "dir": null,
+    "t": 1782727241600,
+    "data": "career-ops"
+  },
+  {
+    "kind": "m",
+    "id": "v1",
+    "session": "sesB",
+    "parent": "sesA",
+    "dir": "/work/o",
+    "t": 1782727242000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1782727242000},\"agent\":\"build\",\"model\":{\"providerID\":\"deepseek\",\"modelID\":\"deepseek-v4-pro\"}}"
+  },
+  {
+    "kind": "m",
+    "id": "b1",
+    "session": "sesB",
+    "parent": "sesA",
+    "dir": "/work/o",
+    "t": 1782727242100,
+    "data": "{\"parentID\":\"v1\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0.003,\"tokens\":{\"total\":330,\"input\":300,\"output\":30,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727242100,\"completed\":1782727242200},\"finish\":\"stop\"}"
+  },
+  {
+    "kind": "m",
+    "id": "a2",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727242300,
+    "data": "{\"parentID\":\"u1\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0.002,\"tokens\":{\"total\":255,\"input\":20,\"output\":5,\"reasoning\":0,\"cache\":{\"write\":30,\"read\":200}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727242300,\"completed\":1782727242500},\"finish\":\"stop\"}"
+  },
+  {
+    "kind": "m",
+    "id": "u2",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727243000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1782727243000},\"agent\":\"build\",\"model\":{\"providerID\":\"deepseek\",\"modelID\":\"deepseek-v4-pro\"}}"
+  },
+  {
+    "kind": "m",
+    "id": "a3",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727243100,
+    "data": "{\"parentID\":\"u2\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0,\"tokens\":{\"total\":44,\"input\":40,\"output\":4,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727243100,\"completed\":1782727243500},\"finish\":\"tool-calls\"}"
+  },
+  {
+    "kind": "m",
+    "id": "u3",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727244000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1782727244000},\"agent\":\"build\",\"model\":{\"providerID\":\"deepseek\",\"modelID\":\"deepseek-v4-pro\"}}"
+  },
+  {
+    "kind": "m",
+    "id": "a4",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727244050,
+    "data": "{\"parentID\":\"u3\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0.0005,\"tokens\":{\"total\":11,\"input\":10,\"output\":1,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727244050,\"completed\":1782727244100},\"error\":{\"name\":\"MessageAbortedError\",\"data\":{\"message\":\"The operation was aborted.\"}}}"
+  },
+  {
+    "kind": "m",
+    "id": "u4",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727245000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1782727245000},\"agent\":\"build\",\"model\":{\"providerID\":\"deepseek\",\"modelID\":\"deepseek-v4-pro\"}}"
+  },
+  {
+    "kind": "m",
+    "id": "a5",
+    "session": "sesA",
+    "parent": null,
+    "dir": "/work/o",
+    "t": 1782727245050,
+    "data": "{\"parentID\":\"u4\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/work/o\",\"root\":\"/work/o\"},\"cost\":0.001,\"tokens\":{\"total\":11,\"input\":10,\"output\":1,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"deepseek-v4-pro\",\"providerID\":\"deepseek\",\"time\":{\"created\":1782727245050,\"completed\":1782727245090},\"finish\":\"tool-calls\"}"
+  },
+  {
+    "kind": "s",
+    "id": "prt_later-skill",
+    "session": "sesA",
+    "parent": null,
+    "dir": null,
+    "t": 1782727245100,
+    "data": "later-skill"
+  }
+]

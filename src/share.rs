@@ -286,6 +286,7 @@ mod tests {
                 rec(Event::Turn(crate::ledger::Turn {
                     harness: None,
                     premium: None,
+                    cost_micros: None,
                     project: project.clone(), model: heading.clone(), input: 1, output: 1,
                     session: None,
                     cache_read: 0, cache_write: 0, agent: false, aborted: false,

@@ -227,7 +227,8 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                         s.rewrite_cost += b.rewritten as f64 * r.cache_write / 1e6;
                     }
                 }
-                if t.agent {
+                // Subagents and other harnesses' imported turns don't end an idle period.
+                if t.agent || t.harness.is_some() {
                     continue;
                 }
                 if let Some((model, expected)) = pending.remove(t.project.as_str()) {
@@ -283,6 +284,7 @@ mod tests {
         Turn {
             harness: None,
             premium: None,
+            cost_micros: None,
             project: "/p".into(),
             session: None,
             model: model.into(),
@@ -508,6 +510,26 @@ mod tests {
             doctor_line(&turn("mystery", &[(1_500_000, 1_250_000, 4_000)])).unwrap(),
             "the prompt cache had expired (idle 1h 6m); this turn re-wrote 1.2M tokens"
         );
+    }
+
+    #[test]
+    fn imported_turns_do_not_end_an_idle_period() {
+        // A Codex turn in the same folder after a ping is not Claude Code coming back.
+        let records = vec![
+            rec(1, ping("/p", 200_000, 200_100)),
+            rec(
+                2,
+                Event::Turn(Turn {
+                    harness: Some("codex".into()),
+                    ..turn("gpt-6-sol", &[])
+                }),
+            ),
+            rec(
+                3,
+                Event::Turn(turn("claude-opus-5-5", &[(300_000, 300_000, 9_000)])),
+            ),
+        ];
+        assert_eq!(summarise(&records, Some("/p")).warm_returns, 0);
     }
 
     #[test]

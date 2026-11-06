@@ -26,8 +26,8 @@ pub struct On {
     pub agents_model: bool,
     /// The advice is for Codex turns: name Codex's commands.
     pub codex: bool,
-    /// The advice is for Copilot CLI turns: name its instructions file.
-    pub copilot: bool,
+    /// The advice is for a harness with `/clear` and `AGENTS.md` (Copilot CLI, OpenCode).
+    pub agents_md: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -56,8 +56,12 @@ pub struct Advice {
     pub premium_requests: u64,
 }
 
-/// Estimated dollars for one turn (subagents write the 5-minute cache); 0 for unknown models.
+/// Dollars for one turn: the harness's own figure when it logged one, else list prices
+/// (subagents write the 5-minute cache); 0 for unknown models.
 fn turn_cost(t: &Turn) -> f64 {
+    if let Some(micros) = t.cost_micros {
+        return micros as f64 / 1e6;
+    }
     price::rates(&t.model)
         .map(|r| if t.agent { r.five_minute() } else { r })
         .map_or(0.0, |r| {
@@ -84,7 +88,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     let spend: f64 = turns.iter().map(|(_, t)| turn_cost(t)).sum();
     let unpriced = turns
         .iter()
-        .filter(|(_, t)| price::rates(&t.model).is_none())
+        .filter(|(_, t)| t.cost_micros.is_none() && price::rates(&t.model).is_none())
         .count() as u64;
     let mut harnesses: BTreeMap<String, f64> = BTreeMap::new();
     for (_, t) in &turns {
@@ -105,7 +109,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     }
     let (clear, memory) = if on.codex {
         ("/new", "AGENTS.md")
-    } else if on.copilot {
+    } else if on.agents_md {
         ("/clear", "AGENTS.md")
     } else {
         ("/clear", "CLAUDE.md")
@@ -374,6 +378,7 @@ mod tests {
         Turn {
             harness: None,
             premium: None,
+            cost_micros: None,
             project: "/p".into(),
             session: None,
             model: model.into(),
@@ -508,9 +513,9 @@ mod tests {
     }
 
     #[test]
-    fn copilot_advice_names_copilot_files() {
+    fn copilot_and_opencode_advice_names_agents_md() {
         let on = On {
-            copilot: true,
+            agents_md: true,
             ..On::default()
         };
         let mut early = turn("claude-sonnet-4-6", 400_000, 0);
@@ -528,6 +533,24 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("CLAUDE.md"), "{text}");
+    }
+
+    #[test]
+    fn a_logged_cost_is_used_and_is_not_unpriced() {
+        let mut opencode = turn("deepseek-v4-pro", 0, 1_000_000);
+        opencode.harness = Some("opencode".into());
+        opencode.cost_micros = Some(2_500_000);
+        let mut listed = turn("claude-opus-5-5", 0, 1_000_000);
+        listed.cost_micros = Some(1_000_000); // the log's figure wins over list prices
+        let advice = advise(
+            &[rec(10, opencode), rec(20, listed)],
+            100,
+            1000,
+            On::default(),
+        );
+        assert_eq!(advice.harnesses["opencode"], 2.5);
+        assert_eq!(advice.spend, 3.5);
+        assert_eq!(advice.unpriced, 0);
     }
 
     #[test]
