@@ -1,0 +1,11 @@
+{
+  "name": "girth",
+  "displayName": "Girth",
+  "version": "0.10.0",
+  "description": "Just-in-time, project-scoped skills distilled from the skills you already have.",
+  "author": { "name": "mohessaid" },
+  "license": "MIT",
+  "keywords": ["skills", "agent-skills", "context", "cost", "tokens"],
+  "logo": "assets/logo.svg",
+  "skills": "skills"
+}

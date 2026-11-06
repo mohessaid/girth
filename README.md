@@ -101,6 +101,21 @@ The studio, OpenMontage and HyperFrames results above use 8 runs per arm, compou
 /plugin install girth@girth
 ```
 
+**As a Codex plugin** (Codex CLI 0.164 or later; the install was checked from a local copy of this repo):
+
+```bash
+codex plugin marketplace add mohessaid/girth
+codex plugin add girth@girth
+```
+
+**As a Gemini CLI or Antigravity extension.** The repo root holds `gemini-extension.json`, and the skill is in `skills/`:
+
+```bash
+gemini extensions install https://github.com/mohessaid/girth
+```
+
+The repo also carries a `.cursor-plugin/plugin.json` for the Cursor Marketplace. Girth isn't listed there yet.
+
 **As a plain skill, for any agent the [skills CLI](https://skills.sh) supports:**
 
 ```bash
