@@ -17,6 +17,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **List prices for Claude Sonnet 4.6, Opus 4.6 and Haiku 4.5**, the models in older Copilot sessions.
 
 ### Fixed
+- The Codex and Cursor plugin icon (`assets/logo.svg`) was rejected as unusable because it declared an external DTD; it no longer does (`claude plugin validate` flags it).
 - CLI tests no longer read the machine's own Codex, Copilot or OpenCode data.
 - The keeper's warm-return count no longer counts another harness's imported turn in the same folder as Claude Code coming back.
 

@@ -1558,6 +1558,47 @@ fn every_command_has_its_own_summary() {
 }
 
 #[test]
+fn advise_names_the_chosen_harness_s_commands() {
+    let tmp = TempDir::new().unwrap();
+    let g = tmp.path().join("g");
+    std::fs::create_dir_all(&g).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let line = |harness: &str, model: &str| {
+        format!(
+            r#"{{"v":1,"ts":{},"kind":"turn","project":"/p","model":"{model}","input":0,"output":0,"cache_read":400000,"cache_write":0,"agent":false,"aborted":false,"harness":"{harness}"}}"#,
+            now - 60
+        )
+    };
+    let ledger = [
+        line("codex", "gpt-6-astra"),
+        line("gemini", "gemini-2.5-pro"),
+    ]
+    .join("\n");
+    std::fs::write(g.join("ledger.jsonl"), ledger + "\n").unwrap();
+    let text = |harness: &str| {
+        let out = girth()
+            .env("GIRTH_HOME", &g)
+            .args(["advise", "--harness", harness])
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout).into_owned()
+    };
+    let codex = text("codex");
+    assert!(
+        codex.contains("/new") && !codex.contains("/clear"),
+        "{codex}"
+    );
+    let gemini = text("gemini");
+    assert!(
+        gemini.contains("/clear") && !gemini.contains("/new"),
+        "{gemini}"
+    );
+}
+
+#[test]
 fn advise_filters_by_harness() {
     let tmp = TempDir::new().unwrap();
     let g = tmp.path().join("g");

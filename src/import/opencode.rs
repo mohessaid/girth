@@ -10,7 +10,9 @@
 //! A turn is done when a later prompt exists in its session, when its last request
 //! finished for a reason other than `tool-calls`, or when a request logged an `error`.
 //! A turn cut off by a later prompt or an error is recorded as aborted. A session left
-//! mid-tool-call keeps its last turn open until it moves on.
+//! mid-tool-call keeps its last turn open until it moves on. `opencode db` runs with
+//! no timeout; its stdin is closed, so it can't wait on a prompt, but a slow database
+//! migration would hold up `girth import`.
 
 use std::collections::BTreeMap;
 

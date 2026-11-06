@@ -62,6 +62,7 @@ girth advise (100000d): $610.09 estimated at list prices; shares overlap
        (611 Copilot premium requests; Copilot's share is at list prices, not what the subscription bills)
 ```
 
+- The 43% "turns 8h+ into a session" share is partly how the import works. Each turn is stamped at its shutdown, so every turn after a resume counts as hours or weeks into the session. `/clear` is still the right fix for a session resumed over weeks, but don't quote the share as a measured finding.
 - Copilot logs per-model totals at each shutdown. A resumed session's next shutdown holds either a fresh count or the running totals, depending on the CLI version; one session here has both. The first draft of the rule read one fresh count as running totals (about $70 too little). Model-tagged assistant messages settled that case: 312 Sonnet and 48 gpt-5.4 messages in that stretch.
 - 16 shutdowns are empty. Of the other 80, rules settle 67 structurally (39 first, 24 where a model went down, 4 carried over unchanged), message tags settle 6, and turn counts settle 7.
 - An independent Python pass with the same rule gives **$610.09**. The bounds are $278.20 if every shutdown were running totals and $646.27 if every one were fresh.
