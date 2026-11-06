@@ -1,6 +1,9 @@
 {
   "name": "girth",
   "owner": { "name": "mohessaid" },
+  "metadata": {
+    "description": "Girth: just-in-time, project-scoped skills and AI spend tracking for Claude Code and other agent harnesses."
+  },
   "plugins": [
     {
       "name": "girth",
