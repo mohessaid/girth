@@ -11,7 +11,8 @@
 //! (the tool-use prompt) as input, and none of the three is in `input` or `output`.
 //! A turn is done when a later prompt exists, or when its last reply made no tool call.
 //! A turn cut off mid-tool-call by the next prompt is recorded as aborted. A session
-//! left mid-tool-call keeps its last turn open.
+//! left mid-tool-call keeps its last turn open. Every turn is a main-loop turn: the
+//! sessions seen so far carry `kind: "main"` or no kind at all.
 
 use serde_json::Value;
 

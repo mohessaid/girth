@@ -35,7 +35,7 @@ Instead of installing dozens of large skills and paying for all of them every tu
 
 <p align="center"><img src="assets/demo.gif" alt="Girth demo: measure 21 public skills, find the one slice a task needs, validate the small crafted skill, and remember taste" width="760"></p>
 
-Status: v0.11, early and measured: every headline result below is re-runnable from `examples/`. Design: `docs/superpowers/specs/`.
+Status: v0.12, early and measured: every headline result below is re-runnable from `examples/`. Design: `docs/superpowers/specs/`.
 
 Independent research points the same way: in [SkillsBench](https://arxiv.org/abs/2602.12670), focused skills improved task success by 18.9 points against 5.7 for comprehensive documentation, and 2–3 skills per task beat 4 or more.
 

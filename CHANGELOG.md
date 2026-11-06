@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-06
+
 ### Added
 - **`girth import --from copilot`** (and `all`, the default) appends GitHub Copilot CLI spend from `$COPILOT_HOME/session-state` (default `~/.copilot`). There is one turn per model each time a session shuts down, with `harness: "copilot"`, the request count, the premium requests used, and the token counts. Skills the session ran (`skill.invoked`) are recorded as uses. A re-run adds only new shutdowns. Copilot resumes either restart their totals or carry them over, depending on the version; Girth tells the two apart so nothing is counted twice (see `src/import/copilot.rs`).
 - **`girth import --from opencode`** appends OpenCode turns, one per prompt, read through OpenCode's own `opencode db --pure` (so Girth links no SQLite code). It runs only when `$XDG_DATA_HOME/opencode/opencode.db` (default `~/.local/share/opencode`) already exists; `GIRTH_OPENCODE_BIN` names another binary. Each turn keeps OpenCode's own per-request cost (`cost_micros`), which `advise` uses in place of list prices. A turn is recorded as aborted when it logged an error or was cut off by the next prompt. `skill` tool calls are recorded as uses. An OpenCode that can't be run imports nothing and says so on stderr.
@@ -204,7 +206,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mohessaid/girth/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mohessaid/girth/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mohessaid/girth/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mohessaid/girth/compare/v0.8.0...v0.9.0

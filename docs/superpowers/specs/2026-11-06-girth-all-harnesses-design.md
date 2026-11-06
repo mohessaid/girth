@@ -38,7 +38,11 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 
 ### 3. Spend from other harnesses: `girth import [--from codex|copilot|opencode|gemini|all]`
 - **What it does:** reads each harness's local session logs and appends `turn` and `use` records to the ledger. Each record gets a new `harness` field (`Option<String>`, serde default, absent means Claude Code).
-- **Idempotent:** each source keeps a cursor of imported request ids in `~/.girth/import.json` (Codex `response_id`, Copilot `apiCallId`, OpenCode message id, Gemini message id). Re-running never double-counts.
+- **Idempotent:** each source keeps a cursor per file or session in `~/.girth/import.json`. Re-running never double-counts. **As built:**
+  - Codex: the byte offset after the last finished turn (a shorter file is read again).
+  - Copilot: the number of shutdowns imported (fewer shutdowns means it is read again).
+  - OpenCode: per session, the time of the last imported prompt.
+  - Gemini: per file, the time of the last imported prompt, since older files are rewritten whole.
 
 | Harness | Source (verified on this machine) | Per request | Turn grouping | Skill use |
 |---|---|---|---|---|
