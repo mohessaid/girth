@@ -88,15 +88,20 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 - A headless, read-only run per installed harness (Codex, Copilot CLI, OpenCode, `agy`, plus Cursor once logged in): in a fresh folder with a crafted skill in `.agents/skills`, ask the agent to list its `girth-` skills, then to run `girth search` through the skill. Record the results in `examples/portability/RESULTS.md`.
 - These runs spend other providers' credits, not the Claude plan. Run them one at a time, never alongside cargo.
 
-## Follow-up: one project cache across harnesses
+## Follow-up: one project cache across harnesses (decided 2026-11-06)
 
-- **The split.** Crafted skills now land in `.claude/skills` under Claude Code and in `.agents/skills` elsewhere. Claude Code reads only the first, and most other harnesses only the second. `girth search` finds both, as root hits. But on a repo worked from two harnesses, a skill crafted in one does not load in the other, so the compounding cache stops compounding across harnesses.
-- **Options, not built yet:**
-  - **Link at craft time.** Under Claude Code, write to `.agents/skills/girth-x` and link `.claude/skills/girth-x` to it. One copy then serves every harness.
-  - **The reverse**, or a `girth sync` command that links whichever side is missing.
-- **Before choosing, check:**
-  - Claude Code follows a symlinked skill dir. Plugin installs suggest so, but this needs checking for project skills.
-  - Links survive `git` on Windows checkouts.
+- **The split.** Crafted skills land in `.claude/skills` under Claude Code and in `.agents/skills` elsewhere. Claude Code reads only the first; most other harnesses read only the second. On a repo worked from two harnesses, a skill crafted in one does not load in the other, so the cache stops compounding across harnesses.
+- **What was checked:**
+  - **Claude Code follows a symlinked skill folder.** Its skills docs say: "a `<skill-name>` entry in the enterprise, personal, or project location can be a symlink to a directory elsewhere on disk. Claude Code reads `SKILL.md` from the target and loads the skill once even if several locations point at the same target."
+  - **The other harnesses follow links too.** `npx skills add` installs by linking into each harness's folder. The headless runs in `examples/portability/RESULTS.md` loaded skills set up that way.
+  - **Windows:** with git's default `core.symlinks=false`, a committed link checks out as a small file holding the target path. That isn't a skill folder, so every harness ignores it: no sharing, and no harm.
+- **Decision: link at validate time.**
+  - Where skills are written doesn't change: each harness writes where it reads, so a failed link never hides a skill from the harness that crafted it.
+  - `girth validate` runs on every crafted skill in the craft flow. When a valid `girth-*` skill sits directly in `<project>/.claude/skills/` or `<project>/.agents/skills/`, and the same name doesn't exist on the other side, it creates a relative symlink there: `.agents/skills/girth-x → ../../.claude/skills/girth-x`, or the reverse.
+  - A link that can't be made is noted on stderr, and validation still passes. Stdout is unchanged (`VALID <dir>` is frozen). Existing files or folders on the other side are never replaced.
+  - Discovery already searches a folder reached twice only once, by its canonical path.
+- **Committing.** Crafted skills are project files, meant to be committed so the cache compounds across machines and teammates; the link commits with them. On Windows checkouts the link degrades as described above.
+- **Rejected:** writing to `.agents/skills` under Claude Code and linking back. If the link failed, Claude Code would lose the skill it just crafted. A separate `girth sync` command was also rejected: an extra step that agents and users would forget.
 
 ## Follow-up: Copilot per-request import
 
