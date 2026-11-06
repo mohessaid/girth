@@ -6,6 +6,7 @@ pub mod drift;
 pub mod fetch;
 pub mod frontmatter;
 pub mod harness;
+pub mod import;
 pub mod keeper;
 pub mod ledger;
 pub mod lens;
