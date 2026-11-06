@@ -84,6 +84,16 @@ Girth's two ideas are not tied to Claude Code. The first is just-in-time project
 - A headless, read-only run per installed harness (Codex, Copilot CLI, OpenCode, `agy`, plus Cursor once logged in): in a fresh folder with a crafted skill in `.agents/skills`, ask the agent to list its `girth-` skills, then to run `girth search` through the skill. Record the results in `examples/portability/RESULTS.md`.
 - These runs spend other providers' credits, not the Claude plan. Run them one at a time, never alongside cargo.
 
+## Follow-up: one project cache across harnesses
+
+- **The split.** Crafted skills now land in `.claude/skills` under Claude Code and in `.agents/skills` elsewhere. Claude Code reads only the first, and most other harnesses only the second. `girth search` finds both, as root hits. But on a repo worked from two harnesses, a skill crafted in one does not load in the other, so the compounding cache stops compounding across harnesses.
+- **Options, not built yet:**
+  - **Link at craft time.** Under Claude Code, write to `.agents/skills/girth-x` and link `.claude/skills/girth-x` to it. One copy then serves every harness.
+  - **The reverse**, or a `girth sync` command that links whichever side is missing.
+- **Before choosing, check:**
+  - Claude Code follows a symlinked skill dir. Plugin installs suggest so, but this needs checking for project skills.
+  - Links survive `git` on Windows checkouts.
+
 ## Not in scope
 - Porting Lens, Meter, keeper or compaction to other harnesses' hook systems. Codex's `PostModelRequest` hook carries `token_usage`, so a live Codex meter is a possible follow-up once import shows the data is useful.
 - Rewriting the A/B example scripts. They measure Claude Code and keep `.claude/skills`.
