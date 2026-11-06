@@ -40,11 +40,12 @@ pub struct Summary {
     pub since_commit: f64,
 }
 
-/// Summarise `turn` events, optionally for one project.
+/// Summarise Claude Code's `turn` events, optionally for one project. Turns imported
+/// from other harnesses are left out: Meter reports the session it runs in.
 pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     let mut s = Summary::default();
     let turns = records.iter().filter_map(|r| match &r.event {
-        Event::Turn(t) if project.is_none_or(|p| p == t.project) => Some(t),
+        Event::Turn(t) if t.harness.is_none() && project.is_none_or(|p| p == t.project) => Some(t),
         _ => None,
     });
     for t in turns {
@@ -190,6 +191,17 @@ mod tests {
                 outcomes: vec![],
             }),
         }
+    }
+
+    #[test]
+    fn imported_turns_from_other_harnesses_are_not_metered() {
+        let mut codex = turn("/a", "gpt-6-astra", 1_000_000, None);
+        if let Event::Turn(t) = &mut codex.event {
+            t.harness = Some("codex".into());
+        }
+        let records = vec![turn("/a", "claude-opus-5-5", 5, None), codex];
+        let s = summarise(&records, None);
+        assert_eq!((s.turns, s.input), (1, 5));
     }
 
     #[test]
