@@ -1,7 +1,9 @@
 //! Per-model API prices, for cost estimates from recorded token counts.
 //!
-//! Source: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
-//! 2026-10-06). Cache writes are priced at the 1-hour rate (2× input), the
+//! Sources: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
+//! 2026-10-06) for Claude models; developers.openai.com/api/docs/pricing (standard
+//! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
+//! cache writes at the 30-minute rate. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
 //! reports. Subagents write the 5-minute cache (1.25× input): see `five_minute`.
 
@@ -17,7 +19,7 @@ pub struct Rates {
 /// Rates for a model id. Matches the exact id, or the id followed by a
 /// bracketed suffix (`claude-opus-5-5[1m]`).
 pub fn rates(model: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 4] = [
+    const TABLE: [(&str, Rates); 9] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -54,9 +56,24 @@ pub fn rates(model: &str) -> Option<Rates> {
                 cache_write: 20.0,
             },
         ),
+        ("gpt-6-astra", openai(10.0, 1.0, 12.5, 50.0)),
+        ("gpt-6.1-sol", openai(2.0, 0.10, 2.5, 10.0)),
+        ("gpt-6-sol", openai(2.0, 0.20, 2.5, 10.0)),
+        ("gpt-6.1-terra", openai(1.0, 0.05, 1.25, 5.0)),
+        ("gpt-6-luna", openai(0.10, 0.01, 0.125, 0.50)),
     ];
     let id = model.split('[').next().unwrap_or(model);
     TABLE.iter().find(|(name, _)| *name == id).map(|(_, r)| *r)
+}
+
+/// OpenAI's table order: input, cached input, cache write, output.
+const fn openai(input: f64, cache_read: f64, cache_write: f64, output: f64) -> Rates {
+    Rates {
+        input,
+        output,
+        cache_read,
+        cache_write,
+    }
 }
 
 impl Rates {
@@ -82,6 +99,23 @@ pub fn cost(rates: Rates, input: u64, output: u64, cache_read: u64, cache_write:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn openai_models_are_priced() {
+        assert_eq!(
+            rates("gpt-6-astra"),
+            Some(Rates {
+                input: 10.0,
+                output: 50.0,
+                cache_read: 1.0,
+                cache_write: 12.5,
+            })
+        );
+        assert_eq!(rates("gpt-6.1-terra").unwrap().cache_read, 0.05);
+        assert_eq!(rates("gpt-6-sol").unwrap().cache_read, 0.20);
+        assert_eq!(rates("gpt-6-luna").unwrap().cache_write, 0.125);
+        assert_eq!(rates("gpt-6.1-sol").unwrap().output, 10.0);
+    }
 
     #[test]
     fn current_models_have_rates_and_unknown_ones_do_not() {
