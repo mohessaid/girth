@@ -136,7 +136,7 @@ The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Cl
 Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/specification) skill, so it is not tied to Claude Code:
 
 - **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`).
-- **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead.
+- **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead. `girth validate` then links each crafted skill into the other folder, so a skill crafted in one harness loads in all of them, and the project cache keeps compounding when you switch harnesses.
 - **Counts what other harnesses spend.** `girth import` reads the local session logs of Codex, GitHub Copilot CLI, OpenCode and Gemini CLI. `girth advise --harness codex` (or `copilot`, `opencode`, `gemini`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent:
   - 140 Codex turns, $173.00 at OpenAI list prices;
   - 97 Copilot session stretches, $610.09 at Anthropic list prices;

@@ -10,6 +10,7 @@ pub mod import;
 pub mod keeper;
 pub mod ledger;
 pub mod lens;
+pub mod link;
 pub mod mcp_lens;
 pub mod measure;
 pub mod meter;

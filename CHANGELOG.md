@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **One project cache across harnesses.** `girth validate` links each valid crafted skill in `<project>/.claude/skills` into `<project>/.agents/skills` with a relative symlink, and the reverse. Claude Code reads the first folder and most other harnesses the second, so a skill crafted in one now loads in both. An existing entry on the other side is never replaced. A link that can't be made (for example on Windows without symlink rights) is noted on stderr, and validation still passes. Discovery lists a linked skill once.
+
 ## [0.12.0] - 2026-11-06
 
 ### Added

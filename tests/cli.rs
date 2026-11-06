@@ -287,6 +287,79 @@ fn validate_records_craft_events_and_reports_the_diff() {
 }
 
 #[test]
+fn validate_links_a_crafted_skill_for_the_other_harnesses() {
+    let tmp = TempDir::new().unwrap();
+    let skills = tmp.path().join("p/.claude/skills");
+    let crafted = write_skill(&skills, "girth-captions", VALID_FM, "## House\nours\n");
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("home"))
+        .args(["validate", "--no-record"])
+        .arg(&crafted)
+        .assert()
+        .success()
+        .stdout("VALID girth-captions\n")
+        .stderr(
+            predicate::str::contains("linked")
+                .and(predicate::str::contains(".agents/skills/girth-captions")),
+        );
+    let link = tmp.path().join("p/.agents/skills/girth-captions");
+    assert!(link.join("SKILL.md").is_file());
+    assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
+}
+
+#[test]
+fn a_linked_skill_is_found_once() {
+    let tmp = TempDir::new().unwrap();
+    let p = tmp.path().join("p");
+    let crafted = write_skill(
+        &p.join(".claude/skills"),
+        "girth-captions",
+        VALID_FM,
+        "## Timing\nrule\n",
+    );
+    girth()
+        .args(["validate", "--no-record"])
+        .arg(&crafted)
+        .assert()
+        .success();
+    let out = girth()
+        .current_dir(&p)
+        .args(["search", "caption rules", "--json", "--roots"])
+        .arg(p.join(".claude/skills"))
+        .arg(p.join(".agents/skills"))
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let names: Vec<_> = json["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["name"].clone())
+        .collect();
+    assert_eq!(names, [serde_json::json!("girth-captions")]);
+}
+
+#[test]
+fn validate_still_passes_when_the_link_cannot_be_made() {
+    let tmp = TempDir::new().unwrap();
+    let crafted = write_skill(
+        &tmp.path().join("p/.claude/skills"),
+        "girth-captions",
+        VALID_FM,
+        "## House\nours\n",
+    );
+    std::fs::write(tmp.path().join("p/.agents"), "a file").unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("home"))
+        .args(["validate", "--no-record"])
+        .arg(&crafted)
+        .assert()
+        .success()
+        .stdout("VALID girth-captions\n")
+        .stderr(predicate::str::contains("could not link"));
+}
+
+#[test]
 fn validate_no_record_and_invalid_skills_write_nothing() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");

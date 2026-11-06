@@ -1223,6 +1223,20 @@ fn main() -> ExitCode {
                 if !errors.is_empty() {
                     continue;
                 }
+                if name.starts_with(CRAFTED_PREFIX) {
+                    // One cache for every harness: Claude Code reads .claude/skills, most
+                    // others .agents/skills. A failed link never fails validation.
+                    match girth::link::link_other_side(dir) {
+                        Ok(Some(at)) => eprintln!(
+                            "girth: linked {} so other harnesses load it too",
+                            at.display()
+                        ),
+                        Ok(None) => {}
+                        Err(e) => {
+                            eprintln!("girth: could not link {name} for other harnesses: {e}")
+                        }
+                    }
+                }
                 if no_record || !name.starts_with(CRAFTED_PREFIX) {
                     let _ = writeln!(out, "VALID {name}");
                     continue;

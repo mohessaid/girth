@@ -72,3 +72,7 @@ v0.5 (2026-10-15):
 - **After the branch review's fixes** (filter pipes, key-value summaries, quote-aware splitting), `--in-diff` again: 187 mutants, 2 unviable, **182 of 185 caught**.
   - The three survivors were the splitter's backslash escape and two edges of the filter rule (`tee` is not a filter; a grep with no pipe before it is not one).
   - Tests now pin all three. Each fails under its hand-applied mutant.
+
+## link.rs (v0.12.x)
+
+- `symlink_dir -> Ok(())` in the `#[cfg(windows)]` and `#[cfg(not(any(unix, windows)))]` variants: those functions are not compiled on the Linux CI host, so no test can reach them. The Unix variant is caught.
