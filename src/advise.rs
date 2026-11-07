@@ -47,18 +47,24 @@ enum Output {
     Shell,
     File,
     Fetch,
+    /// Searches, MCP calls, subagents and the rest: no one fix fits them.
+    Other,
 }
 
 fn output_kind(tool: &str) -> Output {
     match tool.to_ascii_lowercase().as_str() {
-        "read" | "view" => Output::File,
+        "exec" | "js" => Output::Shell,
+        t if t.contains("bash") || t.contains("shell") => Output::Shell,
+        "read" | "view" | "read_file" | "read_many_files" => Output::File,
+        t if t.contains("file_contents") => Output::File,
         t if t.contains("fetch") => Output::Fetch,
-        _ => Output::Shell,
+        _ => Output::Other,
     }
 }
 
 /// The fix and guard for large tool output: one part per kind of tool with at least a
-/// fifth of the large tokens, largest first. RTK filters Claude Code's Bash tool only.
+/// fifth of the large tokens, largest first; other tools count toward the total only.
+/// When no known kind qualifies, a general fix. RTK filters Claude Code's Bash tool only.
 fn output_fix(turns: &[(u64, &Turn)], harness: Option<&str>) -> (String, String) {
     let mut kinds: Vec<(Output, u64)> = Vec::new();
     for (tool, n) in turns.iter().flat_map(|(_, t)| &t.tool_output) {
@@ -93,9 +99,14 @@ fn output_fix(turns: &[(u64, &Turn)], harness: Option<&str>) -> (String, String)
                 "fetch large pages in a subagent, so only its summary stays in the conversation",
                 "the subagent still reads the whole page",
             ),
+            (Output::Other, _) => continue,
         };
         fix.push(f);
         guard.push(g);
+    }
+    if fix.is_empty() {
+        fix.push("ask tools for less: narrower searches and patterns, smaller ranges and limits");
+        guard.push("a narrower query still finds what the task needs");
     }
     (fix.join("; "), guard.join("; "))
 }
@@ -685,9 +696,33 @@ mod tests {
             f.contains("RTK") && f.contains("line range") && f.contains("subagent"),
             "{f}"
         );
-        // A tool of no known kind falls back to the shell fix.
-        let (f, _) = fix(&[("mystery", 9_000)], Some("codex"));
+        // File readers by other names; `read_bash` reads a shell's output.
+        let (f, _) = fix(&[("read_file", 9_000)], Some("gemini"));
+        assert_eq!(f, "read large files by line range");
+        let (f, _) = fix(
+            &[("github-mcp-server-get_file_contents", 9_000)],
+            Some("copilot"),
+        );
+        assert_eq!(f, "read large files by line range");
+        let (f, _) = fix(&[("read_bash", 9_000)], Some("copilot"));
+        assert!(f.contains("| tail -n 40"), "{f}");
+        // Codex's shell runs under `exec` and `js`.
+        let (f, _) = fix(&[("exec", 5_000), ("js", 5_000)], Some("codex"));
         assert!(f.contains("| tail -n 40") && !f.contains("RTK"), "{f}");
+        // Tools of no known kind count toward the total but get no fix of their own.
+        let (f, _) = fix(
+            &[("run_shell_command", 6_000), ("resolve-library-id", 4_000)],
+            Some("gemini"),
+        );
+        assert_eq!(f, "end long commands with | tail -n 40 or | head");
+        let (f, _) = fix(&[("bash", 1_000), ("grep", 9_000)], Some("codex"));
+        assert!(f.starts_with("ask tools for less"), "{f}");
+        let (f, g) = fix(&[("mystery", 9_000)], Some("codex"));
+        assert!(
+            f.starts_with("ask tools for less") && !f.contains("RTK"),
+            "{f}"
+        );
+        assert!(!g.is_empty(), "{g}");
     }
 
     #[test]

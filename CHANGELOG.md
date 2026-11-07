@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- `advise`'s large-tool-output fix gave `| tail` for every tool it didn't know, such as searches, MCP calls and subagents. Those now count toward the total without a fix of their own, and if only such tools qualify, the fix asks for narrower searches and ranges. Gemini's `read_file` and MCP `get_file_contents` count as file reads.
+
 ## [0.14.0] - 2026-11-07
 
 ### Added
