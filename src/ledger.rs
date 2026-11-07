@@ -168,8 +168,7 @@ pub struct Turn {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<u64>,
     /// Estimated tokens of large tool results (`LARGE_OUTPUT_CHARS` or more each), per
-    /// tool, at 4 characters per token. Claude Code's mod measures Bash; Codex's import
-    /// measures every tool.
+    /// tool, at 4 characters per token. Every harness measures every tool's result text.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tool_output: BTreeMap<String, u64>,
 }

@@ -784,6 +784,25 @@ test('large Bash results go to the meter as estimated tokens, per loop', async (
   expect(records[1].tool_output).toBeUndefined()
 })
 
+test('large results of every tool go to the meter, measured by their text', async ($, on) => {
+  const records: any[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'meter') records.push(JSON.parse(e.init!.stdin!))
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  // Every tool's result carries `text`, what the model reads; an image Read has none.
+  on('tool.call', ($, e) => ({ result: {}, text: 'z'.repeat(Number(e.n)) }) as any)
+  on('turn.complete', () => ({ text: '' }))
+  await $.tool.call({ tool: 'Read', n: '8000' } as any)
+  await $.tool.call({ tool: 'Read', n: '9001' } as any)
+  await $.tool.call({ tool: 'Read', n: '0' } as any)
+  await $.tool.call({ tool: 'WebFetch', n: '7999' } as any)
+  await $.tool.call({ tool: 'mcp__docs__get', n: '12000' } as any)
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(records[0].tool_output).toEqual({ Read: 2000 + 2251, mcp__docs__get: 3000 })
+})
+
 test('the last 64 Bash calls of a turn go to the meter', async ($, on) => {
   const records: any[] = []
   on('session.cwd', () => ({ value: '/work/app' }))

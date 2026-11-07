@@ -78,6 +78,7 @@ Evidence: `examples/portability/RESULTS.md` ("Codex large tool output").
 - **Not handled:** Codex subagent threads are recorded as main-loop turns, as before.
 - **Copilot (same day):** only turns read from per-request records carry `tool_output`. See the all-harnesses spec.
 - **OpenCode (same day):** `part.state.output` lengths, capped by OpenCode at 50 KB, go with their prompt's turn. `context` is the last request's input plus its cache reads and writes.
+- **Claude Code, every tool (same day):** a probe mod logged the shape of each `tool.call` result in a headless run. Read, Grep, Glob, WebFetch and ToolSearch all return `text`, a string holding what the model reads: Read's has line numbers, an image Read's is empty. The mod measures `text` for every tool, MCP tools included, and Bash keeps its stdout and stderr fallback. This replaces the earlier "non-Bash results are not measured".
 - **Gemini CLI (same day):** each tool call's `functionResponse.response.output` length goes with its turn; `resultDisplay`, the user's copy, is not counted. `context` is the last request's `input` plus `tool`.
 - **The fix follows the tools.** On OpenCode, 77% of large output was `webfetch`, which `| tail` can't trim. Tool names are grouped into shell (the default), file reads (`read`, `view`) and fetches (any name containing `fetch`). Each group with at least a fifth of the window's large tokens gets its fix and guard, largest first.
 

@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **Claude Code's large tool output covers every tool, not just Bash.** Each tool result carries `text`, the text the model reads, which a headless probe confirmed for Read (line-numbered), Grep, Glob, WebFetch and ToolSearch. The mod now measures that for every tool, MCP tools included, and records it per tool. An image Read's `text` is empty, so images count as 0, and a call Girth denies (an MCP server's held-back instructions) isn't counted.
+
 ### Fixed
 - `advise`'s large-tool-output fix gave `| tail` for every tool it didn't know, such as searches, MCP calls and subagents. Those now count toward the total without a fix of their own, and if only such tools qualify, the fix asks for narrower searches and ranges. Gemini's `read_file` and MCP `get_file_contents` count as file reads.
 

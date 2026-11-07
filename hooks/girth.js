@@ -52,11 +52,13 @@ let agentSettings = null
 // Outcomes: each loop's Bash calls this turn ('' is the main loop), for the
 // binary to classify. Only its labels reach the ledger.
 const bash = new Map()
-// Estimated tokens of large Bash results this turn, per loop (agentId; '' is the main loop).
+// Estimated tokens of large tool results this turn, per loop (agentId; '' is the main
+// loop), then per tool.
 const large = new Map()
 const OUTPUT_TAIL = 4000
 const MAX_CALLS = 64
-// A Bash result this long (2,000 tokens at 4 characters each) is a large one.
+// A tool result this long (2,000 tokens at 4 characters each) is a large one. Lengths
+// are UTF-16 units; the importers count characters, the same for ASCII.
 // `LARGE_OUTPUT_CHARS` in src/ledger.rs keeps the same figure for imports.
 const LARGE_OUTPUT_CHARS = 8000
 // A break re-wrote at least this much (and 20% of what was cached), and the
@@ -161,6 +163,15 @@ export function compactor(deps) {
       return n
     },
   }
+}
+
+// Adds a large result's estimated tokens to its loop's turn.
+function measure(agentId, tool, text) {
+  if (text.length < LARGE_OUTPUT_CHARS) return
+  const key = agentId ?? ''
+  const tools = large.get(key) ?? {}
+  tools[tool] = (tools[tool] ?? 0) + Math.ceil(text.length / 4)
+  large.set(key, tools)
 }
 
 function launcher($) {
@@ -270,10 +281,7 @@ export function register(on) {
             typeof result?.text === 'string'
               ? result.text
               : [r?.stdout, r?.stderr].filter((t) => typeof t === 'string' && t !== '').join('\n')
-          if (output.length >= LARGE_OUTPUT_CHARS) {
-            const key = e.agentId ?? ''
-            large.set(key, (large.get(key) ?? 0) + Math.ceil(output.length / 4))
-          }
+          measure(e.agentId, 'Bash', output)
           calls.push({
             command: String(e.command),
             output: tail(output),
@@ -288,19 +296,27 @@ export function register(on) {
       return result
     }
     const id = serverOf(e.tool)
-    if (id === null) return next(e)
-    servers.add(id)
-    const held = deferred.get(id)
-    if (held !== undefined && !delivered.has(id)) {
-      delivered.add(id)
-      return {
-        deny:
-          id +
-          ' instructions (Girth held them back until first use; read them, then call the tool again):\n\n' +
-          held,
+    if (id !== null) {
+      servers.add(id)
+      const held = deferred.get(id)
+      if (held !== undefined && !delivered.has(id)) {
+        delivered.add(id)
+        return {
+          deny:
+            id +
+            ' instructions (Girth held them back until first use; read them, then call the tool again):\n\n' +
+            held,
+        }
       }
     }
-    return next(e)
+    const result = await next(e)
+    try {
+      // `text` is what the model reads; an image Read's is empty.
+      if (result?.deny === undefined && typeof result?.text === 'string') measure(e.agentId, e.tool, result.text)
+    } catch {
+      // Observing only: the result goes back unchanged.
+    }
+    return result
   }).catch(async ($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
@@ -380,7 +396,7 @@ export function register(on) {
       servers.clear()
     }
     if (calls) turn.bash = calls
-    if (big) turn.tool_output = { Bash: big }
+    if (big) turn.tool_output = big
     const found = breaks.get(e.turnId)
     breaks.delete(e.turnId)
     if (found) turn.breaks = found
