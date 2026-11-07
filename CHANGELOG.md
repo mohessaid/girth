@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-07
+
 ### Added
 - **Claude Code's large tool output covers every tool, not just Bash.** Each tool result carries `text`, the text the model reads, which a headless probe confirmed for Read (line-numbered), Grep, Glob, WebFetch and ToolSearch. The mod now measures that for every tool, MCP tools included, and records it per tool. An image Read's `text` is empty, so images count as 0, and a call Girth denies (an MCP server's held-back instructions) isn't counted.
 
@@ -242,7 +244,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/mohessaid/girth/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/mohessaid/girth/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mohessaid/girth/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mohessaid/girth/compare/v0.11.0...v0.12.0
