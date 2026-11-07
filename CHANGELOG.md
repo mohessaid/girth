@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-07
+
 ### Added
 - **`girth advise --harness codex` flags large tool output.** `girth import` now measures each tool result in a Codex rollout. One of 8,000 characters or more is recorded with its turn as `tool_output`, keyed by tool name (`exec`, `js`, `shell`), along with the turn's last request size (`context`). Codex logs results after its own truncation, so this is what the model was sent. Codex's fix suggests only `| tail` and `| head`, since RTK filters Claude Code's Bash tool. Codex turns imported before this release keep no such data, as each rollout is read once.
 - **List prices for `gpt-5.4`, `gpt-5.3-codex` and `deepseek-v4-pro`,** models Copilot and OpenCode sessions run. OpenAI lists no GPT-5 cache-write price, so a write is priced as input. DeepSeek bills by the hour, and Girth uses its off-peak rates; peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC) bill twice these.
@@ -234,7 +236,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mohessaid/girth/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mohessaid/girth/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mohessaid/girth/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mohessaid/girth/compare/v0.10.0...v0.11.0
