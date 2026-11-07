@@ -13,23 +13,32 @@
 //! mid-tool-call keeps its last turn open until it moves on. `opencode db` runs with
 //! no timeout; its stdin is closed, so it can't wait on a prompt, but a slow database
 //! migration would hold up `girth import`.
+//!
+//! A tool result (`part.state.output`) of `LARGE_OUTPUT_CHARS` or more goes with its
+//! prompt's turn as `tool_output`, by tool name. OpenCode caps what it sends the model
+//! and stores that capped text ("Output capped at 50 KB"). `context` is the last
+//! request's whole input: uncached, cache read and cache write.
 
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::ledger::{Event, Turn};
+use crate::ledger::{Event, LARGE_OUTPUT_CHARS, Turn};
 
 const HARNESS: &str = "opencode";
 
-/// Messages and `skill` tool calls, oldest first. `t` is milliseconds since the epoch.
+/// Messages, `skill` tool calls, and every tool result's name and length (`n`, in
+/// characters), oldest first. `t` is milliseconds since the epoch.
 pub const QUERY: &str = "SELECT 'm' AS kind, m.id AS id, m.session_id AS session, \
-s.parent_id AS parent, s.directory AS dir, m.time_created AS t, m.data AS data \
+s.parent_id AS parent, s.directory AS dir, m.time_created AS t, m.data AS data, NULL AS n \
 FROM message m JOIN session s ON s.id = m.session_id \
 UNION ALL SELECT 's', p.id, p.session_id, NULL, NULL, p.time_created, \
-json_extract(p.data, '$.state.input.name') FROM part p \
-WHERE json_extract(p.data, '$.tool') = 'skill' ORDER BY t";
+json_extract(p.data, '$.state.input.name'), NULL FROM part p \
+WHERE json_extract(p.data, '$.tool') = 'skill' \
+UNION ALL SELECT 't', p.id, p.session_id, NULL, NULL, p.time_created, \
+json_extract(p.data, '$.tool'), length(json_extract(p.data, '$.state.output')) FROM part p \
+WHERE json_extract(p.data, '$.type') = 'tool' ORDER BY t";
 
 #[derive(Deserialize)]
 struct Row {
@@ -40,6 +49,8 @@ struct Row {
     dir: Option<String>,
     t: u64,
     data: Option<String>,
+    #[serde(default)]
+    n: Option<u64>,
 }
 
 #[derive(Default)]
@@ -48,6 +59,8 @@ struct Prompt {
     t: u64,
     requests: Vec<Value>,
     skills: Vec<(u64, String)>,
+    /// Estimated tokens of large tool results, by tool.
+    outputs: BTreeMap<String, u64>,
 }
 
 /// Ledger events for the turns in `rows` (the JSON `QUERY` returns) that are done and
@@ -71,6 +84,13 @@ pub fn parse(
         };
         let prompts = &mut sessions[i].3;
         let data = row.data.unwrap_or_default();
+        if row.kind == "t" {
+            let chars = row.n.unwrap_or(0) as usize;
+            if let (Some(p), true) = (prompts.last_mut(), chars >= LARGE_OUTPUT_CHARS) {
+                *p.outputs.entry(data).or_default() += chars.div_ceil(4) as u64;
+            }
+            continue;
+        }
         if row.kind == "s" {
             if let Some(p) = prompts.last_mut() {
                 p.skills.push((row.t, data));
@@ -119,6 +139,7 @@ pub fn parse(
             };
             let mut t = turn(&session, agent, &dir, &p.requests);
             t.aborted = error || !finished;
+            t.tool_output = p.outputs.clone();
             let ms = last["time"]["completed"].as_u64().unwrap_or(p.t);
             for (at, skill) in &p.skills {
                 events.push((*at, use_event(skill, &t.project, &session, agent)));
@@ -162,7 +183,11 @@ fn turn(session: &str, agent: bool, dir: &str, requests: &[Value]) -> Turn {
         harness: Some(HARNESS.into()),
         premium: None,
         cost_micros: priced.then(|| costs.iter().map(|c| (c * 1e6).round() as u64).sum()),
-        context: None,
+        context: Some(
+            n(&last["tokens"]["input"])
+                + n(&last["tokens"]["cache"]["read"])
+                + n(&last["tokens"]["cache"]["write"]),
+        ),
         tool_output: Default::default(),
     }
 }
@@ -284,6 +309,25 @@ mod tests {
         let (events, cursors) = parse(rows, &BTreeMap::new());
         assert!(events.is_empty());
         assert_eq!(cursors["s"], 1000);
+    }
+
+    #[test]
+    fn large_tool_output_and_context_go_with_the_prompt() {
+        let rows = r#"[
+          {"kind":"m","id":"u1","session":"s","parent":null,"dir":"/d","t":1000,"data":"{\"role\":\"user\"}"},
+          {"kind":"t","id":"p1","session":"s","parent":null,"dir":null,"t":1100,"data":"read","n":8000},
+          {"kind":"t","id":"p2","session":"s","parent":null,"dir":null,"t":1200,"data":"bash","n":7999},
+          {"kind":"t","id":"p3","session":"s","parent":null,"dir":null,"t":1300,"data":"read","n":9001},
+          {"kind":"m","id":"a1","session":"s","parent":null,"dir":"/d","t":1400,"data":"{\"role\":\"assistant\",\"parentID\":\"u1\",\"finish\":\"tool-calls\",\"tokens\":{\"input\":5,\"cache\":{\"read\":100,\"write\":0}}}"},
+          {"kind":"m","id":"a2","session":"s","parent":null,"dir":"/d","t":1500,"data":"{\"role\":\"assistant\",\"parentID\":\"u1\",\"finish\":\"stop\",\"time\":{\"completed\":1600},\"tokens\":{\"input\":7,\"cache\":{\"read\":200,\"write\":30}}}"}
+        ]"#;
+        let got = turns(rows, &BTreeMap::new());
+        assert_eq!(got.len(), 1);
+        let t = &got[0].1;
+        // 8000 / 4 + ceil(9001 / 4), both from `read`; 7999 characters is not large.
+        assert_eq!(t.tool_output, [("read".to_string(), 2000 + 2251)].into());
+        // The last request's whole input: uncached, read and written.
+        assert_eq!(t.context, Some(7 + 200 + 30));
     }
 
     #[test]

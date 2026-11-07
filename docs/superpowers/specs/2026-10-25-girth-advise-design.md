@@ -76,7 +76,9 @@ Evidence: `examples/portability/RESULTS.md` ("Codex large tool output").
 - **Fix text per harness:** RTK filters Claude Code's Bash tool, so other harnesses' fix and guard name only `| tail` and `| head`.
 - **Bound check:** in each Codex session, the tokens the cost model says were re-read stay under that session's logged cache reads (at most 48%). A cost model that broke this bound would be overcounting.
 - **Not handled:** Codex subagent threads are recorded as main-loop turns, as before.
-- **Copilot (same day):** only turns read from per-request records carry `tool_output`. See the all-harnesses spec. Copilot's fix adds "view large files by line range", since its largest results are whole-file `view` calls.
+- **Copilot (same day):** only turns read from per-request records carry `tool_output`. See the all-harnesses spec.
+- **OpenCode (same day):** `part.state.output` lengths, capped by OpenCode at 50 KB, go with their prompt's turn. `context` is the last request's input plus its cache reads and writes.
+- **The fix follows the tools.** On OpenCode, 77% of large output was `webfetch`, which `| tail` can't trim. Tool names are grouped into shell (the default), file reads (`read`, `view`) and fetches (any name containing `fetch`). Each group with at least a fifth of the window's large tokens gets its fix and guard, largest first.
 
 ## Not in scope
 

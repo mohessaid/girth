@@ -40,6 +40,66 @@ fn names(harness: Option<&str>) -> (&'static str, &'static str) {
     }
 }
 
+/// What a tool's large results are, by its name in each harness (Claude Code, Codex,
+/// Copilot, OpenCode).
+#[derive(Clone, Copy, PartialEq)]
+enum Output {
+    Shell,
+    File,
+    Fetch,
+}
+
+fn output_kind(tool: &str) -> Output {
+    match tool.to_ascii_lowercase().as_str() {
+        "read" | "view" => Output::File,
+        t if t.contains("fetch") => Output::Fetch,
+        _ => Output::Shell,
+    }
+}
+
+/// The fix and guard for large tool output: one part per kind of tool with at least a
+/// fifth of the large tokens, largest first. RTK filters Claude Code's Bash tool only.
+fn output_fix(turns: &[(u64, &Turn)], harness: Option<&str>) -> (String, String) {
+    let mut kinds: Vec<(Output, u64)> = Vec::new();
+    for (tool, n) in turns.iter().flat_map(|(_, t)| &t.tool_output) {
+        let k = output_kind(tool);
+        match kinds.iter_mut().find(|(o, _)| *o == k) {
+            Some(e) => e.1 += n,
+            None => kinds.push((k, *n)),
+        }
+    }
+    kinds.sort_by_key(|k| std::cmp::Reverse(k.1));
+    let total: u64 = kinds.iter().map(|k| k.1).sum();
+    let claude = matches!(harness, None | Some("claude-code"));
+    let (mut fix, mut guard) = (Vec::new(), Vec::new());
+    for (k, n) in kinds {
+        if n * 5 < total {
+            break;
+        }
+        let (f, g) = match (k, claude) {
+            (Output::Shell, true) => (
+                "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK",
+                "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
+            ),
+            (Output::Shell, false) => (
+                "end long commands with | tail -n 40 or | head",
+                "tail keeps the summary and errors at the end",
+            ),
+            (Output::File, _) => (
+                "read large files by line range",
+                "a range keeps the part being worked on",
+            ),
+            (Output::Fetch, _) => (
+                "fetch large pages in a subagent, so only its summary stays in the conversation",
+                "the subagent still reads the whole page",
+            ),
+        };
+        fix.push(f);
+        guard.push(g);
+    }
+    (fix.join("; "), guard.join("; "))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Contributor {
     /// `skill`, `context`, `sessions`, `rewrites`, `subagents` or `tool_output`.
@@ -308,29 +368,14 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             Some(price::cost(r, 0, 0, 0, tokens) + read)
         })
         .sum();
-    // RTK filters Claude Code's Bash tool; tail and head work in every harness's shell.
-    let (fix, guard) = match on.harness {
-        None | Some("claude-code") => (
-            "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK",
-            "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
-        ),
-        // Copilot's largest results are whole-file views (`view` takes a line range).
-        Some("copilot") => (
-            "end long commands with | tail -n 40 or | head, and view large files by line range",
-            "tail keeps the summary and errors at the end; a range keeps the part being worked on",
-        ),
-        Some(_) => (
-            "end long commands with | tail -n 40 or | head",
-            "tail keeps the summary and errors at the end",
-        ),
-    };
+    let (fix, guard) = output_fix(&turns, on.harness);
     push(
         &mut out,
         "tool_output",
         "large tool output".into(),
         large_output,
-        fix.into(),
-        guard,
+        fix,
+        &guard,
     );
 
     out.sort_by(|a, b| b.share.total_cmp(&a.share));
@@ -590,22 +635,59 @@ mod tests {
         );
     }
 
+    fn outputs(tools: &[(&str, u64)]) -> Turn {
+        Turn {
+            tool_output: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
+            ..bash_out(None, 2, 0, 50_000)
+        }
+    }
+
     #[test]
-    fn copilot_s_fix_also_names_file_ranges() {
-        let records = [rec(10, bash_out(None, 2, 8_000, 50_000))];
-        let on = On {
-            harness: Some("copilot"),
-            ..On::default()
+    fn the_fix_names_what_the_large_results_came_from() {
+        let fix = |tools: &[(&str, u64)], harness| {
+            let on = On {
+                harness,
+                ..On::default()
+            };
+            let c = advise(&[rec(10, outputs(tools))], 100, 1000, on);
+            let c = tool_output(&c).unwrap().clone();
+            (c.fix, c.guard)
         };
-        let c = advise(&records, 100, 1000, on);
-        let c = tool_output(&c).unwrap();
-        // Copilot's largest results are whole-file views.
-        assert!(
-            c.fix.contains("| tail -n 40") && c.fix.contains("line range"),
-            "{}",
-            c.fix
+        // Mostly fetched pages, then file reads (`read` and `view` together pass a
+        // fifth, neither alone does); bash under a fifth is left out.
+        let (f, g) = fix(
+            &[
+                ("webfetch", 7_000),
+                ("read", 1_100),
+                ("view", 1_100),
+                ("bash", 800),
+            ],
+            Some("opencode"),
         );
-        assert!(!c.fix.contains("RTK"), "{}", c.fix);
+        assert!(f.starts_with("fetch large pages in a subagent"), "{f}");
+        assert!(f.contains("read large files by line range"), "{f}");
+        assert!(!f.contains("tail"), "{f}");
+        assert!(g.contains("subagent") && g.contains("range"), "{g}");
+        // Copilot's names: `view` is a file read, `web_fetch` a fetch, `read_bash` a shell.
+        let (f, _) = fix(&[("view", 5_000), ("read_bash", 5_000)], Some("copilot"));
+        assert!(
+            f.contains("line range") && f.contains("| tail -n 40"),
+            "{f}"
+        );
+        let (f, _) = fix(&[("web_fetch", 9_000)], Some("copilot"));
+        assert!(f.starts_with("fetch large pages"), "{f}");
+        // Claude Code's names; RTK is offered with the shell fix there only.
+        let (f, _) = fix(
+            &[("Bash", 5_000), ("Read", 5_000), ("WebFetch", 5_000)],
+            None,
+        );
+        assert!(
+            f.contains("RTK") && f.contains("line range") && f.contains("subagent"),
+            "{f}"
+        );
+        // A tool of no known kind falls back to the shell fix.
+        let (f, _) = fix(&[("mystery", 9_000)], Some("codex"));
+        assert!(f.contains("| tail -n 40") && !f.contains("RTK"), "{f}");
     }
 
     #[test]

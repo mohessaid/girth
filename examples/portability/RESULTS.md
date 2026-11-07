@@ -130,6 +130,19 @@ imported 0 turns from opencode
 
 - An independent Python read of `opencode.db` gives $0.283301 over 135 requests and 11 prompts. Girth's ledger gives the same: 11 turns, 135 requests, $0.283301, 0 unpriced, 1 aborted, 4 in subagent sessions, plus 2 skill uses (`career-ops`, `girth`).
 
+**OpenCode large tool output (2026-11-07).** Of 298 tool results, 35 are 8,000+ characters, 188,957 estimated tokens in all. Girth's ledger and a direct SQL count over `opencode.db` agree to the token. The text is what the model was sent: the largest stop at OpenCode's 50 KB cap, with its "Output capped at 50 KB" note.
+
+```
+$ girth advise --since 100000d --harness opencode
+girth advise (100000d): $0.28 estimated at list prices; shares overlap
+  67%  large tool output  ($0.19)
+       fix: fetch large pages in a subagent, so only its summary stays in the conversation
+```
+
+- **By tool:** `webfetch` 77%, `read` 15%, `bash` 8%. A `| tail` fix would have missed most of it, which is why the fix now follows the tools.
+- **Bound:** in every session, carried tokens stay under the logged cache reads (ratios 0.07 to 0.87).
+- **One caveat:** the share is at list prices, while OpenCode's own logged costs price the spend.
+
 **Gemini CLI spend.** `girth import --from gemini` on the author's `~/.gemini` (23 sessions; into a scratch `GIRTH_HOME`):
 
 ```
