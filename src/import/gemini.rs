@@ -13,10 +13,17 @@
 //! A turn cut off mid-tool-call by the next prompt is recorded as aborted. A session
 //! left mid-tool-call keeps its last turn open. Every turn is a main-loop turn: the
 //! sessions seen so far carry `kind: "main"` or no kind at all.
+//!
+//! A tool call whose `functionResponse` output (what the model was sent;
+//! `resultDisplay` is the user's copy) is `LARGE_OUTPUT_CHARS` or more goes with its
+//! turn as `tool_output`, by tool name. `context` is the last request's input, cached
+//! part and tool-use prompt included.
 
 use serde_json::Value;
 
-use crate::ledger::{Event, Turn};
+use std::collections::BTreeMap;
+
+use crate::ledger::{Event, LARGE_OUTPUT_CHARS, Turn};
 
 const HARNESS: &str = "gemini";
 
@@ -105,8 +112,19 @@ pub fn parse(text: &str, project: &str, cursor: u64) -> (Vec<(u64, Event)>, u64)
             continue;
         };
         let ts = last["timestamp"].as_str().and_then(millis).unwrap_or(*at) / 1000;
+        let mut outputs = BTreeMap::<String, u64>::new();
         for r in replies {
             for call in r["toolCalls"].as_array().into_iter().flatten() {
+                let chars: usize = call["result"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|p| p["functionResponse"]["response"]["output"].as_str())
+                    .map(|o| o.chars().count())
+                    .sum();
+                if let (Some(name), true) = (call["name"].as_str(), chars >= LARGE_OUTPUT_CHARS) {
+                    *outputs.entry(name.to_string()).or_default() += chars.div_ceil(4) as u64;
+                }
                 if call["name"] == "activate_skill" {
                     if let Some(skill) = call["args"]["name"].as_str() {
                         let when = r["timestamp"].as_str().and_then(millis).unwrap_or(*at);
@@ -117,9 +135,15 @@ pub fn parse(text: &str, project: &str, cursor: u64) -> (Vec<(u64, Event)>, u64)
         }
         let mut t = turn(&requests, project, &session);
         t.aborted = calling;
+        t.tool_output = outputs;
+        t.context = Some(n(&last["tokens"]["input"]) + n(&last["tokens"]["tool"]));
         events.push((ts, Event::Turn(t)));
     }
     (events, kept)
+}
+
+fn n(v: &Value) -> u64 {
+    v.as_u64().unwrap_or(0)
 }
 
 fn turn(requests: &[&Value], project: &str, session: &Option<String>) -> Turn {
@@ -288,6 +312,38 @@ mod tests {
             .collect();
         let at = millis("2026-05-06T17:00:05.000Z").unwrap() / 1000;
         assert_eq!(uses, [(at, "girth".to_string(), "/work/g".to_string())]);
+    }
+
+    #[test]
+    fn large_tool_output_and_context_go_with_their_turn() {
+        let call = |name: &str, chars: usize| {
+            format!(
+                r#"{{"name":"{name}","result":[{{"functionResponse":{{"name":"{name}","response":{{"output":"{}"}}}}}}],"resultDisplay":"{}"}}"#,
+                "x".repeat(chars),
+                "y".repeat(chars * 2)
+            )
+        };
+        let text = format!(
+            r#"{{"sessionId":"g","messages":[
+              {{"id":"u","type":"user","timestamp":"2026-05-06T17:00:00.000Z"}},
+              {{"id":"a","type":"gemini","timestamp":"2026-05-06T17:00:01.000Z","tokens":{{"input":10,"tool":1}},"toolCalls":[{},{},{}]}},
+              {{"id":"b","type":"gemini","timestamp":"2026-05-06T17:00:02.000Z","tokens":{{"input":300,"cached":200,"tool":5}}}}
+            ]}}"#,
+            call("run_shell_command", 8000),
+            call("run_shell_command", 9001),
+            call("read_file", 7999)
+        );
+        let (events, _) = parse(&text, "/work/g", 0);
+        let Some((_, Event::Turn(t))) = events.last() else {
+            panic!("a turn");
+        };
+        // The response the model was sent; `resultDisplay` is the user's copy.
+        assert_eq!(
+            t.tool_output,
+            [("run_shell_command".to_string(), 2000 + 2251)].into()
+        );
+        // The last request's whole input, with the tool-use prompt.
+        assert_eq!(t.context, Some(305));
     }
 
     #[test]

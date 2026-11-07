@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **List prices for `gpt-5.4`, `gpt-5.3-codex` and `deepseek-v4-pro`,** models Copilot and OpenCode sessions run. OpenAI lists no GPT-5 cache-write price, so a write is priced as input. DeepSeek bills by the hour, and Girth uses its off-peak rates; peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC) bill twice these.
 
 - **Copilot large tool output.** `girth import --from copilot` records tool results of 8,000+ characters with their turn (`tool_output`, by tool name) and each turn's last request size (`context`), in stretches read from per-request records. `content`, what the model was sent, is measured; `detailedContent` is not. Stretches read from shutdown totals get neither, because one such turn spans hundreds of requests and their compactions.
+- **Gemini CLI large tool output.** `girth import --from gemini` records tool calls whose `functionResponse` output (what the model was sent; `resultDisplay` is not counted) is 8,000+ characters, and each turn's last request size (`context`).
 - **OpenCode large tool output.** `girth import --from opencode` records tool results (`part.state.output`, which OpenCode caps at 50 KB before sending) of 8,000+ characters with their prompt's turn, and each turn's last request size (`context`).
 
 ### Changed

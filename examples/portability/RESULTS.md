@@ -143,6 +143,10 @@ girth advise (100000d): $0.28 estimated at list prices; shares overlap
 - **Bound:** in every session, carried tokens stay under the logged cache reads (ratios 0.07 to 0.87).
 - **One caveat:** the share is at list prices, while OpenCode's own logged costs price the spend.
 
+**Gemini CLI large tool output (2026-11-07).** Of 269 tool responses, 12 are large, 62,793 estimated tokens in done turns. Girth's ledger and an independent pass that rebuilds each session's messages give the same figure.
+- **By tool:** `run_shell_command` 76%, `resolve-library-id` 8%, `activate_skill` 8%, `read_file` 8%.
+- **`advise --harness gemini`:** large tool output is 7% of $1.55, with the `| tail` fix.
+
 **Gemini CLI spend.** `girth import --from gemini` on the author's `~/.gemini` (23 sessions; into a scratch `GIRTH_HOME`):
 
 ```
