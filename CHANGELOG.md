@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-07
+
 ### Added
 - **Copilot spend per prompt, before the session ends.** Copilot CLI 1.0.105+ logs every request (`session.usage_record`). `girth import --from copilot` now reads those: one turn per prompt (per model), recorded as soon as the prompt's work is done, so a running session counts without waiting for its shutdown. Stretches without records (older Copilot versions) are still read from their shutdown totals, and a stretch is never counted both ways. Sessions already imported by 0.12 are not counted again: the new record cursor sits beside the old one (`<file>#records` in `import.json`).
 - **`girth advise` flags large Bash output.** The mod now measures each Bash result; one of 2,000 estimated tokens or more (4 characters per token) is recorded with its turn (`tool_output`). `advise` prices it as written to the cache once and re-read by every later request until the conversation shrinks, and suggests `| tail -n 40`, `| head` or a shell-output filter such as RTK. Only Bash is measured: other tools' results aren't documented to mods, and many are images. Turns also keep their last request's context size (`context`), which marks where a conversation was compacted or cleared.
@@ -216,7 +218,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/mohessaid/girth/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mohessaid/girth/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mohessaid/girth/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mohessaid/girth/compare/v0.9.0...v0.10.0
