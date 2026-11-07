@@ -81,6 +81,18 @@ imported 0 turns from copilot
 - One prompt was answered by agent-initiated requests only, after a request that had stopped. A first draft grouped turns by initiator alone, so that prompt joined the turn before it, and a live import would have dropped those requests.
 - 4 of the 9 turns are recorded as aborted: the next prompt cut them off mid-tool-call.
 
+**Copilot's other models priced (2026-11-07).** List prices for `gpt-5.4` and `gpt-5.3-codex` (OpenAI's pricing page) and `deepseek-v4-pro` (DeepSeek's, off-peak rates) price 9 more turns:
+
+```
+$ girth advise --since 100000d --harness copilot
+girth advise (100000d): $618.16 estimated at list prices; shares overlap
+       (16 turns on models without known prices are not counted)
+```
+
+- The 9 turns add $8.07: $4.17 on deepseek-v4-pro (7 turns), $3.15 on gpt-5.4 (1) and $0.74 on gpt-5.3-codex (1). An independent Python sum at the same rates gives $8.06; the remainder is probably subagent turns, priced at the 5-minute cache-write rate.
+- The 16 turns still unpriced are all `agnes-3.0-flash`, a BYOK model with no public price.
+- DeepSeek bills peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC) at twice these rates. A Copilot turn is stamped at its shutdown, not when it ran, so the off-peak figure may be low.
+
 **OpenCode spend.** `girth import --from opencode` reads OpenCode's database through `opencode db` (into a scratch `GIRTH_HOME`):
 
 ```

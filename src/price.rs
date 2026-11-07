@@ -23,7 +23,7 @@ pub struct Rates {
 /// Rates for a model id. Matches the exact id, or the id followed by a
 /// bracketed suffix (`claude-opus-5-5[1m]`).
 pub fn rates(model: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 16] = [
+    const TABLE: [(&str, Rates); 19] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -64,6 +64,13 @@ pub fn rates(model: &str) -> Option<Rates> {
         ("claude-sonnet-4-6", anthropic(3.0, 0.30, 15.0)),
         ("claude-opus-4-6", anthropic(5.0, 0.50, 25.0)),
         ("claude-haiku-4-5", anthropic(1.0, 0.10, 5.0)),
+        // Other models Copilot sessions ran. OpenAI lists no GPT-5 cache-write price.
+        ("gpt-5.4", openai(2.50, 0.25, 2.50, 15.0)),
+        ("gpt-5.3-codex", openai(1.75, 0.175, 1.75, 14.0)),
+        // DeepSeek bills by the hour: these are its off-peak rates, which cover weekends
+        // and most weekday hours. Peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC)
+        // bill twice these, so a figure here may be low.
+        ("deepseek-v4-pro", openai(0.66, 0.022, 0.66, 1.98)),
         // Gemini CLI's models (standard tier, prompts up to 200K tokens, text input).
         ("gemini-3-flash-preview", google(0.50, 0.05, 3.0)),
         ("gemini-3.1-flash-lite-preview", google(0.25, 0.025, 1.50)),
@@ -149,6 +156,25 @@ mod tests {
         assert_eq!(rates("gpt-6-sol").unwrap().cache_read, 0.20);
         assert_eq!(rates("gpt-6-luna").unwrap().cache_write, 0.125);
         assert_eq!(rates("gpt-6.1-sol").unwrap().output, 10.0);
+    }
+
+    #[test]
+    fn other_models_copilot_runs_are_priced() {
+        let rows = [
+            // OpenAI lists no cache-write price for GPT-5, so a write is plain input.
+            ("gpt-5.4", (2.50, 15.0, 0.25, 2.50)),
+            ("gpt-5.3-codex", (1.75, 14.0, 0.175, 1.75)),
+            // DeepSeek's off-peak rates; peak hours bill twice these.
+            ("deepseek-v4-pro", (0.66, 1.98, 0.022, 0.66)),
+        ];
+        for (id, want) in rows {
+            let r = rates(id).unwrap();
+            assert_eq!(
+                (r.input, r.output, r.cache_read, r.cache_write),
+                want,
+                "{id}"
+            );
+        }
     }
 
     #[test]
