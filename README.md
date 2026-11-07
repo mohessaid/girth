@@ -139,7 +139,7 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 - **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead. `girth validate` then links each crafted skill into the other folder, so a skill crafted in one harness loads in all of them, and the project cache keeps compounding when you switch harnesses.
 - **Counts what other harnesses spend.** `girth import` reads the local session logs of Codex, GitHub Copilot CLI, OpenCode and Gemini CLI. `girth advise --harness codex` (or `copilot`, `opencode`, `gemini`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent:
   - 140 Codex turns, $173.00 at OpenAI list prices;
-  - 103 Copilot turns, $618.16 at list prices (one per prompt where Copilot 1.0.105+ logs each request, otherwise one per session stretch);
+  - 103 Copilot turns, $618.16 at list prices (one per prompt where Copilot 1.0.95+ logs each request, otherwise one per session stretch);
   - 11 OpenCode turns, $0.28 by OpenCode's own per-request cost;
   - 45 Gemini CLI turns, $1.55 at Google list prices (13 turns on `gemini-3-pro-preview`, which Google no longer prices, are labelled unpriced).
 
@@ -149,7 +149,7 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 |---|---|---|---|---|
 | Claude Code | ✓ | `.claude/skills` | native (the mod) | ✓ |
 | Codex CLI 0.164 | ✓ | `.agents/skills` | ✓ `girth import` | ✓ |
-| GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | ✓ `girth import` (per prompt on 1.0.105+, else per session stretch; with premium requests) | ✓ |
+| GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | ✓ `girth import` (per prompt on 1.0.95+, else per session stretch; with premium requests) | ✓ |
 | OpenCode 1.17 | ✓ | `.agents/skills` | ✓ `girth import` (through `opencode db`, with its own costs) | ✓ |
 | Antigravity CLI 1.5 | ✓ | `.agents/skills` | — (logs are opaque) | ✓ |
 | Gemini CLI 0.65 | ✓ | `.agents/skills` | ✓ `girth import` | not yet (its free tier moved to Antigravity) |

@@ -87,7 +87,7 @@ girth advise (100000d): $610.09 estimated at list prices; shares overlap
 - An independent Python pass with the same rule gives **$610.09**. The bounds are $278.20 if every shutdown were running totals and $646.27 if every one were fresh.
 - Unpriced: agnes-3.0-flash (BYOK, logged cost 0), deepseek-v4-pro, gpt-5.4, gpt-5.3-codex.
 
-**Copilot per-request records (Unreleased).** Copilot 1.0.105+ logs each request as a `session.usage_record`. 3 sessions here carry them (96 records, all BYOK `agnes-3.0-flash` with logged cost 0), and in each the records sum exactly to the shutdown totals. Read from records, those 3 stretches become 9 turns, one per prompt, instead of 3 shutdown turns:
+**Copilot per-request records (0.13.0).** Copilot 1.0.95+ logs each request as a `session.usage_record`. 3 sessions here carry them (96 records, all BYOK `agnes-3.0-flash` with logged cost 0), and in each the records sum exactly to the shutdown totals. Read from records, those 3 stretches become 9 turns, one per prompt, instead of 3 shutdown turns:
 
 ```
 $ girth import --from copilot
@@ -111,6 +111,13 @@ girth advise (100000d): $618.16 estimated at list prices; shares overlap
 - The 9 turns add $8.06 ($610.0929 → $618.1568): $4.17 on deepseek-v4-pro (7 turns), $3.15 on gpt-5.4 (1) and $0.74 on gpt-5.3-codex (1). An independent Python sum at the same rates gives the same $8.0639.
 - The 16 turns still unpriced are all `agnes-3.0-flash`, a BYOK model with no public price.
 - DeepSeek bills peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC) at twice these rates. A Copilot turn is stamped at its shutdown, not when it ran, so the off-peak figure may be low.
+
+**Copilot large tool output (2026-11-07).** A survey of all 29,359 tool results in `~/.copilot` found:
+- **706 are large** (8,000+ characters of `content`): `view` 334, `bash` 265, `web_fetch` 33.
+- **`content` is what the model was sent.** 36 large results have a longer `detailedContent`, the user-facing text, and Bash results stop at about 26K characters. The largest results are whole-file views, up to 91K characters.
+- **Only stretches read from per-request records get `tool_output`.** A shutdown stretch is one turn of hundreds of requests, with 291 compactions across the machine, so the cost model can't tell what a result was re-read by.
+- **Records depend on the Copilot version, not on BYOK.** A one-prompt 1.0.106 run on GitHub's `gpt-6-luna` (0.22 AI credits; its session was deleted afterwards) wrote a `session.usage_record`.
+- **The record stretches here** hold 2 large Bash results (3,736 and 2,320 estimated tokens), both found by Girth and by an independent pass. They are on the unpriced BYOK model, so `advise` shows no share yet. Spend is unchanged at $618.16.
 
 **OpenCode spend.** `girth import --from opencode` reads OpenCode's database through `opencode db` (into a scratch `GIRTH_HOME`):
 

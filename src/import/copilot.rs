@@ -18,7 +18,7 @@
 //!
 //! On the author's 80 non-empty shutdowns, 7 fall to the turn-count tiebreak.
 //!
-//! Copilot 1.0.105+ also writes a `session.usage_record` per request. A stretch holding
+//! Copilot 1.0.95+ also writes a `session.usage_record` per request. A stretch holding
 //! any is read from its records instead of its shutdown, so it is never counted both ways.
 //! A turn starts at a user-initiated request, at the first request after a prompt, or
 //! after a request that ended its turn (it finished for a reason other than `tool_calls`,
@@ -27,13 +27,20 @@
 //! running session) are imported once their turn is done, so they split into the same
 //! turns as when read after the shutdown. A record's `cost` is read as premium requests,
 //! like a shutdown's `requests.cost`.
+//!
+//! In a stretch read from records, a tool result whose `content` (the text the model
+//! was sent; `detailedContent` is what the user sees) is `LARGE_OUTPUT_CHARS` or more
+//! goes with its turn as `tool_output`, keyed by tool name, on the turn of the model
+//! that ran it (or of the turn's last request). Each turn also keeps `context`, its
+//! model's last request input. A stretch read from its shutdown is one turn of hundreds
+//! of requests across compactions, so its large results are not recorded.
 
 use std::collections::BTreeMap;
 
 use serde_json::Value;
 
 use super::codex::unix_seconds;
-use crate::ledger::{Event, Turn};
+use crate::ledger::{Event, LARGE_OUTPUT_CHARS, Turn};
 
 const HARNESS: &str = "copilot";
 
@@ -185,6 +192,30 @@ impl Record {
     }
 }
 
+/// What waits for its turn: skill uses and large tool results (model, tool, tokens),
+/// each with the record index it belongs with.
+#[derive(Default)]
+struct Pending {
+    uses: Vec<(usize, u64, Event)>,
+    outs: Vec<(usize, String, String, u64)>,
+}
+
+impl Pending {
+    /// The anchor for something seen now: a prompt's first request, or the last one.
+    fn anchor(recs: &[Record], prompted: bool) -> usize {
+        if prompted || recs.is_empty() {
+            recs.len()
+        } else {
+            recs.len() - 1
+        }
+    }
+
+    fn clear(&mut self) {
+        self.uses.clear();
+        self.outs.clear();
+    }
+}
+
 /// Where a session is while reading: its id and folder.
 struct At<'a> {
     session: &'a Option<String>,
@@ -192,11 +223,11 @@ struct At<'a> {
 }
 
 /// The turns in one stretch's records (`first` is the file-wide index of `recs[0]`),
-/// skipping those before record `from`. `uses` hold the record index each belongs with.
+/// skipping those before record `from`.
 /// Returns how many of `recs` are done; with `closed`, all are.
 fn from_records(
     recs: &[Record],
-    uses: &mut Vec<(usize, u64, Event)>,
+    pending: &mut Pending,
     first: usize,
     from: usize,
     closed: bool,
@@ -218,28 +249,50 @@ fn from_records(
         done = end;
         // The last turn of a closed stretch also takes skills used after its requests.
         let all = closed && !later;
-        let (now, rest): (Vec<_>, Vec<_>) = uses.drain(..).partition(|u| u.0 < end || all);
-        *uses = rest;
+        let mine = |a: usize| a < end || all;
+        let (now, rest): (Vec<_>, Vec<_>) = pending.uses.drain(..).partition(|u| mine(u.0));
+        pending.uses = rest;
+        let (outs, rest): (Vec<_>, Vec<_>) = pending.outs.drain(..).partition(|o| mine(o.0));
+        pending.outs = rest;
         if first + start < from {
             continue;
         }
         events.extend(now.into_iter().map(|(_, ts, e)| (ts, e)));
-        let mut models: Vec<(&str, Usage, f64)> = Vec::new();
+        // Per model: usage, cost, its last request's input.
+        let mut models: Vec<(&str, Usage, f64, u64)> = Vec::new();
         for r in &recs[start..end] {
             match models.iter_mut().find(|m| m.0 == r.model) {
                 Some(m) => {
                     m.1 = m.1.plus(&r.usage);
                     m.2 += r.cost;
+                    m.3 = r.usage.input;
                 }
-                None => models.push((&r.model, r.usage, r.cost)),
+                None => models.push((&r.model, r.usage, r.cost, r.usage.input)),
             }
         }
-        for (model, mut u, cost) in models {
-            u.premium = cost.round() as u64;
-            let mut t = turn(model, &u, at.cwd, at.session);
-            t.aborted = !last.stopped;
-            events.push((last.ts, Event::Turn(t)));
+        let mut turns: Vec<Turn> = models
+            .iter()
+            .map(|(model, u, cost, context)| {
+                let u = Usage {
+                    premium: cost.round() as u64,
+                    ..*u
+                };
+                let mut t = turn(model, &u, at.cwd, at.session);
+                t.aborted = !last.stopped;
+                t.context = Some(*context);
+                t
+            })
+            .collect();
+        for (_, model, tool, tokens) in outs {
+            let i = models
+                .iter()
+                .position(|m| m.0 == model)
+                .or_else(|| models.iter().position(|m| m.0 == last.model));
+            if let Some(i) = i {
+                *turns[i].tool_output.entry(tool).or_default() += tokens;
+            }
         }
+        events.extend(turns.into_iter().map(|t| (last.ts, Event::Turn(t))));
     }
     done
 }
@@ -252,7 +305,9 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
     let mut prev = Metrics::new();
     let mut tagged = BTreeMap::<String, u64>::new();
     let (mut turns, mut shutdowns) = (0u64, 0usize);
-    let mut uses = Vec::new();
+    let mut pending = Pending::default();
+    // Tool names by call id.
+    let mut tools = BTreeMap::<String, String>::new();
     let mut recs = Vec::<Record>::new();
     let (mut seen, mut prompted) = (0usize, false);
     let mut events = Vec::new();
@@ -286,11 +341,7 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
                 if let Some(skill) = d["name"].as_str() {
                     // A skill typed with a prompt goes with that prompt's first request;
                     // one called mid-turn, with the request that called it.
-                    let anchor = if prompted || recs.is_empty() {
-                        recs.len()
-                    } else {
-                        recs.len() - 1
-                    };
+                    let anchor = Pending::anchor(&recs, prompted);
                     let event = Event::Use {
                         skill: skill.to_string(),
                         project: cwd.clone(),
@@ -298,7 +349,25 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
                         agent: false,
                         harness: Some(HARNESS.into()),
                     };
-                    uses.push((anchor, ts, event));
+                    pending.uses.push((anchor, ts, event));
+                }
+            }
+            "tool.execution_start" => {
+                if let (Some(id), Some(name)) = (d["toolCallId"].as_str(), d["toolName"].as_str()) {
+                    tools.insert(id.to_string(), name.to_string());
+                }
+            }
+            "tool.execution_complete" => {
+                let id = d["toolCallId"].as_str().unwrap_or_default();
+                let tool = tools.remove(id);
+                let chars = d["result"]["content"]
+                    .as_str()
+                    .map_or(0, |c| c.chars().count());
+                if let (Some(tool), true) = (tool, chars >= LARGE_OUTPUT_CHARS) {
+                    let model = d["model"].as_str().unwrap_or_default().to_string();
+                    let tokens = chars.div_ceil(4) as u64;
+                    let anchor = Pending::anchor(&recs, prompted);
+                    pending.outs.push((anchor, model, tool, tokens));
                 }
             }
             "session.shutdown" => {
@@ -314,11 +383,19 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
                 };
                 if !recs.is_empty() {
                     if new {
-                        from_records(&recs, &mut uses, seen, done.records, true, &at, &mut events);
+                        from_records(
+                            &recs,
+                            &mut pending,
+                            seen,
+                            done.records,
+                            true,
+                            &at,
+                            &mut events,
+                        );
                     }
                 } else {
                     if new {
-                        events.extend(uses.drain(..).map(|(_, ts, e)| (ts, e)));
+                        events.extend(pending.uses.drain(..).map(|(_, ts, e)| (ts, e)));
                     }
                     if !cur.is_empty() {
                         let running = carries_over(&prev, &cur, &tagged, turns);
@@ -338,7 +415,7 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
                 }
                 seen += recs.len();
                 recs.clear();
-                uses.clear();
+                pending.clear();
                 tagged.clear();
                 turns = 0;
             }
@@ -351,7 +428,7 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
     };
     let open = from_records(
         &recs,
-        &mut uses,
+        &mut pending,
         seen,
         done.records,
         false,
@@ -596,6 +673,66 @@ mod tests {
         format!(
             r#"{{"type":"session.usage_record","timestamp":"{ts}","data":{{"usage":{{"model":"claude-haiku-4.5","inputTokens":10,"outputTokens":1,"cacheReadTokens":0,"cacheWriteTokens":2,"cost":1.0,"initiator":"{initiator}","finishReason":"{finish}"}}}}}}"#
         )
+    }
+
+    #[test]
+    fn large_tool_results_go_with_their_record_turn() {
+        let start = |id: &str, name: &str| {
+            format!(
+                r#"{{"type":"tool.execution_start","timestamp":"2026-10-18T11:00:01.000Z","data":{{"toolCallId":"{id}","toolName":"{name}"}}}}"#
+            )
+        };
+        let done = |id: &str, model: &str, chars: usize| {
+            format!(
+                r#"{{"type":"tool.execution_complete","timestamp":"2026-10-18T11:00:02.000Z","data":{{"toolCallId":"{id}","model":"{model}","result":{{"content":"{}","detailedContent":"{}"}}}}}}"#,
+                "x".repeat(chars),
+                "y".repeat(chars * 2)
+            )
+        };
+        let text = [
+            r#"{"type":"session.start","timestamp":"2026-10-18T11:00:00.000Z","data":{"sessionId":"s","context":{"cwd":"/w"}}}"#.to_string(),
+            // No records in this stretch: its large result is not recorded.
+            start("c0", "bash"),
+            done("c0", "claude-haiku-4.5", 9000),
+            shutdown(1, 1),
+            // Two earlier turns, so a result's turn depends on its anchor.
+            record("2026-10-18T11:01:10.000Z", true, "stop"),
+            record("2026-10-18T11:01:20.000Z", true, "stop"),
+            PROMPT.to_string(),
+            record("2026-10-18T11:01:40.000Z", true, "tool_calls"),
+            // Another model's request: its result goes to its own turn.
+            record("2026-10-18T11:01:41.000Z", false, "tool_calls")
+                .replace("claude-haiku-4.5", "gpt-5.4"),
+            start("c4", "rg"),
+            done("c4", "gpt-5.4", 8004),
+            // `content` is what the model was sent; `detailedContent` is not counted.
+            start("c1", "view"),
+            done("c1", "claude-haiku-4.5", 8000),
+            start("c2", "bash"),
+            done("c2", "claude-haiku-4.5", 7999),
+            // A model with no request in the turn: the turn's last request takes it.
+            start("c3", "bash"),
+            done("c3", "other", 9001),
+            record("2026-10-18T11:01:50.000Z", false, "stop"),
+        ]
+        .join("\n");
+        let got = turns_from(&text, Cursor::default());
+        let (haiku, gpt) = (&got[got.len() - 2].1, &got[got.len() - 1].1);
+        assert_eq!(
+            (haiku.model.as_str(), gpt.model.as_str()),
+            ("claude-haiku-4-5", "gpt-5.4")
+        );
+        let want: BTreeMap<String, u64> =
+            [("view".to_string(), 2000), ("bash".to_string(), 2251)].into();
+        assert_eq!(haiku.tool_output, want);
+        assert_eq!(gpt.tool_output, [("rg".to_string(), 2001)].into());
+        // Each model's last request's whole input.
+        assert_eq!((haiku.context, gpt.context), (Some(10), Some(10)));
+        assert!(
+            got[..got.len() - 2]
+                .iter()
+                .all(|(_, t)| t.tool_output.is_empty())
+        );
     }
 
     #[test]

@@ -314,6 +314,11 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK",
             "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
         ),
+        // Copilot's largest results are whole-file views (`view` takes a line range).
+        Some("copilot") => (
+            "end long commands with | tail -n 40 or | head, and view large files by line range",
+            "tail keeps the summary and errors at the end; a range keeps the part being worked on",
+        ),
         Some(_) => (
             "end long commands with | tail -n 40 or | head",
             "tail keeps the summary and errors at the end",
@@ -583,6 +588,24 @@ mod tests {
             "{}",
             c.guard
         );
+    }
+
+    #[test]
+    fn copilot_s_fix_also_names_file_ranges() {
+        let records = [rec(10, bash_out(None, 2, 8_000, 50_000))];
+        let on = On {
+            harness: Some("copilot"),
+            ..On::default()
+        };
+        let c = advise(&records, 100, 1000, on);
+        let c = tool_output(&c).unwrap();
+        // Copilot's largest results are whole-file views.
+        assert!(
+            c.fix.contains("| tail -n 40") && c.fix.contains("line range"),
+            "{}",
+            c.fix
+        );
+        assert!(!c.fix.contains("RTK"), "{}", c.fix);
     }
 
     #[test]

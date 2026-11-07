@@ -76,6 +76,7 @@ Evidence: `examples/portability/RESULTS.md` ("Codex large tool output").
 - **Fix text per harness:** RTK filters Claude Code's Bash tool, so other harnesses' fix and guard name only `| tail` and `| head`.
 - **Bound check:** in each Codex session, the tokens the cost model says were re-read stay under that session's logged cache reads (at most 48%). A cost model that broke this bound would be overcounting.
 - **Not handled:** Codex subagent threads are recorded as main-loop turns, as before.
+- **Copilot (same day):** only turns read from per-request records carry `tool_output`. See the all-harnesses spec. Copilot's fix adds "view large files by line range", since its largest results are whole-file `view` calls.
 
 ## Not in scope
 
