@@ -72,11 +72,9 @@ fn turn_cost(t: &Turn) -> f64 {
     if let Some(micros) = t.cost_micros {
         return micros as f64 / 1e6;
     }
-    price::rates(&t.model)
-        .map(|r| if t.agent { r.five_minute() } else { r })
-        .map_or(0.0, |r| {
-            price::cost(r, t.input, t.output, t.cache_read, t.cache_write)
-        })
+    price::turn_rates(&t.model, t.agent).map_or(0.0, |r| {
+        price::cost(r, t.input, t.output, t.cache_read, t.cache_write)
+    })
 }
 
 fn expensive(model: &str) -> bool {
@@ -289,8 +287,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             if tokens == 0 {
                 return None;
             }
-            let r = price::rates(&t.model)?;
-            let r = if t.agent { r.five_minute() } else { r };
+            let r = price::turn_rates(&t.model, t.agent)?;
             let mut carried = t.requests.unwrap_or(1) as f64 / 2.0;
             if let (Some(s), false) = (&t.session, t.agent) {
                 let mut before = t.context;

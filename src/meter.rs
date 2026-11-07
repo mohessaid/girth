@@ -56,7 +56,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.output += t.output;
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
-        let rates = price::rates(&t.model).map(|r| if t.agent { r.five_minute() } else { r });
+        let rates = price::turn_rates(&t.model, t.agent);
         let cost = match rates {
             Some(r) => price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
             None => {

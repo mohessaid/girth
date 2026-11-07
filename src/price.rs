@@ -9,7 +9,7 @@
 //! CLI runs. `gemini-3.1-flash-lite-preview` takes the `gemini-3.1-flash-lite` row, and
 //! `gemini-3-pro-preview`, which the page no longer lists, is left unpriced. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
-//! reports. Subagents write the 5-minute cache (1.25× input): see `five_minute`.
+//! reports. Claude subagents write the 5-minute cache (1.25× input): see `turn_rates`.
 
 /// US dollars per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -86,6 +86,18 @@ pub fn rates(model: &str) -> Option<Rates> {
     TABLE.iter().find(|(name, _)| *name == id).map(|(_, r)| *r)
 }
 
+/// Rates for one turn of `model`: a Claude subagent's turn writes Anthropic's
+/// 5-minute cache (see `Rates::five_minute`). Other vendors charge a subagent's
+/// cache writes the same as the main loop's.
+pub fn turn_rates(model: &str, agent: bool) -> Option<Rates> {
+    let r = rates(model)?;
+    Some(if agent && model.starts_with("claude-") {
+        r.five_minute()
+    } else {
+        r
+    })
+}
+
 /// Anthropic's earlier models: input, cache read (0.1× input), output; 1-hour writes at 2× input.
 const fn anthropic(input: f64, cache_read: f64, output: f64) -> Rates {
     Rates {
@@ -156,6 +168,21 @@ mod tests {
         assert_eq!(rates("gpt-6-sol").unwrap().cache_read, 0.20);
         assert_eq!(rates("gpt-6-luna").unwrap().cache_write, 0.125);
         assert_eq!(rates("gpt-6.1-sol").unwrap().output, 10.0);
+    }
+
+    #[test]
+    fn only_claude_subagents_pay_the_five_minute_write_rate() {
+        let opus = rates("claude-opus-5-5").unwrap();
+        assert_eq!(turn_rates("claude-opus-5-5", false), Some(opus));
+        assert_eq!(
+            turn_rates("claude-opus-5-5[1m]", true),
+            Some(opus.five_minute())
+        );
+        // Other vendors' writes cost the same in a subagent.
+        for id in ["gpt-5.4", "deepseek-v4-pro", "gemini-2.5-pro"] {
+            assert_eq!(turn_rates(id, true), rates(id), "{id}");
+        }
+        assert_eq!(turn_rates("unknown", true), None);
     }
 
     #[test]
