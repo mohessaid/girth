@@ -47,6 +47,25 @@ girth advise (60d): $173.00 estimated at list prices; shares overlap
 - The first build gave $170.14. The $2.87 gap was 4 turns that never logged an end event; they are now recorded as aborted once a later turn ends.
 - Across both harnesses over 60 days, `advise --json` splits spend as `claude-code` $3,549 and `codex` $173.
 
+**Codex large tool output (2026-11-07).** `girth import` now records Codex tool results of 8,000 characters or more. Same `~/.codex`, into a scratch `GIRTH_HOME`:
+
+```
+$ girth import
+imported 142 turns from codex
+$ girth advise --since 100000d --harness codex
+girth advise (100000d): $173.45 estimated at list prices; shares overlap
+  81%  turns 8h+ into a session  ($140.05)
+  44%  large conversations  ($76.90)
+  28%  large tool output  ($49.25)
+       fix: end long commands with | tail -n 40 or | head
+```
+
+- 548 of 4,386 tool results are large: 515 from `exec` and 33 from `js`, about 2.4M estimated tokens in all.
+- These are what the model was sent: the largest is 48K characters, and 162 carry Codex's "tokens truncated" marker.
+- An independent Python pass with the same carry rule gives **$49.25**.
+- **Bound:** in each session, the tokens the rule says were re-read stay under the session's logged cache reads (ratios 0.07, 0.08, 0.29 and 0.48), so the estimate is possible, though the true share may be lower.
+- The 2 turns more than the 140 above have happened since.
+
 **Copilot CLI spend.** `girth import --from copilot` on the author's `~/.copilot` (58 sessions, 96 shutdowns; into a scratch `GIRTH_HOME`):
 
 ```

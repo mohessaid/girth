@@ -275,7 +275,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         );
     }
 
-    // Large Bash output: written to the cache once, then re-read by every later request
+    // Large tool output: written to the cache once, then re-read by every later request
     // until the conversation shrinks. Half its own turn's requests carry it (where in the
     // turn it came isn't recorded); on the main loop, so does every later main turn of
     // its session up to the first whose context is smaller than the one before.
@@ -308,14 +308,24 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             Some(price::cost(r, 0, 0, 0, tokens) + read)
         })
         .sum();
+    // RTK filters Claude Code's Bash tool; tail and head work in every harness's shell.
+    let (fix, guard) = match on.harness {
+        None | Some("claude-code") => (
+            "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK",
+            "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
+        ),
+        Some(_) => (
+            "end long commands with | tail -n 40 or | head",
+            "tail keeps the summary and errors at the end",
+        ),
+    };
     push(
         &mut out,
         "tool_output",
-        "large Bash output".into(),
+        "large tool output".into(),
         large_output,
-        "end long commands with | tail -n 40 or | head, or use a shell-output filter such as RTK"
-            .into(),
-        "tail keeps the summary and errors at the end; a filter keeps errors and summaries",
+        fix.into(),
+        guard,
     );
 
     out.sort_by(|a, b| b.share.total_cmp(&a.share));
@@ -544,13 +554,35 @@ mod tests {
         let r = price::rates(SONNET).unwrap();
         let want = price::cost(r, 0, 0, 10_000 * (2 + 3), 10_000);
         assert!(close(c.cost, want), "{} vs {want}", c.cost);
-        assert_eq!(c.label, "large Bash output");
+        assert_eq!(c.label, "large tool output");
         assert!(
             c.fix.contains("| tail") && c.fix.contains("filter"),
             "{}",
             c.fix
         );
         assert!(c.guard.contains("errors"), "{}", c.guard);
+    }
+
+    #[test]
+    fn other_harnesses_trim_large_output_without_rtk() {
+        let records = [rec(10, bash_out(None, 2, 8_000, 50_000))];
+        let on = On {
+            harness: Some("codex"),
+            ..On::default()
+        };
+        let c = advise(&records, 100, 1000, on);
+        let c = tool_output(&c).unwrap();
+        // RTK hooks Claude Code's Bash tool; tail works in every shell.
+        assert!(
+            c.fix.contains("| tail -n 40") && !c.fix.contains("RTK"),
+            "{}",
+            c.fix
+        );
+        assert!(
+            c.guard.contains("errors") && !c.guard.contains("filter"),
+            "{}",
+            c.guard
+        );
     }
 
     #[test]

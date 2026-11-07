@@ -2,7 +2,9 @@
 
 use serde_json::Value;
 
-use crate::ledger::{Event, Turn};
+use std::collections::BTreeMap;
+
+use crate::ledger::{Event, LARGE_OUTPUT_CHARS, Turn};
 
 /// Ledger events for the completed turns in `text`, in file order, and the byte
 /// offset just past the last one's end line. An open turn is left for the next run.
@@ -11,11 +13,18 @@ use crate::ledger::{Event, Turn};
 /// `input` is the uncached rest. A line cut short (Codex killed mid-write) is skipped.
 /// Codex runs one turn at a time, so a turn still open when a later one ends was
 /// cut off: it is recorded as aborted, at the time of its last request.
+///
+/// A tool result of `LARGE_OUTPUT_CHARS` or more goes with the turn its log line names
+/// (or the open turn) as `tool_output`, keyed by the tool's name. The log holds what
+/// the model was sent, after Codex's own truncation. `context` is the input of the
+/// turn's last request, cached part included.
 pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
     let mut session: Option<String> = None;
     let mut session_cwd = String::new();
     // Open turns in order: id, turn, time of its last request.
     let mut open: Vec<(String, Turn, u64)> = Vec::new();
+    // Tool names by call id.
+    let mut tools: BTreeMap<String, String> = BTreeMap::new();
     let (mut events, mut offset, mut pos) = (Vec::new(), 0, 0);
     for line in text.split_inclusive('\n') {
         pos += line.len();
@@ -51,6 +60,30 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
                 t.cache_write += write;
                 t.output += n("output_tokens");
                 t.requests = Some(t.requests.unwrap_or(0) + 1);
+                t.context = Some(n("input_tokens"));
+            }
+            (Some("response_item"), Some(kind)) if kind.ends_with("_call") => {
+                if let (Some(id), Some(name)) = (p["call_id"].as_str(), p["name"].as_str()) {
+                    tools.insert(id.to_string(), name.to_string());
+                }
+            }
+            (Some("response_item"), Some(kind)) if kind.ends_with("_call_output") => {
+                let chars = output_chars(&p["output"]);
+                if chars < LARGE_OUTPUT_CHARS {
+                    continue;
+                }
+                let id = p["call_id"].as_str().unwrap_or_default();
+                let Some(name) = tools.remove(id) else {
+                    continue;
+                };
+                let named = p["internal_chat_message_metadata_passthrough"]["turn_id"].as_str();
+                let turn = match named {
+                    Some(n) => open.iter_mut().find(|(o, ..)| o == n),
+                    None => open.last_mut(),
+                };
+                if let Some((_, t, _)) = turn {
+                    *t.tool_output.entry(name).or_default() += chars.div_ceil(4) as u64;
+                }
             }
             (Some("event_msg"), Some(kind @ ("task_complete" | "turn_aborted"))) => {
                 let end = e["timestamp"].as_str().and_then(unix_seconds).unwrap_or(0);
@@ -73,6 +106,19 @@ pub fn parse(text: &str) -> (Vec<(u64, Event)>, usize) {
         }
     }
     (events, offset)
+}
+
+/// Characters in a tool result: a string, or a list of text parts.
+fn output_chars(output: &Value) -> usize {
+    match output {
+        Value::String(s) => s.chars().count(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|p| p["text"].as_str())
+            .map(|s| s.chars().count())
+            .sum(),
+        _ => 0,
+    }
 }
 
 fn entry<'a>(
@@ -228,6 +274,59 @@ mod tests {
         );
         assert_eq!((t[1].1.input, t[1].1.aborted), (20, false));
         assert_eq!(events.len(), 2);
+    }
+
+    #[test]
+    fn large_tool_output_and_context_go_with_their_turn() {
+        let meta = |turn: &str| {
+            format!(r#""internal_chat_message_metadata_passthrough":{{"turn_id":"{turn}"}}"#)
+        };
+        let call = |kind: &str, id: &str, name: &str| {
+            format!(
+                r#"{{"timestamp":"2026-10-25T10:00:01Z","type":"response_item","payload":{{"type":"{kind}","call_id":"{id}","name":"{name}"}}}}"#
+            )
+        };
+        let lines = [
+            r#"{"timestamp":"2026-10-25T10:00:00Z","type":"turn_context","payload":{"turn_id":"a","cwd":"/w","model":"gpt-6-sol"}}"#.to_string(),
+            call("custom_tool_call", "c1", "exec"),
+            // The current form: a list of text parts (exactly the threshold), named by turn.
+            format!(
+                r#"{{"timestamp":"2026-10-25T10:00:02Z","type":"response_item","payload":{{"type":"custom_tool_call_output","call_id":"c1","output":[{{"type":"input_text","text":"{}"}},{{"type":"input_text","text":"x"}}],{}}}}}"#,
+                "x".repeat(7999),
+                meta("a")
+            ),
+            call("function_call", "c2", "shell"),
+            // Just under the threshold: not large.
+            format!(
+                r#"{{"timestamp":"2026-10-25T10:00:03Z","type":"response_item","payload":{{"type":"function_call_output","call_id":"c2","output":"{}"}}}}"#,
+                "y".repeat(7999)
+            ),
+            call("function_call", "c3", "shell"),
+            // The older string form, with no turn named: the open turn's.
+            format!(
+                r#"{{"timestamp":"2026-10-25T10:00:04Z","type":"response_item","payload":{{"type":"function_call_output","call_id":"c3","output":"{}"}}}}"#,
+                "z".repeat(9001)
+            ),
+            r#"{"timestamp":"2026-10-25T10:00:05Z","type":"token_usage_record","payload":{"turn_id":"a","usage":{"input_tokens":100,"output_tokens":1}}}"#.to_string(),
+            r#"{"timestamp":"2026-10-25T10:00:06Z","type":"token_usage_record","payload":{"turn_id":"a","usage":{"input_tokens":300,"cached_input_tokens":100,"output_tokens":1}}}"#.to_string(),
+            r#"{"timestamp":"2026-10-25T10:00:07Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"a"}}"#.to_string(),
+            // An output with no open turn is dropped.
+            call("function_call", "c4", "shell"),
+            format!(
+                r#"{{"timestamp":"2026-10-25T10:00:08Z","type":"response_item","payload":{{"type":"function_call_output","call_id":"c4","output":"{}"}}}}"#,
+                "w".repeat(9000)
+            ),
+        ];
+        let text = lines.join("\n") + "\n";
+        let t = turns(&text);
+        assert_eq!(t.len(), 1);
+        let a = &t[0].1;
+        // 8000 / 4 and ceil(9001 / 4) estimated tokens.
+        let want: std::collections::BTreeMap<String, u64> =
+            [("exec".to_string(), 2000), ("shell".to_string(), 2251)].into();
+        assert_eq!(a.tool_output, want);
+        // The last request's whole input, cached part included.
+        assert_eq!(a.context, Some(300));
     }
 
     #[test]

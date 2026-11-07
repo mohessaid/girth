@@ -57,6 +57,7 @@ const large = new Map()
 const OUTPUT_TAIL = 4000
 const MAX_CALLS = 64
 // A Bash result this long (2,000 tokens at 4 characters each) is a large one.
+// `LARGE_OUTPUT_CHARS` in src/ledger.rs keeps the same figure for imports.
 const LARGE_OUTPUT_CHARS = 8000
 // A break re-wrote at least this much (and 20% of what was cached), and the
 // prompt didn't shrink below 80% of it (compaction or /clear).

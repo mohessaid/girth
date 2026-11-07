@@ -167,11 +167,16 @@ pub struct Turn {
     /// Input tokens (with cache) of the turn's last request, on main-loop turns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<u64>,
-    /// Estimated tokens of large tool results (2,000 or more each), per tool. Only Bash
-    /// results are measured, at 4 characters per token.
+    /// Estimated tokens of large tool results (`LARGE_OUTPUT_CHARS` or more each), per
+    /// tool, at 4 characters per token. Claude Code's mod measures Bash; Codex's import
+    /// measures every tool.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tool_output: BTreeMap<String, u64>,
 }
+
+/// A tool result this long (2,000 estimated tokens) is large. `hooks/girth.js` keeps
+/// the same figure.
+pub const LARGE_OUTPUT_CHARS: usize = 8000;
 
 /// One ledger line: schema version, unix timestamp, event.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

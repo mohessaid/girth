@@ -35,7 +35,7 @@ It reads the ledger and ranks **contributors**: each has a share of spend (`pric
 | Subagent turns on the main model (`agent`) | `{"agents":{"model":"sonnet"}}` | code edits stay on the main model |
 | Turns 8 h+ into a session (`Turn.session`, new) | `/clear` on a task switch | CLAUDE.md, project skills and the ledger carry over; `/compact` if the work goes on |
 | MCP servers connected but unused (`mcp`) | Lens collapses them | servers that are used are kept |
-| Large Bash output (`tool_output`, added 2026-11-06) | end the command with `\| tail -n 40` or `\| head`, or use a shell-output filter such as RTK | `tail` keeps the summary and errors at the end; a filter keeps errors and summaries |
+| Large tool output (`tool_output`, added 2026-11-06; Codex 2026-11-07) | end the command with `\| tail -n 40` or `\| head`, or use a shell-output filter such as RTK (Claude Code only) | `tail` keeps the summary and errors at the end; a filter keeps errors and summaries |
 
 - **`--brief`** prints only the top contributor above a threshold (≥ 15% of spend in the window) whose fix isn't already on. If there is none, it prints nothing.
 - **Frozen-interface rule:** a new command and new JSON. Nothing existing changes.
@@ -65,6 +65,17 @@ Evidence: `examples/context/RESULTS.md`. Tool traffic is most of what a conversa
 - **Cost model:** a large result is written to the cache once and re-read by every later request until the conversation shrinks. Inside its own turn, half the turn's requests are counted (where in the turn it came isn't recorded). Then every later turn of the same session and loop (main or subagent), up to the first main turn whose `context` is smaller than the turn before's: a `/compact`, an idle compaction or a `/clear` that kept the session id. Subagent results are counted within their turn only. Without a session id, only the turn itself. This is the weighting `examples/context/analyze-tails.py` used.
 - **Fix text covers both setups.** Whether a mod sees a Bash command before or after another hook (such as RTK's) rewrites it wasn't verified, so the fix names `| tail`, `| head` and a filter rather than detecting one.
 - **Calibration, once real data exists:** with RTK on, the author's large results are about 4% of tool re-reads, so the contributor should stay under the 15% `--brief` threshold there. If it fires on that machine, the model overcounts.
+
+## Addendum (2026-11-07): large tool output from Codex
+
+Evidence: `examples/portability/RESULTS.md` ("Codex large tool output").
+
+- **Measured:** `girth import` reads each tool result in a Codex rollout (`function_call_output` or `custom_tool_call_output`, a string or a list of text parts), named by its call (`exec`, `js`, `shell`). A result of `LARGE_OUTPUT_CHARS` (8,000) characters or more goes with the turn its line names, or the open turn, at 4 characters per token. The log holds what the model was sent: the largest of the author's 548 large results is 48K characters, and 162 carry Codex's "tokens truncated" marker.
+- **Also recorded:** `context`, the input of the turn's last request, cached part included.
+- **Label:** "large tool output" for every harness, since Codex's tools aren't Bash.
+- **Fix text per harness:** RTK filters Claude Code's Bash tool, so other harnesses' fix and guard name only `| tail` and `| head`.
+- **Bound check:** in each Codex session, the tokens the cost model says were re-read stay under that session's logged cache reads (at most 48%). A cost model that broke this bound would be overcounting.
+- **Not handled:** Codex subagent threads are recorded as main-loop turns, as before.
 
 ## Not in scope
 

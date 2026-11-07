@@ -6,6 +6,6 @@
 3. Apply **one** fix at a time, and only the one the user picks. Then run its guard:
    - a skill: distil its slice (the craft flow), then `scripts/girth validate` and `scripts/girth drift`;
    - large conversations or turns 8h+ into a session: suggest `/compact <what to keep>` at a natural break, or `/clear` (Codex: `/new`) on a task switch. Never compact or clear without asking;
-   - large Bash output: suggest ending long commands with `| tail -n 40` or `| head`, or a shell-output filter. The tail keeps the summary and errors; check that an error still shows before trimming a command for good;
+   - large tool output: suggest ending long commands with `| tail -n 40` or `| head`, or, in Claude Code, a shell-output filter. The tail keeps the summary and errors; check that an error still shows before trimming a command for good;
    - cache rewrites or subagents (Claude Code only; these levers are Girth's Claude Code mod): show the exact config line and the file it goes in. Let the user add it.
 4. Never uninstall a skill, change settings or end a session yourself.

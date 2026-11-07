@@ -5,7 +5,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- **`girth advise --harness codex` flags large tool output.** `girth import` now measures each tool result in a Codex rollout. One of 8,000 characters or more is recorded with its turn as `tool_output`, keyed by tool name (`exec`, `js`, `shell`), along with the turn's last request size (`context`). Codex logs results after its own truncation, so this is what the model was sent. Codex's fix suggests only `| tail` and `| head`, since RTK filters Claude Code's Bash tool. Codex turns imported before this release keep no such data, as each rollout is read once.
 - **List prices for `gpt-5.4`, `gpt-5.3-codex` and `deepseek-v4-pro`,** models Copilot and OpenCode sessions run. OpenAI lists no GPT-5 cache-write price, so a write is priced as input. DeepSeek bills by the hour, and Girth uses its off-peak rates; peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC) bill twice these.
+
+### Changed
+- The contributor "large Bash output" is now "large tool output", since Codex's tools aren't Bash. Its `kind` in `--json` is still `tool_output`.
 
 ### Fixed
 - A subagent turn on a non-Claude model was priced with Anthropic's 5-minute cache-write rate (1.25× input). Other vendors charge a subagent's writes the same as the main loop's, so Gemini, GPT-5 and DeepSeek subagent turns were slightly overpriced. None of the author's imported turns were affected; OpenAI's GPT-6 write rates already equal 1.25× input.

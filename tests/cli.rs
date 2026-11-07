@@ -759,7 +759,7 @@ fn meter_record_keeps_context_and_large_tool_output() {
         .args(["advise", "--since", "1d"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("large Bash output"))
+        .stdout(predicate::str::contains("large tool output"))
         .stdout(predicate::str::contains("| tail -n 40"));
 }
 
