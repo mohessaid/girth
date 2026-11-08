@@ -7,6 +7,5 @@
    - a skill: distil its slice (the craft flow), then `scripts/girth validate` and `scripts/girth drift`;
    - large conversations or turns 8h+ into a session: suggest `/compact <what to keep>` at a natural break, or `/clear` (Codex: `/new`) on a task switch. Never compact or clear without asking;
    - large tool output: relay the fix it prints. That's `| tail -n 40` or `| head` for commands (in Claude Code, also a shell-output filter), reading large files by line range, or fetching big pages in a subagent. The tail keeps the summary and errors; check that an error still shows before trimming a command for good;
-   - background-agent progress summaries (Claude Code only): show the line `CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1` for the shell profile or the `env` of `~/.claude/settings.json`. Background agents keep running; only their progress line goes;
-   - cache rewrites or subagents (Claude Code only; these levers are Girth's Claude Code mod): show the exact config line and the file it goes in. Let the user add it.
+   - cache rewrites, subagents or progress summaries (Claude Code only; these levers are Girth's Claude Code mod): show the exact config line and the file it goes in. Let the user add it.
 4. Never uninstall a skill, change settings or end a session yourself.

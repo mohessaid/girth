@@ -80,3 +80,11 @@ v0.5 (2026-10-15):
 ## import/codex.rs (v0.13.x)
 
 - The match guard `kind.ends_with("_call_output") -> true` is equivalent in practice. With it, every other `response_item` line (messages, calls) reaches the output arm, but these lines have no `output` field, so they measure as 0 characters and are skipped before anything is recorded.
+
+## Side queries (2026-11-08)
+
+`cargo mutants --in-diff` on the side-query change: 60 mutants, 53 caught, 4 unviable and 3 missed. All three were real gaps, not equivalent mutants:
+- `stats --json` added a `meter` key to an empty ledger (two mutants of one condition).
+- The side-queries line printed with no side queries.
+
+Tests now pin both. A rerun of the affected functions caught all 19 mutants.

@@ -297,6 +297,8 @@ mod tests {
             "{}",
             render(&odd)
         );
+        // Nothing priced, so no source is the largest.
+        assert!(!render(&odd).contains("largest"), "{}", render(&odd));
     }
 
     #[test]
@@ -308,6 +310,8 @@ mod tests {
         let records = vec![turn("/a", "claude-opus-5-5", 5, None), codex];
         let s = summarise(&records, None);
         assert_eq!((s.turns, s.input), (1, 5));
+        // No side queries recorded: no side-queries line.
+        assert!(!render(&s).contains("side queries"), "{}", render(&s));
     }
 
     #[test]

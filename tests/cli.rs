@@ -931,6 +931,10 @@ fn keeper_record_appends_pings_and_stats_report_them() {
 fn side_record_appends_each_total_and_stats_report_them_for_claude_code_only() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");
+    // An empty ledger has no meter.
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert!(json.get("meter").is_none(), "{json}");
     let sides = r#"[
       {"project":"/w","source":"agent_summary","model":"claude-opus-5-5","requests":4,"input":3188,"output":230,"cache_read":0,"cache_write":0,"cost_micros":411},
       {"project":"/w","source":"prompt_suggestion","model":"claude-opus-5-5","requests":1,"input":518,"output":54,"cache_read":42899,"cache_write":5,"cost_micros":509}
