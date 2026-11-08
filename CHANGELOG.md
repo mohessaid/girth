@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **Claude Code's side queries are metered.** These are the requests it sends outside the conversation:
+  - progress summaries of background agents (`agent_summary`)
+  - prompt suggestions, session titles and compaction
+  - A probe showed that Girth's turns hold exactly the main-loop and subagent requests, so before this release none of these was counted (`examples/sidequery/RESULTS.md`).
+  - The mod now reads each request's record (its `telemetry.log` collector event, which reaches plugins with telemetry off). It totals the numbers per source and model: requests, tokens and Claude Code's own price. After each answer it saves the totals to the ledger as `side` events. It never copies account, organization or request ids.
+  - `girth stats --meter` adds a `side queries` line, and their cost counts in the meter's total and in `advise`.
+  - **New `advise` cause: background-agent progress summaries.** Claude Code sends these about every 30 s while a background agent runs, and none of their input is cached. The fix is `CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1`, which stopped them on Claude Code 2.1.319 (4 requests became 0 on the same task).
+  - Older Girth versions skip `side` events.
+
 ### Fixed
 - **Claude Sonnet 5.5 cache reads are priced at $0.10 per million tokens, not $0.20.** Anthropic halved them on 2026-10-08, two days after the price list Girth was built from. Cache reads are most of a Claude Code session's input, so Sonnet 5.5 costs came out too high. Prices are worked out from the stored token counts each time, so past turns are corrected too. Claude Haiku 5.5 charges more when a request's prompt is over 100,000 tokens. A turn stores token sums across its requests, not each request's prompt size, so Girth prices every Haiku 5.5 turn at the lower rate.
 

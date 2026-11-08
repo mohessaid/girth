@@ -193,7 +193,11 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 **Meter** records each turn's real token usage in your local ledger (numbers and a model id only). Run `/girth-meter` or `girth stats --meter` to see:
 - your usage for the project;
 - an estimated cost;
-- how much Lens kept out of the prompt.
+- how much Lens kept out of the prompt;
+- **side queries,** the requests Claude Code sends outside the conversation:
+  - background agents' progress summaries (`agent_summary`), sent about every 30 s with none of their input cached
+  - prompt suggestions, session titles, compaction
+  - The mod reads Claude Code's own records of these requests, which plugins receive even with telemetry off. It keeps the counts, the model and the source name, never your account details. `girth advise` names the summaries' share and the variable that turns them off: `CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1` (`examples/sidequery/RESULTS.md`).
 
 **Cost per outcome:** Meter also counts what the money bought. For each Bash call Claude runs, Girth works out whether it was a test run (and whether it passed), a commit or a pull request. `/girth-meter` then adds a line such as `meter: outcomes: 12 commits · ≈ $3.40 per commit · ≈ $1.20 since the last commit · test runs: 20 passed, 8 failed, 2 no verdict`.
 - **Test verdicts come from the runner's own summary** (`test result: FAILED`, `3 failed`, `12 tests, 1 failure`, …), not the exit status. Claude almost always pipes test output through `tail` or `grep`, so the exit status is the filter's. On the author's history, exit status called 99% of runs green; the summaries said 35% failed.
