@@ -928,6 +928,52 @@ fn keeper_record_appends_pings_and_stats_report_them() {
 }
 
 #[test]
+fn side_record_appends_each_total_and_stats_report_them_for_claude_code_only() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let sides = r#"[
+      {"project":"/w","source":"agent_summary","model":"claude-opus-5-5","requests":4,"input":3188,"output":230,"cache_read":0,"cache_write":0,"cost_micros":411},
+      {"project":"/w","source":"prompt_suggestion","model":"claude-opus-5-5","requests":1,"input":518,"output":54,"cache_read":42899,"cache_write":5,"cost_micros":509}
+    ]"#;
+    home_cmd(&home)
+        .args(["side", "record"])
+        .write_stdin(sides)
+        .assert()
+        .success()
+        .stdout("");
+    // Bad input, and an array with a bad item, append nothing for the bad parts.
+    for bad in ["not json", r#"[{"project":"/w"}]"#, r#"{"project":"/w"}"#] {
+        home_cmd(&home)
+            .args(["side", "record"])
+            .write_stdin(bad)
+            .assert()
+            .success()
+            .stdout("");
+    }
+    let out = home_cmd(&home)
+        .args(["stats", "--meter"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains(
+            "meter: side queries: 5 requests outside turns · ≈ $0.0009 (largest: prompt_suggestion)"
+        ),
+        "{text}"
+    );
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(json["meter"]["side_requests"], 5);
+    // Side queries are Claude Code's: another harness's view leaves them out.
+    let out = home_cmd(&home)
+        .args(["stats", "--meter", "--harness", "codex"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(!text.contains("side queries"), "{text}");
+}
+
+#[test]
 fn compact_record_appends_and_stats_report_it() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");

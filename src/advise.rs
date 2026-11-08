@@ -164,7 +164,17 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             _ => None,
         })
         .collect();
-    let spend: f64 = turns.iter().map(|(_, t)| turn_cost(t)).sum();
+    // Claude Code's requests outside turns (progress summaries, suggestions, titles).
+    let sides: Vec<&crate::ledger::Side> = records
+        .iter()
+        .filter(in_window)
+        .filter_map(|r| match &r.event {
+            Event::Side(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    let side_spend: f64 = sides.iter().map(|s| crate::meter::side_cost(s)).sum();
+    let spend: f64 = turns.iter().map(|(_, t)| turn_cost(t)).sum::<f64>() + side_spend;
     let unpriced = turns
         .iter()
         .filter(|(_, t)| t.cost_micros.is_none() && price::rates(&t.model).is_none())
@@ -173,6 +183,9 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     for (_, t) in &turns {
         let h = t.harness.as_deref().unwrap_or("claude-code");
         *harnesses.entry(h.to_string()).or_default() += turn_cost(t);
+    }
+    if side_spend > 0.0 {
+        *harnesses.entry("claude-code".to_string()).or_default() += side_spend;
     }
     let premium_requests = turns.iter().filter_map(|(_, t)| t.premium).sum();
     let mut out = Vec::new();
@@ -200,6 +213,21 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
                 });
             }
         };
+
+    // Background agents' progress summaries: Claude Code re-sends each running agent's
+    // transcript about every 30 s, uncached, to draw its progress line.
+    push(
+        &mut out,
+        "agent_summary",
+        "background-agent progress summaries".into(),
+        sides
+            .iter()
+            .filter(|s| s.source == "agent_summary")
+            .map(|s| crate::meter::side_cost(s))
+            .sum(),
+        "set CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1 in your shell or settings env (checked on Claude Code 2.1.319)".into(),
+        "background agents run the same; only their progress line goes",
+    );
 
     // Skills. A loaded skill stays in context for the rest of its session, so with a session
     // id a main-loop use charges every later main turn there (even a use from before the
@@ -622,6 +650,73 @@ mod tests {
             c.fix
         );
         assert!(c.guard.contains("errors"), "{}", c.guard);
+    }
+
+    fn side(ts: u64, source: &str, micros: u64) -> Record {
+        Record {
+            v: 1,
+            ts,
+            event: Event::Side(crate::ledger::Side {
+                project: "/p".into(),
+                session: None,
+                source: source.into(),
+                model: "claude-opus-5-5".into(),
+                requests: 3,
+                input: 1_000,
+                output: 10,
+                cache_read: 0,
+                cache_write: 0,
+                cost_micros: Some(micros),
+            }),
+        }
+    }
+
+    #[test]
+    fn side_queries_count_in_spend_and_progress_summaries_get_their_fix() {
+        let records = [
+            rec(10, turn(SONNET, 0, 100_000)),
+            side(20, "agent_summary", 250_000),
+            side(30, "agent_summary", 250_000),
+            side(40, "prompt_suggestion", 100_000),
+            // Outside the window: not counted.
+            side(5_000, "agent_summary", 9_000_000),
+        ];
+        let advice = advise(&records, 100, 1000, On::default());
+        let turn_cost = price::cost(price::rates(SONNET).unwrap(), 0, 100_000, 0, 0);
+        assert!(close(advice.spend, turn_cost + 0.6), "{}", advice.spend);
+        assert!(close(advice.harnesses["claude-code"], advice.spend));
+        let c = advice
+            .contributors
+            .iter()
+            .find(|c| c.kind == "agent_summary")
+            .expect("a progress-summary contributor");
+        assert!(close(c.cost, 0.5), "{}", c.cost);
+        assert_eq!(c.label, "background-agent progress summaries");
+        assert!(
+            c.fix
+                .contains("CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1"),
+            "{}",
+            c.fix
+        );
+        assert!(c.guard.contains("progress"), "{}", c.guard);
+        // Other side sources have no verified fix: spend only.
+        assert_eq!(
+            advice
+                .contributors
+                .iter()
+                .filter(|c| c.kind == "agent_summary")
+                .count(),
+            1
+        );
+        assert!(
+            advice
+                .contributors
+                .iter()
+                .all(|c| !c.label.contains("prompt_suggestion"))
+        );
+        // Side queries alone are spend too.
+        let alone = advise(&[side(20, "compact", 300_000)], 100, 1000, On::default());
+        assert!(close(alone.spend, 0.3), "{}", alone.spend);
     }
 
     #[test]

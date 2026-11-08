@@ -114,7 +114,8 @@ pub fn payload(records: &[Record]) -> SharePayload {
             | Event::Seen { .. }
             | Event::Turn(_)
             | Event::Ping(_)
-            | Event::Compact(_) => {}
+            | Event::Compact(_)
+            | Event::Side(_) => {}
         }
     }
     for sources in latest.values() {

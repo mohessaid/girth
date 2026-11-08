@@ -86,6 +86,29 @@ pub enum Event {
     Ping(Ping),
     /// An idle compaction: Girth compacted a large conversation while it sat idle.
     Compact(Compact),
+    /// Requests Claude Code sent outside any turn (progress summaries, prompt
+    /// suggestions, titles), totalled per source and model.
+    Side(Side),
+}
+
+/// Claude Code's requests of one `query_source` and model outside turns, since the
+/// last flush. Numbers, a source name and a model id only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Side {
+    pub project: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    /// Claude Code's `query_source`, such as `agent_summary`.
+    pub source: String,
+    pub model: String,
+    pub requests: u64,
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    /// What Claude Code priced the requests at, in millionths of a US dollar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_micros: Option<u64>,
 }
 
 /// One idle compaction. Numbers and a model id only.
@@ -440,6 +463,33 @@ mod tests {
         assert_eq!(read(tmp.path())[0].event, compact);
         let line = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
         assert!(line.contains(r#""kind":"compact""#), "{line}");
+    }
+
+    #[test]
+    fn side_queries_round_trip_and_older_lines_without_a_session_parse() {
+        let tmp = TempDir::new().unwrap();
+        let side = Event::Side(Side {
+            project: "/p".into(),
+            session: Some("s1".into()),
+            source: "agent_summary".into(),
+            model: "claude-opus-5-5".into(),
+            requests: 4,
+            input: 3_188,
+            output: 230,
+            cache_read: 0,
+            cache_write: 0,
+            cost_micros: Some(411),
+        });
+        append(tmp.path(), side.clone()).unwrap();
+        assert_eq!(read(tmp.path())[0].event, side);
+        let line = std::fs::read_to_string(tmp.path().join(LEDGER_FILE)).unwrap();
+        assert!(line.contains(r#""kind":"side""#), "{line}");
+        let bare = r#"{"v":1,"ts":5,"kind":"side","project":"/p","source":"compact","model":"m","requests":1,"input":1,"output":2,"cache_read":3,"cache_write":4}"#;
+        let r: Record = serde_json::from_str(bare).unwrap();
+        let Event::Side(s) = r.event else {
+            panic!("not a side event")
+        };
+        assert_eq!((s.session, s.cost_micros), (None, None));
     }
 
     #[test]

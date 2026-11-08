@@ -38,17 +38,44 @@ pub struct Summary {
     pub per_commit: f64,
     /// The cost of the turns after the last commit (all of them without one).
     pub since_commit: f64,
+    /// Requests Claude Code sent outside turns (`side` events), and their cost, which
+    /// is part of `cost`.
+    pub side_requests: u64,
+    pub side_cost: f64,
+    /// The side-query source that cost the most.
+    pub side_top: Option<String>,
+}
+
+/// Dollars for side queries: Claude Code's own price when it gave one, else list
+/// prices at main-loop rates; 0 for unknown models.
+pub fn side_cost(s: &crate::ledger::Side) -> f64 {
+    if let Some(micros) = s.cost_micros {
+        return micros as f64 / 1e6;
+    }
+    price::rates(&s.model).map_or(0.0, |r| {
+        price::cost(r, s.input, s.output, s.cache_read, s.cache_write)
+    })
 }
 
 /// Summarise Claude Code's `turn` events, optionally for one project. Turns imported
 /// from other harnesses are left out: Meter reports the session it runs in.
 pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     let mut s = Summary::default();
-    let turns = records.iter().filter_map(|r| match &r.event {
-        Event::Turn(t) if t.harness.is_none() && project.is_none_or(|p| p == t.project) => Some(t),
-        _ => None,
-    });
-    for t in turns {
+    let mut by_source: std::collections::BTreeMap<&str, f64> = Default::default();
+    for r in records {
+        let t = match &r.event {
+            Event::Turn(t) if t.harness.is_none() && project.is_none_or(|p| p == t.project) => t,
+            Event::Side(side) if project.is_none_or(|p| p == side.project) => {
+                let cost = side_cost(side);
+                s.side_requests += side.requests;
+                s.side_cost += cost;
+                s.cost += cost;
+                s.since_commit += cost;
+                *by_source.entry(side.source.as_str()).or_default() += cost;
+                continue;
+            }
+            _ => continue,
+        };
         s.turns += 1;
         let requests = t.requests.unwrap_or(1).max(1);
         s.requests += requests;
@@ -94,13 +121,17 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     if s.commits > 0 {
         s.per_commit = (s.cost - s.since_commit) / s.commits as f64;
     }
+    s.side_top = by_source
+        .into_iter()
+        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(a.0)))
+        .map(|(source, _)| source.to_string());
     s
 }
 
 /// The `meter:` lines for `girth stats`; empty when no turn was recorded.
 pub fn render(summary: &Summary) -> String {
     use crate::measure::thousands;
-    if summary.turns == 0 {
+    if summary.turns == 0 && summary.side_requests == 0 {
         return String::new();
     }
     let mut text = format!(
@@ -122,6 +153,15 @@ pub fn render(summary: &Summary) -> String {
             thousands(summary.lens_tokens_saved),
             summary.lens_cost_saved,
         ));
+    }
+    if summary.side_requests > 0 {
+        text.push_str(&format!(
+            "\nmeter: side queries: {} requests outside turns · ≈ ${:.4}",
+            summary.side_requests, summary.side_cost
+        ));
+        if let (Some(top), true) = (&summary.side_top, summary.side_cost > 0.0) {
+            text.push_str(&format!(" (largest: {top})"));
+        }
     }
     let mut parts = Vec::new();
     if summary.commits > 0 {
@@ -195,6 +235,68 @@ mod tests {
                 outcomes: vec![],
             }),
         }
+    }
+
+    fn side(project: &str, source: &str, model: &str, cost_micros: Option<u64>) -> Record {
+        Record {
+            v: 1,
+            ts: 1,
+            event: Event::Side(crate::ledger::Side {
+                project: project.into(),
+                session: None,
+                source: source.into(),
+                model: model.into(),
+                requests: 4,
+                input: 3_000,
+                output: 200,
+                cache_read: 40_000,
+                cache_write: 0,
+                cost_micros,
+            }),
+        }
+    }
+
+    #[test]
+    fn side_queries_add_cost_and_requests_but_no_turns() {
+        let records = vec![
+            turn("/a", "claude-opus-5-5", 5, None),
+            side("/a", "agent_summary", "claude-opus-5-5", Some(411)),
+            // No price from Claude Code: list price at main-loop rates.
+            side("/a", "prompt_suggestion", "claude-sonnet-5-5", None),
+            side("/b", "agent_summary", "claude-opus-5-5", Some(1_000_000)),
+        ];
+        let s = summarise(&records, Some("/a"));
+        let opus = price::rates("claude-opus-5-5").unwrap();
+        let sonnet = price::rates("claude-sonnet-5-5").unwrap();
+        let listed = price::cost(sonnet, 3_000, 200, 40_000, 0);
+        assert_eq!((s.turns, s.requests, s.input), (1, 1, 5));
+        assert_eq!(s.side_requests, 8);
+        assert!(
+            (s.side_cost - (0.000411 + listed)).abs() < 1e-12,
+            "{}",
+            s.side_cost
+        );
+        let turn_cost = price::cost(opus, 5, 10, 1_000, 100);
+        assert!((s.cost - (turn_cost + s.side_cost)).abs() < 1e-12);
+        assert!((s.since_commit - s.cost).abs() < 1e-12);
+        assert_eq!(s.side_top.as_deref(), Some("prompt_suggestion"));
+        let text = render(&s);
+        assert!(
+            text.contains(&format!(
+                "meter: side queries: 8 requests outside turns · ≈ ${:.4} (largest: prompt_suggestion)",
+                s.side_cost
+            )),
+            "{text}"
+        );
+        // An unknown model with no price from Claude Code costs nothing and says so.
+        let odd = summarise(&[side("/a", "compact", "mystery", None)], None);
+        assert_eq!((odd.side_cost, odd.side_requests), (0.0, 4));
+        // Side queries alone still print the meter.
+        assert!(
+            render(&odd).contains("side queries: 4 requests"),
+            "{}",
+            render(&odd)
+        );
     }
 
     #[test]

@@ -104,6 +104,11 @@ enum Command {
         #[command(subcommand)]
         what: KeeperWhat,
     },
+    /// Claude Code's requests outside turns, such as progress summaries (used by the plugin's mod).
+    Side {
+        #[command(subcommand)]
+        what: SideWhat,
+    },
     /// Idle compactions of large conversations (used by the plugin's mod).
     Compact {
         #[command(subcommand)]
@@ -244,6 +249,12 @@ enum MeterWhat {
 #[derive(Subcommand)]
 enum CompactWhat {
     /// Append one idle compaction, read as JSON from stdin. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum SideWhat {
+    /// Append side-query totals, read as a JSON array from stdin. Bad items are ignored.
     Record,
 }
 
@@ -700,6 +711,7 @@ fn only_harness(records: &mut Vec<Record>, h: &str) {
     records.retain(|r| match &r.event {
         Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
         Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
+        Event::Side(_) => h == "claude-code",
         _ => true,
     });
 }
@@ -750,7 +762,7 @@ fn run_stats(
         if let Some((d, r, m)) = taste_counts {
             value["taste"] = serde_json::json!({"domains": d, "rules": r, "made": m});
         }
-        if summary.turns > 0 {
+        if summary.turns > 0 || summary.side_requests > 0 {
             value["meter"] = serde_json::to_value(&summary).expect("meter serialises");
         }
         if keeper.breaks > 0 || keeper.pings > 0 || keeper.compactions > 0 {
@@ -1047,6 +1059,21 @@ fn main() -> ExitCode {
                 value["agents"] = serde_json::json!({ "model": model });
             }
             let _ = writeln!(out, "{value}");
+            ExitCode::SUCCESS
+        }
+        Command::Side {
+            what: SideWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            let items = serde_json::from_str::<Vec<serde_json::Value>>(&input).unwrap_or_default();
+            let home = girth_home(&ctx);
+            for item in items {
+                if let Ok(side) = serde_json::from_value::<ledger::Side>(item) {
+                    let _ = ledger::append(&home, Event::Side(side));
+                }
+            }
             ExitCode::SUCCESS
         }
         Command::Keeper {
