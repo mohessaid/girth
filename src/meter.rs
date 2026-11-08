@@ -84,9 +84,11 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
         let rates = price::turn_rates(&t.model, t.agent);
-        let cost = match rates {
-            Some(r) => price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
-            None => {
+        // Claude Code's own price for the turn's requests, when the mod could add it up.
+        let cost = match (t.cost_micros, rates) {
+            (Some(micros), _) => micros as f64 / 1e6,
+            (None, Some(r)) => price::cost(r, t.input, t.output, t.cache_read, t.cache_write),
+            (None, None) => {
                 s.unpriced_turns += 1;
                 0.0
             }
@@ -299,6 +301,21 @@ mod tests {
         );
         // Nothing priced, so no source is the largest.
         assert!(!render(&odd).contains("largest"), "{}", render(&odd));
+    }
+
+    #[test]
+    fn claude_codes_own_price_is_preferred_over_list_prices() {
+        let mut priced = turn("/a", "claude-haiku-5-5", 200_000, None);
+        let mut odd = turn("/a", "mystery-model", 5, None);
+        for r in [&mut priced, &mut odd] {
+            if let Event::Turn(t) = &mut r.event {
+                t.cost_micros = Some(250_000);
+            }
+        }
+        let s = summarise(&[priced, odd], None);
+        assert!((s.cost - 0.5).abs() < 1e-12, "{}", s.cost);
+        // A model Girth can't price is priced by Claude Code's figure.
+        assert_eq!(s.unpriced_turns, 0);
     }
 
     #[test]

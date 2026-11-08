@@ -5,7 +5,8 @@
 //! 0.1× and 1-hour writes at 2× input), rechecked against docs.claude.com pricing on
 //! 2026-11-08 (Sonnet 5.5 cache hits fell to $0.10 on 2026-10-08). Claude Haiku 5.5 bills a
 //! request whose prompt is over 100,000 tokens at higher prices; a turn's tokens are
-//! summed over its requests, so the table prices every Haiku 5.5 turn at the lower tier; developers.openai.com/api/docs/pricing (standard
+//! summed over its requests, so the table prices every Haiku 5.5 turn at the lower tier
+//! (main-loop turns the mod could price from Claude Code's own records skip the table); developers.openai.com/api/docs/pricing (standard
 //! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
 //! cache writes at the 30-minute rate; aistudio.google.com/docs/pricing (standard tier,
 //! prompts up to 200K tokens, text input, read 2026-11-06) for the Gemini models Gemini

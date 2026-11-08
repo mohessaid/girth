@@ -70,6 +70,9 @@ let advised = false
 // Claude Code's requests outside turns (query_source → totals), from its collector
 // records; flushed to `girth side record` after a main-loop turn and at session end.
 const side = new Map()
+// The main loop's requests since its last turn: Claude Code's own price for them,
+// kept for the turn when their tokens add up to its usage.
+let main = { requests: 0, tokens: 0, micros: 0, priced: true }
 // Sources already counted through turn.complete, and mod forks (Girth's own pings).
 const TURN_SOURCES = new Set(['repl_main_thread', 'sdk', 'hook_prompt', 'plugin_model_complete', 'plugin_model_classify'])
 
@@ -187,6 +190,13 @@ function tally(a) {
   const source = a?.query_source
   const model = a?.model
   if (typeof source !== 'string' || typeof model !== 'string' || model === '') return
+  if (source === 'repl_main_thread' || source === 'sdk') {
+    main.requests += 1
+    main.tokens += count(a.input_tokens) + count(a.output_tokens) + count(a.cache_read_tokens) + count(a.cache_creation_tokens)
+    if (typeof a.cost_usd_micros === 'number' && Number.isFinite(a.cost_usd_micros)) main.micros += a.cost_usd_micros
+    else main.priced = false
+    return
+  }
   if (TURN_SOURCES.has(source) || source.startsWith('agent:')) return
   const key = source + '\u0000' + model
   const t = side.get(key) ?? { source, model, requests: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, cost_micros: 0 }
@@ -460,6 +470,11 @@ export function register(on) {
     breaks.delete(e.turnId)
     if (found) turn.breaks = found
     if (e.agentId === undefined && context > 0) turn.context = context
+    if (e.agentId === undefined) {
+      const sum = (turn.input ?? 0) + (turn.output ?? 0) + (turn.cache_read ?? 0) + (turn.cache_write ?? 0)
+      if (main.requests > 0 && main.priced && main.tokens === sum) turn.cost_micros = Math.round(main.micros)
+      main = { requests: 0, tokens: 0, micros: 0, priced: true }
+    }
     const note = e.agentId === undefined ? squeeze?.takeNote() : null
     if (note) turn.compacted = note
     const run = await $.process.run([launcher($), 'meter', 'record'], {

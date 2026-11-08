@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- **Claude Code's main-loop turns are priced at Claude Code's own figure.** Each request's record carries `cost_usd_micros`. The mod adds these up for each main-loop turn and stores the total as `cost_micros`, but only when the requests' tokens equal the turn's usage exactly, so a lost record never gives a wrong price. The meter and `advise` prefer that figure to Girth's price table. A stale table row, such as Sonnet 5.5's until 0.16, no longer skews these turns, and Haiku 5.5's long-prompt prices are applied as Claude Code bills them. A probe on Sonnet 5.5 matched the table to the millionth of a dollar. Subagent turns, which can run several at once, still use list prices.
+
 ### Fixed
 - **Cost per outcome sees through `rtk bypass`.** RTK 1.1 renamed `rtk proxy <cmd>` to `rtk bypass <cmd>`, and its instructions now tell agents to use it. A test run or commit behind the new name had no verdict until now.
 

@@ -946,3 +946,37 @@ test('a failing side record never disturbs the turn or the telemetry', async ($,
   const out = await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
   expect(out.text).toBe('kept')
 })
+
+test("a main-loop turn carries Claude Code's own price when its requests add up to the turn", async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('telemetry.log', { to: 'collector' }, () => ({ value: undefined }))
+  on('turn.complete', () => ({ text: '' }))
+  // USAGE: 2 + 7 + 8605 + 26631 = 35245 tokens, sent here as two requests.
+  const req = (source: string, i: number, o: number, r: number, w: number, micros: number) =>
+    apiRequest(source, micros, { input_tokens: i, output_tokens: o, cache_read_tokens: r, cache_creation_tokens: w })
+  await $.telemetry.log(req('repl_main_thread', 1, 3, 8605, 20000, 1500))
+  await $.telemetry.log(req('repl_main_thread', 1, 4, 0, 6631, 700))
+  // A subagent's request is not the main loop's.
+  await $.telemetry.log(req('agent:builtin:general-purpose', 1, 1, 1, 1, 99))
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // Requests that do not add up (one record lost): no price; list prices apply.
+  await $.telemetry.log(req('sdk', 1, 3, 8605, 20000, 1500))
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // No records at all: no price.
+  await $.turn.complete({ turnId: 't3', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // One unpriced request: no price.
+  await $.telemetry.log(req('sdk', 2, 7, 8605, 26631, 1500))
+  await $.telemetry.log({ ...req('sdk', 0, 0, 0, 0, 0), attributes: { ...req('sdk', 0, 0, 0, 0, 0).attributes, cost_usd_micros: undefined } })
+  await $.turn.complete({ turnId: 't4', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // A subagent's turn takes no main-loop price.
+  await $.telemetry.log(req('sdk', 2, 7, 8605, 26631, 1500))
+  await $.turn.complete({ turnId: 'a', agentId: 'ag', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 't5', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const turns = runs.filter((r) => r.argv[1] === 'meter').map((r) => JSON.parse(r.stdin!))
+  expect(turns.map((t) => t.cost_micros)).toEqual([2200, undefined, undefined, undefined, undefined, 1500])
+})
