@@ -3,6 +3,7 @@
 //! Each source file's imported length is kept in `<girth home>/import.json`, so a
 //! re-run appends only what is new. Logs are read, never changed.
 
+pub mod antigravity;
 pub mod codex;
 pub mod copilot;
 pub mod gemini;
@@ -16,7 +17,7 @@ use crate::ledger;
 pub const OFFSETS_FILE: &str = "import.json";
 
 /// The harnesses `girth import` reads, in the order it reads them.
-pub const SOURCES: [&str; 4] = ["codex", "copilot", "opencode", "gemini"];
+pub const SOURCES: [&str; 5] = ["codex", "copilot", "opencode", "gemini", "antigravity"];
 
 type Offsets = BTreeMap<String, BTreeMap<String, usize>>;
 
@@ -157,6 +158,84 @@ pub fn import_gemini(gemini_dir: &Path, girth_home: &Path) -> std::io::Result<us
         }
         if kept > cursor {
             seen.insert(key, kept as usize);
+        }
+    }
+    save(girth_home, &offsets, added)?;
+    Ok(turns)
+}
+
+/// Append the Antigravity CLI turns in `<dir>/*.db` not imported before, read by running
+/// `<sqlite3> -readonly` on each; returns how many. A conversation's last turn waits until
+/// the file has been idle for `antigravity::IDLE_DONE_S` or a later prompt exists. A
+/// `sqlite3` that can't be run is noted on stderr and imports nothing; a file it can't
+/// read is skipped.
+pub fn import_antigravity(
+    sqlite3: &Path,
+    dir: &Path,
+    girth_home: &Path,
+    now: u64,
+) -> std::io::Result<usize> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(0);
+    };
+    let mut dbs: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "db"))
+        .collect();
+    dbs.sort();
+    let mut offsets = load(girth_home);
+    let seen = offsets.entry("antigravity".into()).or_default();
+    let (mut added, mut turns) = (0, 0);
+    for db in dbs {
+        let uri = format!("file:{}?mode=ro", db.display());
+        let run = std::process::Command::new(sqlite3)
+            .args([
+                "-readonly",
+                "-batch",
+                "-noheader",
+                "-separator",
+                "|",
+                &uri,
+                antigravity::QUERY,
+            ])
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output();
+        let rows = match run {
+            Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
+            Ok(_) => continue,
+            Err(e) => {
+                eprintln!(
+                    "girth: skipped Antigravity: could not run {}: {e}",
+                    sqlite3.display()
+                );
+                return Ok(0);
+            }
+        };
+        // agy writes the database or its -wal on every step. Readers, Girth's own sqlite3
+        // included, touch the -shm index and may create an empty -wal, so those don't count.
+        let changed = ["", "-wal"]
+            .iter()
+            .filter_map(|x| std::fs::metadata(format!("{}{x}", db.display())).ok())
+            .filter(|m| m.len() > 0)
+            .filter_map(|m| m.modified().ok())
+            .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .max()
+            .unwrap_or(0);
+        let idle = now.saturating_sub(changed) >= antigravity::IDLE_DONE_S;
+        let key = db.display().to_string();
+        let cursor = seen.get(&key).copied().unwrap_or(0);
+        let (events, kept) =
+            antigravity::parse(&antigravity::Conversation::from_rows(&rows), cursor, idle);
+        for (ts, event) in events {
+            ledger::append_at(girth_home, ts, event)?;
+            added += 1;
+            turns += 1;
+        }
+        if kept > cursor {
+            seen.insert(key, kept);
         }
     }
     save(girth_home, &offsets, added)?;

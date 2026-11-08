@@ -82,7 +82,10 @@ fn a_failed_download_falls_back_to_the_newest_earlier_plugin_version() {
     let cache = tmp.path().join("cache/girth/girth");
     let script = install(&cache.join("0.17.0"));
     for v in ["0.9.0", "0.15.0", "0.16.0"] {
-        fake_bin(&cache.join(v).join("skills/girth/bin/girth"), &format!("v{v}"));
+        fake_bin(
+            &cache.join(v).join("skills/girth/bin/girth"),
+            &format!("v{v}"),
+        );
     }
     // A folder that is not a version is never used.
     fake_bin(&cache.join("latest/skills/girth/bin/girth"), "latest");
@@ -96,7 +99,10 @@ fn a_failed_download_falls_back_to_the_newest_earlier_plugin_version() {
     // A checkout (not a version folder) never looks at its neighbours.
     let repo = tmp.path().join("work/girth");
     let script = install(&repo);
-    fake_bin(&tmp.path().join("work/0.1.0/skills/girth/bin/girth"), "neighbour");
+    fake_bin(
+        &tmp.path().join("work/0.1.0/skills/girth/bin/girth"),
+        "neighbour",
+    );
     let out = run(&script, &env);
     assert_eq!(out.status.code(), Some(127));
 }

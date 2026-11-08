@@ -9,8 +9,8 @@
 //! (main-loop turns the mod could price from Claude Code's own records skip the table); developers.openai.com/api/docs/pricing (standard
 //! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
 //! cache writes at the 30-minute rate; aistudio.google.com/docs/pricing (standard tier,
-//! prompts up to 200K tokens, text input, read 2026-11-06) for the Gemini models Gemini
-//! CLI runs. `gemini-3.1-flash-lite-preview` takes the `gemini-3.1-flash-lite` row, and
+//! prompts up to 200K tokens, text input, read 2026-11-06; 3.6 and 3.8 Flash read
+//! 2026-11-08) for the Gemini models Gemini CLI and Antigravity CLI run. `gemini-3.1-flash-lite-preview` takes the `gemini-3.1-flash-lite` row, and
 //! `gemini-3-pro-preview`, which the page no longer lists, is left unpriced. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
 //! reports. Claude subagents write the 5-minute cache (1.25× input): see `turn_rates`.
@@ -27,7 +27,7 @@ pub struct Rates {
 /// Rates for a model id. Matches the exact id, or the id followed by a
 /// bracketed suffix (`claude-opus-5-5[1m]`).
 pub fn rates(model: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 19] = [
+    const TABLE: [(&str, Rates); 22] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -80,6 +80,11 @@ pub fn rates(model: &str) -> Option<Rates> {
         ("gemini-3.1-flash-lite-preview", google(0.25, 0.025, 1.50)),
         ("gemini-2.5-pro", google(1.25, 0.125, 10.0)),
         ("gemini-2.5-flash", google(0.30, 0.03, 2.50)),
+        // Until 2026-12-31; Google doubles all three on 2027-01-01. Antigravity CLI logs
+        // 3.8 Flash as `gemini-3.8-flash-n`.
+        ("gemini-3.8-flash", google(0.75, 0.075, 3.75)),
+        ("gemini-3.8-flash-n", google(0.75, 0.075, 3.75)),
+        ("gemini-3.6-flash", google(0.75, 0.075, 3.75)),
         ("gpt-6-astra", openai(10.0, 1.0, 12.5, 50.0)),
         ("gpt-6.1-sol", openai(2.0, 0.10, 2.5, 10.0)),
         ("gpt-6-sol", openai(2.0, 0.20, 2.5, 10.0)),
@@ -232,6 +237,10 @@ mod tests {
             ("gemini-3.1-flash-lite-preview", (0.25, 1.50, 0.025)),
             ("gemini-2.5-pro", (1.25, 10.0, 0.125)),
             ("gemini-2.5-flash", (0.30, 2.50, 0.03)),
+            // Antigravity CLI's models; `-n` is how agy 1.5 logs 3.8 Flash.
+            ("gemini-3.8-flash", (0.75, 3.75, 0.075)),
+            ("gemini-3.8-flash-n", (0.75, 3.75, 0.075)),
+            ("gemini-3.6-flash", (0.75, 3.75, 0.075)),
         ];
         for (id, want) in rows {
             let r = rates(id).unwrap();

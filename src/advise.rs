@@ -36,6 +36,7 @@ fn names(harness: Option<&str>) -> (&'static str, &'static str) {
         Some("codex") => ("/new", "AGENTS.md"),
         Some("copilot" | "opencode") => ("/clear", "AGENTS.md"),
         Some("gemini") => ("/clear", "GEMINI.md"),
+        Some("antigravity") => ("/clear", "AGENTS.md"),
         _ => ("/clear", "CLAUDE.md"),
     }
 }

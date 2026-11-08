@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth import` reads Antigravity CLI.**
+  - **What it reads:** each conversation in `~/.gemini/antigravity-cli/conversations/` is a SQLite database. Girth reads it through the `sqlite3` command, read-only, so it needs no SQLite code. Without `sqlite3`, Antigravity is skipped with a note.
+  - **Turns:** a turn is one prompt and the model calls after it. A conversation's last turn is imported once a later prompt exists, or once the conversation has been idle for 30 minutes.
+  - **Checked against agy's own report:** the token fields were read off agy 1.5.2's databases. On one conversation, input (35,102), output (475) and thinking (403) matched agy's own `--output-format json` usage exactly. tokscale's parser adds a fixed per-call count to input (1,318 tokens on agy 1.5.2), and agy's report leaves it out, so Girth does too.
+  - `girth advise --harness antigravity` names `/clear` and `AGENTS.md`.
+  - **Limit:** on agy versions before 1.5, whose steps don't name their model call, a conversation's model calls all go to its last prompt. The totals are still right.
+- **List prices for `gemini-3.8-flash` (logged by agy as `gemini-3.8-flash-n`) and `gemini-3.6-flash`:** $0.75 input, $3.75 output and $0.075 cache reads per million tokens. These are Google's prices through 2026-12-31; Google doubles them on 2027-01-01.
+
 ### Fixed
 - **A plugin update no longer switches Girth off while GitHub's release downloads are failing.** Each Claude Code plugin version lives in its own folder and downloads its binary the first time it runs. On 2026-11-08, GitHub served HTTP 504 for release files for a while, so a fresh 0.17.0 had no binary. The launcher now runs the newest earlier version's binary from the plugin cache, with a note on stderr. It doesn't copy that binary into place, so the next run tries the download again. A checkout, whose folder isn't named as a version, never looks at the folders beside it.
 

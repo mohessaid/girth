@@ -1524,6 +1524,80 @@ fn import_reads_gemini_cli_sessions() {
 }
 
 #[test]
+fn import_reads_antigravity_cli_conversations_through_sqlite3() {
+    if std::process::Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipped: no sqlite3");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let dir = home.join(".gemini/antigravity-cli/conversations");
+    std::fs::create_dir_all(&dir).unwrap();
+    let db = dir.join("c1.db");
+    let sql = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/antigravity/conversation.sql"),
+    )
+    .unwrap();
+    let mut make = std::process::Command::new("sqlite3")
+        .arg(&db)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write as _;
+    make.stdin
+        .take()
+        .unwrap()
+        .write_all(sql.as_bytes())
+        .unwrap();
+    assert!(make.wait().unwrap().success());
+    // A file that is not a database is skipped.
+    std::fs::write(dir.join("broken.db"), "not sqlite").unwrap();
+    let g = tmp.path().join("g");
+    let import = || {
+        girth()
+            .env("GIRTH_HOME", &g)
+            .env("GEMINI_CLI_HOME", &home)
+            .args(["import", "--from", "antigravity"])
+            .assert()
+            .success()
+    };
+    // Just written: the last turn may still be running.
+    import().stdout("imported 1 turns from antigravity\n");
+    let old = std::process::Command::new("touch")
+        .args(["-d", "2026-01-01T00:00:00"])
+        .arg(&db)
+        .status()
+        .unwrap();
+    assert!(old.success());
+    // Readers touch -shm and may leave an empty -wal: neither means agy is still writing.
+    std::fs::write(dir.join("c1.db-shm"), "index").unwrap();
+    std::fs::write(dir.join("c1.db-wal"), "").unwrap();
+    import().stdout("imported 1 turns from antigravity\n");
+    import().stdout("imported 0 turns from antigravity\n");
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.lines().count(), 2, "{ledger}");
+    assert!(ledger.contains(r#""harness":"antigravity""#), "{ledger}");
+    assert!(ledger.contains(r#""project":"/work/agy-app""#), "{ledger}");
+    assert!(ledger.contains(r#""input":16969"#), "{ledger}");
+    // Without sqlite3, Antigravity is skipped with a note.
+    let fresh = tmp.path().join("g2");
+    girth()
+        .env("GIRTH_HOME", &fresh)
+        .env("GEMINI_CLI_HOME", &home)
+        .env("GIRTH_SQLITE3_BIN", tmp.path().join("no-sqlite3"))
+        .args(["import", "--from", "antigravity"])
+        .assert()
+        .success()
+        .stdout("imported 0 turns from antigravity\n")
+        .stderr(predicates::str::contains("girth: skipped Antigravity"));
+}
+
+#[test]
 fn stats_counts_one_harness_s_skill_uses() {
     let tmp = TempDir::new().unwrap();
     let g = tmp.path().join("g");

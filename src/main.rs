@@ -84,7 +84,7 @@ enum Command {
         #[arg(long)]
         project: Option<String>,
         /// Only skill uses and turns from this harness (`claude-code`, `codex`, `copilot`,
-        /// `opencode`, `gemini`); default all.
+        /// `opencode`, `gemini`, `antigravity`); default all.
         #[arg(long)]
         harness: Option<String>,
     },
@@ -164,7 +164,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`, `antigravity`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -179,7 +179,7 @@ enum Command {
     },
     /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode, Gemini CLI) to the ledger.
     Import {
-        /// Which harness: `codex`, `copilot`, `opencode`, `gemini` or `all`.
+        /// Which harness: `codex`, `copilot`, `opencode`, `gemini`, `antigravity` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1127,7 +1127,7 @@ fn main() -> ExitCode {
             use girth::import::SOURCES;
             if from != "all" && !SOURCES.contains(&from.as_str()) {
                 eprintln!(
-                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini or all)"
+                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini, antigravity or all)"
                 );
                 return ExitCode::from(2);
             }
@@ -1146,6 +1146,14 @@ fn main() -> ExitCode {
                     "gemini" => var("GEMINI_CLI_HOME")
                         .or_else(|| ctx.home.clone())
                         .map(|h| girth::import::import_gemini(&h.join(".gemini"), &g)),
+                    "antigravity" => var("GEMINI_CLI_HOME")
+                        .or_else(|| ctx.home.clone())
+                        .map(|h| {
+                            let sqlite3 =
+                                var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
+                            let dir = h.join(".gemini/antigravity-cli/conversations");
+                            girth::import::import_antigravity(&sqlite3, &dir, &g, ledger::now())
+                        }),
                     _ => var("XDG_DATA_HOME")
                         .or_else(|| under_home(".local/share"))
                         .map(|d| {
