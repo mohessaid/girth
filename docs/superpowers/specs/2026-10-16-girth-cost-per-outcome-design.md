@@ -22,7 +22,7 @@ For each Bash call in a turn (main or subagent), from the command and the end of
 - **Test commands:** `cargo test|nextest|llvm-cov`, `make check|test`, `npm|pnpm|yarn|bun [run] test`, `npx vitest|jest|playwright test`, `vitest`, `jest`, `pytest`, `python -m pytest`, `go test`, `deno test`, `flutter test`, `dart test`, `mix test`, `rspec`, `phpunit`, `claude plugin test`.
 - **Normalising a command line:**
   - It is split on `&&`, `||`, `;`, `|` and newlines; heredoc bodies are dropped first; `cd …` segments are skipped.
-  - Leading wrappers are stripped: `rtk`, `rtk proxy`, `sudo`, `time`, `env`, `timeout N`, `nice -n N`, `mise exec … --`, `uv run`, `NAME=value`, and a `/usr/bin/`-style path.
+  - Leading wrappers are stripped: `rtk`, `rtk proxy`, `rtk bypass`, `sudo`, `time`, `env`, `timeout N`, `nice -n N`, `mise exec … --`, `uv run`, `NAME=value`, and a `/usr/bin/`-style path.
   - `git -C <dir> commit` counts.
 - **Summaries read from the last 4,000 characters:**
   - **Failing:** `test result: FAILED`, a line starting `FAIL` or `FAILED`, `N failed|failure(s)|error(s)` with N ≥ 1, `fail N` (node) or `N fail` (bun) with N ≥ 1, `could not compile`, `make: *** … Error`.

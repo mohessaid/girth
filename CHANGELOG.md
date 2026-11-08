@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **Cost per outcome sees through `rtk bypass`.** RTK 1.1 renamed `rtk proxy <cmd>` to `rtk bypass <cmd>`, and its instructions now tell agents to use it. A test run or commit behind the new name had no verdict until now.
+
 ## [0.16.0] - 2026-11-08
 
 ### Added

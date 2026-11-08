@@ -126,7 +126,7 @@ fn normalise(segment: &str) -> Vec<String> {
     let mut words: Vec<&str> = segment.split_whitespace().collect();
     loop {
         let skip = match words.as_slice() {
-            ["rtk", "proxy", ..] | ["timeout", _, ..] | ["uv", "run", ..] => 2,
+            ["rtk", "proxy" | "bypass", ..] | ["timeout", _, ..] | ["uv", "run", ..] => 2,
             ["nice", "-n", _, ..] => 3,
             ["rtk" | "sudo" | "time" | "env", ..] => 1,
             ["mise", "exec", rest @ ..] => match rest.iter().position(|w| *w == "--") {
@@ -409,6 +409,8 @@ mod tests {
         for command in [
             "rtk cargo test",
             "rtk proxy cargo test 2>&1 | tail -20",
+            // RTK 1.1 renamed `rtk proxy` to `rtk bypass`.
+            "rtk bypass cargo test 2>&1 | tail -20",
             "cd /repo && cargo test",
             "cd /repo; make check",
             "/usr/bin/make check",

@@ -101,6 +101,6 @@ Measured with `examples/outcomes/analyze-outcomes.py`. It pairs each Bash call w
 - **A filter at the end of the pipe owns the exit status.** A passing run piped to `grep FAILED` exits 1 when grep finds nothing. Such errors are ignored, and the output decides. Re-measured with this rule (found in review), the failure share stays at 35%.
 - **Spend while the last test run had failed:** $333, or 7.2% of all spend. Request-level, so a lower bound on the cost of fix loops.
 - **The classifier was checked against ground truth.** On this repo it found 117 commits in the transcripts; `git log` has 122 non-merge commits in the same period. The rest are merges, which `git merge` makes, not `git commit`.
-- **Wrappers the classifier must strip:** `rtk` and `rtk proxy`, `/usr/bin/`, `timeout N`, `nice -n N`, `mise exec … --`, `uv run`, environment assignments, `cd … &&` chains and heredoc bodies.
+- **Wrappers the classifier must strip:** `rtk`, `rtk proxy` and `rtk bypass`, `/usr/bin/`, `timeout N`, `nice -n N`, `mise exec … --`, `uv run`, environment assignments, `cd … &&` chains and heredoc bodies.
   - Without the heredoc rule, a `python3 - <<EOF` script that mentions `pytest` counts as a test run.
 - **Verdict:** cost per commit is informative and cheap to compute locally. Cost per passing test run is not a useful unit, because agents rerun tests constantly. Report pass/fail counts instead.
