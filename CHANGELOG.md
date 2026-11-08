@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-08
+
 ### Changed
 - **Each turn is priced at the rates of its own day.** Girth prices turns from stored tokens every time it reports, so before this release a vendor's price change also repriced every earlier turn. The meter and `advise` now look up each turn's and side query's rates as of when it ran. Dated rows so far:
   - Claude Sonnet 5.5 cache reads were $0.20 before 2026-10-08.
@@ -287,7 +289,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/mohessaid/girth/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/mohessaid/girth/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/mohessaid/girth/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/mohessaid/girth/compare/v0.15.0...v0.16.0
