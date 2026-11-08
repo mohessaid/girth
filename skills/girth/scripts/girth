@@ -73,6 +73,20 @@ download() {
 
 if download; then exec "$bin_dir/girth" "$@"; fi
 
+# No download (offline, or the release host failing): in Claude Code's plugin cache,
+# <cache>/<version>/, run the newest earlier version's binary for now. It is not
+# copied here, so the next run tries the download again.
+is_version() { case "$1" in *[!0-9.]* | '' | .* | *.) return 1 ;; *.*) return 0 ;; *) return 1 ;; esac; }
+if is_version "$(basename "$repo")"; then
+  prev=$(cd "$repo/.." && for d in *; do
+    [ "$d" != "$(basename "$repo")" ] && is_version "$d" && [ -x "$d/skills/girth/bin/girth" ] && echo "$d"
+  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+  if [ -n "$prev" ]; then
+    echo "girth: could not download v$GIRTH_VERSION; using $prev for now." >&2
+    exec "$repo/../$prev/skills/girth/bin/girth" "$@"
+  fi
+fi
+
 if [ -f "$repo/Cargo.toml" ] && command -v cargo >/dev/null 2>&1; then
   cargo build --release --quiet --manifest-path "$repo/Cargo.toml" >&2
   exec "$repo/target/release/girth" "$@"

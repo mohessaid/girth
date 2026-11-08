@@ -76,6 +76,32 @@ fn repo_release_build_is_used_in_a_checkout() {
 }
 
 #[test]
+fn a_failed_download_falls_back_to_the_newest_earlier_plugin_version() {
+    // Claude Code's plugin cache: <cache>/<version>/, one folder per installed version.
+    let tmp = TempDir::new().unwrap();
+    let cache = tmp.path().join("cache/girth/girth");
+    let script = install(&cache.join("0.17.0"));
+    for v in ["0.9.0", "0.15.0", "0.16.0"] {
+        fake_bin(&cache.join(v).join("skills/girth/bin/girth"), &format!("v{v}"));
+    }
+    // A folder that is not a version is never used.
+    fake_bin(&cache.join("latest/skills/girth/bin/girth"), "latest");
+    let env = [("GIRTH_DOWNLOAD_BASE", "file:///nonexistent-girth-release")];
+    let out = run(&script, &env);
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "v0.16.0 --flag\n");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("using 0.16.0 for now"), "{err}");
+    // Not cached: the next run tries the download again.
+    assert!(!cache.join("0.17.0/skills/girth/bin/girth").exists());
+    // A checkout (not a version folder) never looks at its neighbours.
+    let repo = tmp.path().join("work/girth");
+    let script = install(&repo);
+    fake_bin(&tmp.path().join("work/0.1.0/skills/girth/bin/girth"), "neighbour");
+    let out = run(&script, &env);
+    assert_eq!(out.status.code(), Some(127));
+}
+
+#[test]
 fn missing_binary_explains_how_to_install() {
     let tmp = TempDir::new().unwrap();
     let script = install(tmp.path());

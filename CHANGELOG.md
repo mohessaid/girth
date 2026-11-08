@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **A plugin update no longer switches Girth off while GitHub's release downloads are failing.** Each Claude Code plugin version lives in its own folder and downloads its binary the first time it runs. On 2026-11-08, GitHub served HTTP 504 for release files for a while, so a fresh 0.17.0 had no binary. The launcher now runs the newest earlier version's binary from the plugin cache, with a note on stderr. It doesn't copy that binary into place, so the next run tries the download again. A checkout, whose folder isn't named as a version, never looks at the folders beside it.
+
 ## [0.17.0] - 2026-11-08
 
 ### Changed
