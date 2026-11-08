@@ -721,6 +721,14 @@ mod tests {
     }
 
     #[test]
+    fn each_harness_names_its_own_fresh_session_command_and_instructions_file() {
+        assert_eq!(names(Some("antigravity")), ("/clear", "AGENTS.md"));
+        assert_eq!(names(Some("gemini")), ("/clear", "GEMINI.md"));
+        assert_eq!(names(Some("codex")), ("/new", "AGENTS.md"));
+        assert_eq!(names(None), ("/clear", "CLAUDE.md"));
+    }
+
+    #[test]
     fn other_harnesses_trim_large_output_without_rtk() {
         let records = [rec(10, bash_out(None, 2, 8_000, 50_000))];
         let on = On {

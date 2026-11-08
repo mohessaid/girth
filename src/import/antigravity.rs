@@ -340,7 +340,15 @@ mod tests {
         }
         usage.extend(int_f(6, 24));
         usage.extend(msg_f(11, resp.as_bytes()));
-        let mut chat = msg_f(4, &usage);
+        // Fixed-width fields (wire types 1 and 5) come before the usage in real blobs.
+        let mut chat = [
+            &[0x09][..],
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+            &[0x15],
+            &[1, 2, 3, 4],
+        ]
+        .concat();
+        chat.extend(msg_f(4, &usage));
         if !model.is_empty() {
             chat.extend(msg_f(19, model.as_bytes()));
         }
@@ -461,6 +469,31 @@ mod tests {
         lone.steps.push((7, 14, step_blob(3_000, None)));
         let (events, kept) = parse(&lone, 0, true);
         assert_eq!((turns(&events).len(), kept), (2, 3));
+    }
+
+    #[test]
+    fn varints_with_a_bare_continuation_byte_and_truncated_fields_are_read_right() {
+        // 128 is [0x80, 0x01]: a byte of exactly 0x80 continues the varint.
+        let mut c = two_turns();
+        c.gens[0].1 = gen_blob("gemini-3.8-flash-n", 128, Some(16_384), Some(2), "r1");
+        let (events, _) = parse(&c, 0, true);
+        let t = turns(&events);
+        assert_eq!(
+            (t[0].1.input, t[0].1.cache_read),
+            (128 + 8_666, 16_384 + 30_000)
+        );
+        // A fixed64 or fixed32 field cut short is no message.
+        assert!(fields(&[0x09, 1, 2, 3]).is_none());
+        assert!(fields(&[0x15, 1, 2]).is_none());
+        assert_eq!(
+            fields(&[0x09, 1, 2, 3, 4, 5, 6, 7, 8]).map(|f| f.len()),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn a_conversation_is_idle_after_half_an_hour() {
+        assert_eq!(IDLE_DONE_S, 30 * 60);
     }
 
     #[test]

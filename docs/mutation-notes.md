@@ -88,3 +88,17 @@ v0.5 (2026-10-15):
 - The side-queries line printed with no side queries.
 
 Tests now pin both. A rerun of the affected functions caught all 19 mutants.
+
+## Antigravity import (2026-11-08)
+
+The first run: 114 mutants, 93 caught, 8 unviable, 4 timeouts and 9 missed. Tests now pin seven of the missed:
+- the decoder's fixed-width fields and their bounds
+- a varint byte of exactly 0x80
+- the 30-minute idle window
+- `advise`'s Antigravity names
+
+A rerun caught all 34 mutants in the decoder and `names`; its 2 timeouts are mutations that make the decoder loop forever.
+
+The other two are equivalent:
+- `import_antigravity`'s `out.status.success()` guard replaced with `true`. A failed `sqlite3` prints no rows, so the conversation parses to nothing either way.
+- `kept > cursor` replaced with `>=`. That only rewrites an unchanged cursor.
