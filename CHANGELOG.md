@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **Search finds DeepSeek Harness skills** in `.dsh/skills` and `~/.dsh/skills`, the folders its own docs name. That makes 80 harnesses. The `skills` CLI's table doesn't list DeepSeek Harness yet, so the folders go in Girth's hand-kept extras.
+
 ## [0.19.0] - 2026-11-08
 
 ### Changed

@@ -24,7 +24,7 @@ Distil only the slice your project needs from the skills you already have — 38
   <a href="examples/portability/RESULTS.md"><img alt="Works with GitHub Copilot CLI" src="https://img.shields.io/badge/works%20with-Copilot%20CLI-24292f?logo=githubcopilot"></a>
   <a href="examples/portability/RESULTS.md"><img alt="Works with OpenCode" src="https://img.shields.io/badge/works%20with-OpenCode-111111"></a>
   <a href="examples/portability/RESULTS.md"><img alt="Works with Antigravity CLI" src="https://img.shields.io/badge/works%20with-Antigravity%20CLI-4285f4?logo=google"></a>
-  <a href="#every-harness"><img alt="Finds skills for 79 harnesses" src="https://img.shields.io/badge/skill%20folders-79%20harnesses-6e7781"></a>
+  <a href="#every-harness"><img alt="Finds skills for 80 harnesses" src="https://img.shields.io/badge/skill%20folders-80%20harnesses-6e7781"></a>
 </p>
 
 <a href="#install">Install</a> · <a href="#how-it-works">How it works</a> · <a href="examples/studio/RESULTS.md">Results</a> · <a href="CONTRIBUTING.md">Contributing</a>
@@ -135,7 +135,7 @@ The plugin registers a `PostToolUse` hook on skill loads (about 1 ms) and, on Cl
 
 Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/specification) skill, so it is not tied to Claude Code:
 
-- **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`).
+- **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`), plus DeepSeek Harness, which the table doesn't list yet (`.dsh/skills`, `~/.dsh/skills`).
 - **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead. `girth validate` then links each crafted skill into the other folder, so a skill crafted in one harness loads in all of them, and the project cache keeps compounding when you switch harnesses.
 - **Counts what other harnesses spend.** `girth import` reads the local session logs of Codex, GitHub Copilot CLI, OpenCode, Gemini CLI and Antigravity CLI. `girth advise --harness codex` (or `copilot`, `opencode`, `gemini`, `antigravity`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent:
   - 140 Codex turns, $173.00 at OpenAI list prices;

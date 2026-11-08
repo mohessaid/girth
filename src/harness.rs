@@ -12,9 +12,13 @@ include!("harness_table.rs");
 
 /// Skill dirs the harnesses read beyond the `skills` CLI's table, checked on
 /// disk or in their docs (2026-11-06): Codex's and the Antigravity CLI's user
-/// dirs, and the project dirs of Cursor, Copilot, OpenCode and Gemini CLI.
-pub const EXTRA_DIRS: [&str; 7] = [
+/// dirs, and the project dirs of Cursor, Copilot, OpenCode and Gemini CLI. DeepSeek
+/// Harness, which the table lacks, reads `.dsh/skills` and `<DSH_HOME>/skills`, its home
+/// defaulting to `~/.dsh` (its docs/subsystems/skills.md and shell-env README, 2026-11-08).
+pub const EXTRA_DIRS: [&str; 9] = [
     "~/.codex/skills",
+    "~/.dsh/skills",
+    ".dsh/skills",
     "~/.gemini/antigravity-cli/skills",
     "~/.config/opencode/skills",
     ".cursor/skills",
@@ -77,6 +81,9 @@ mod tests {
         assert!(dirs.contains(&".cursor/skills"));
         assert!(dirs.contains(&".github/skills"));
         assert!(dirs.contains(&"~/.astrbot/data/skills"));
+        // DeepSeek Harness, absent from the skills table: its own docs name these.
+        assert!(dirs.contains(&".dsh/skills"));
+        assert!(dirs.contains(&"~/.dsh/skills"));
     }
 
     #[test]
