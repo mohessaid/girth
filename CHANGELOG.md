@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-08
+
 ### Changed
 - **Claude Code's main-loop turns are priced at Claude Code's own figure.** Each request's record carries `cost_usd_micros`. The mod adds these up for each main-loop turn and stores the total as `cost_micros`, but only when the requests' tokens equal the turn's usage exactly, so a lost record never gives a wrong price. The meter and `advise` prefer that figure to Girth's price table. A stale table row, such as Sonnet 5.5's until 0.16, no longer skews these turns, and Haiku 5.5's long-prompt prices are applied as Claude Code bills them. A probe on Sonnet 5.5 matched the table to the millionth of a dollar. Subagent turns, which can run several at once, still use list prices.
 
@@ -265,7 +267,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/mohessaid/girth/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/mohessaid/girth/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mohessaid/girth/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/mohessaid/girth/compare/v0.13.0...v0.14.0
