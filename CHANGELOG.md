@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **Claude Sonnet 5.5 cache reads are priced at $0.10 per million tokens, not $0.20.** Anthropic halved them on 2026-10-08, two days after the price list Girth was built from. Cache reads are most of a Claude Code session's input, so Sonnet 5.5 costs came out too high. Prices are worked out from the stored token counts each time, so past turns are corrected too. Claude Haiku 5.5 charges more when a request's prompt is over 100,000 tokens. A turn stores token sums across its requests, not each request's prompt size, so Girth prices every Haiku 5.5 turn at the lower rate.
+
 ## [0.15.0] - 2026-11-07
 
 ### Added

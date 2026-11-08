@@ -2,7 +2,10 @@
 //!
 //! Sources: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
 //! 2026-10-06) for Claude models (earlier models from its legacy table, with cache reads at
-//! 0.1× and 1-hour writes at 2× input); developers.openai.com/api/docs/pricing (standard
+//! 0.1× and 1-hour writes at 2× input), rechecked against docs.claude.com pricing on
+//! 2026-11-08 (Sonnet 5.5 cache hits fell to $0.10 on 2026-10-08). Claude Haiku 5.5 bills a
+//! request whose prompt is over 100,000 tokens at higher prices; a turn's tokens are
+//! summed over its requests, so the table prices every Haiku 5.5 turn at the lower tier; developers.openai.com/api/docs/pricing (standard
 //! tier, short context, read 2026-11-06) for the GPT-6 models Codex runs, with
 //! cache writes at the 30-minute rate; aistudio.google.com/docs/pricing (standard tier,
 //! prompts up to 200K tokens, text input, read 2026-11-06) for the Gemini models Gemini
@@ -38,7 +41,7 @@ pub fn rates(model: &str) -> Option<Rates> {
             Rates {
                 input: 2.0,
                 output: 10.0,
-                cache_read: 0.20,
+                cache_read: 0.10,
                 cache_write: 4.0,
             },
         ),
@@ -247,7 +250,18 @@ mod tests {
             (4.0, 20.0, 0.20, 8.0)
         );
         assert_eq!(rates("claude-opus-5-5[1m]"), Some(opus));
-        assert_eq!(rates("claude-sonnet-5-5").unwrap().cache_read, 0.20);
+        // Anthropic cut Sonnet 5.5's cache hits to 5% of input (2026-10-08).
+        let sonnet = rates("claude-sonnet-5-5").unwrap();
+        assert_eq!(
+            (
+                sonnet.input,
+                sonnet.output,
+                sonnet.cache_read,
+                sonnet.cache_write
+            ),
+            (2.0, 10.0, 0.10, 4.0)
+        );
+        assert_eq!(sonnet.five_minute().cache_write, 2.5);
         assert_eq!(rates("claude-haiku-5-5").unwrap().input, 0.10);
         assert_eq!(rates("claude-fable-5-1").unwrap().cache_read, 0.25);
         assert_eq!(rates("gpt-6"), None);
