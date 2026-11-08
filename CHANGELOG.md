@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-08
+
 ### Added
 - **Claude Code's side queries are metered.** These are the requests it sends outside the conversation:
   - progress summaries of background agents (`agent_summary`)
@@ -257,7 +259,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/mohessaid/girth/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mohessaid/girth/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/mohessaid/girth/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mohessaid/girth/compare/v0.12.0...v0.13.0
