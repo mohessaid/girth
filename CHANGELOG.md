@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-08
+
 ### Added
 - **`girth import` reads Antigravity CLI.**
   - **What it reads:** each conversation in `~/.gemini/antigravity-cli/conversations/` is a SQLite database. Girth reads it through the `sqlite3` command, read-only, so it needs no SQLite code. Without `sqlite3`, Antigravity is skipped with a note.
@@ -279,7 +281,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/mohessaid/girth/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/mohessaid/girth/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/mohessaid/girth/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/mohessaid/girth/compare/v0.14.0...v0.15.0
