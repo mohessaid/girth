@@ -1,4 +1,5 @@
-//! Per-model API prices, for cost estimates from recorded token counts.
+//! Per-model API prices, for cost estimates from recorded token counts. A vendor's dated
+//! change goes in `PERIODS`, so each turn is priced as it was billed (`rates_at`).
 //!
 //! Sources: the claude-api skill bundled with Claude Code 2.1.300 (pricing cached
 //! 2026-10-06) for Claude models (earlier models from its legacy table, with cache reads at
@@ -24,9 +25,60 @@ pub struct Rates {
     pub cache_write: f64,
 }
 
-/// Rates for a model id. Matches the exact id, or the id followed by a
-/// bracketed suffix (`claude-opus-5-5[1m]`).
+/// A model's rates while `from <= ts < until` (unix seconds), over its `rates` row: a
+/// vendor's dated price change, before or after it happens.
+const PERIODS: [(&str, u64, u64, Rates); 4] = [
+    // Anthropic halved Sonnet 5.5's cache hits to $0.10 on 2026-10-08.
+    (
+        "claude-sonnet-5-5",
+        0,
+        1_791_417_600,
+        Rates {
+            input: 2.0,
+            output: 10.0,
+            cache_read: 0.20,
+            cache_write: 4.0,
+        },
+    ),
+    // Google doubles Gemini 3.6 and 3.8 Flash on 2027-01-01.
+    (
+        "gemini-3.8-flash",
+        1_798_761_600,
+        u64::MAX,
+        google(1.50, 0.15, 7.50),
+    ),
+    (
+        "gemini-3.8-flash-n",
+        1_798_761_600,
+        u64::MAX,
+        google(1.50, 0.15, 7.50),
+    ),
+    (
+        "gemini-3.6-flash",
+        1_798_761_600,
+        u64::MAX,
+        google(1.50, 0.15, 7.50),
+    ),
+];
+
+/// Today's rates for a model id: see `rates_at`.
 pub fn rates(model: &str) -> Option<Rates> {
+    rates_at(model, crate::ledger::now())
+}
+
+/// Rates for a model id at `ts` (unix seconds), so a turn is priced as it was billed.
+/// Matches the exact id, or the id followed by a bracketed suffix (`claude-opus-5-5[1m]`).
+pub fn rates_at(model: &str, ts: u64) -> Option<Rates> {
+    let id = model.split('[').next().unwrap_or(model);
+    PERIODS
+        .iter()
+        .find(|(name, from, until, _)| *name == id && *from <= ts && ts < *until)
+        .map(|p| p.3)
+        .or_else(|| listed(id))
+}
+
+/// The table's rates for an id with no bracketed suffix.
+fn listed(id: &str) -> Option<Rates> {
     const TABLE: [(&str, Rates); 22] = [
         (
             "claude-opus-5-5",
@@ -91,7 +143,6 @@ pub fn rates(model: &str) -> Option<Rates> {
         ("gpt-6.1-terra", openai(1.0, 0.05, 1.25, 5.0)),
         ("gpt-6-luna", openai(0.10, 0.01, 0.125, 0.50)),
     ];
-    let id = model.split('[').next().unwrap_or(model);
     TABLE.iter().find(|(name, _)| *name == id).map(|(_, r)| *r)
 }
 
@@ -99,7 +150,12 @@ pub fn rates(model: &str) -> Option<Rates> {
 /// 5-minute cache (see `Rates::five_minute`). Other vendors charge a subagent's
 /// cache writes the same as the main loop's.
 pub fn turn_rates(model: &str, agent: bool) -> Option<Rates> {
-    let r = rates(model)?;
+    turn_rates_at(model, agent, crate::ledger::now())
+}
+
+/// `turn_rates` at `ts` (unix seconds): the rates of the turn's own day.
+pub fn turn_rates_at(model: &str, agent: bool, ts: u64) -> Option<Rates> {
+    let r = rates_at(model, ts)?;
     Some(if agent && model.starts_with("claude-") {
         r.five_minute()
     } else {
@@ -161,6 +217,55 @@ pub fn cost(rates: Rates, input: u64, output: u64, cache_read: u64, cache_write:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_turn_is_priced_at_the_rates_of_its_own_day() {
+        const OCT_8: u64 = 1_791_417_600; // 2026-10-08T00:00:00Z
+        const JAN_1: u64 = 1_798_761_600; // 2027-01-01T00:00:00Z
+        // Anthropic halved Sonnet 5.5's cache reads on 2026-10-08.
+        let before = rates_at("claude-sonnet-5-5", OCT_8 - 1).unwrap();
+        let after = rates_at("claude-sonnet-5-5[1m]", OCT_8).unwrap();
+        assert_eq!((before.cache_read, after.cache_read), (0.20, 0.10));
+        assert_eq!(
+            (before.input, before.output, before.cache_write),
+            (2.0, 10.0, 4.0)
+        );
+        // Google doubles Gemini 3.6 and 3.8 Flash on 2027-01-01.
+        for id in ["gemini-3.8-flash", "gemini-3.8-flash-n", "gemini-3.6-flash"] {
+            let now = rates_at(id, JAN_1 - 1).unwrap();
+            let later = rates_at(id, JAN_1).unwrap();
+            assert_eq!(
+                (now.input, now.output, now.cache_read),
+                (0.75, 3.75, 0.075),
+                "{id}"
+            );
+            assert_eq!(
+                (later.input, later.output, later.cache_read),
+                (1.50, 7.50, 0.15),
+                "{id}"
+            );
+            assert_eq!(later.cache_write, later.input, "{id}");
+        }
+        // Models without a dated change keep one price; unknown ones have none.
+        assert_eq!(
+            rates_at("claude-opus-5-5", 0),
+            rates_at("claude-opus-5-5", JAN_1)
+        );
+        assert_eq!(rates_at("gpt-6", OCT_8), None);
+        // `rates` is today's price; a subagent turn still writes the 5-minute cache.
+        assert_eq!(
+            rates("claude-sonnet-5-5"),
+            rates_at("claude-sonnet-5-5", crate::ledger::now())
+        );
+        assert_eq!(
+            turn_rates_at("claude-sonnet-5-5", true, OCT_8 - 1),
+            Some(before.five_minute())
+        );
+        assert_eq!(
+            turn_rates_at("gemini-3.6-flash", true, JAN_1),
+            rates_at("gemini-3.6-flash", JAN_1)
+        );
+    }
 
     #[test]
     fn openai_models_are_priced() {

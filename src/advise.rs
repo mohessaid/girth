@@ -140,11 +140,11 @@ pub struct Advice {
 
 /// Dollars for one turn: the harness's own figure when it logged one, else list prices
 /// (subagents write the 5-minute cache); 0 for unknown models.
-fn turn_cost(t: &Turn) -> f64 {
+fn turn_cost(ts: u64, t: &Turn) -> f64 {
     if let Some(micros) = t.cost_micros {
         return micros as f64 / 1e6;
     }
-    price::turn_rates(&t.model, t.agent).map_or(0.0, |r| {
+    price::turn_rates_at(&t.model, t.agent, ts).map_or(0.0, |r| {
         price::cost(r, t.input, t.output, t.cache_read, t.cache_write)
     })
 }
@@ -166,24 +166,27 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         })
         .collect();
     // Claude Code's requests outside turns (progress summaries, suggestions, titles).
-    let sides: Vec<&crate::ledger::Side> = records
+    let sides: Vec<(u64, &crate::ledger::Side)> = records
         .iter()
         .filter(in_window)
         .filter_map(|r| match &r.event {
-            Event::Side(s) => Some(s),
+            Event::Side(s) => Some((r.ts, s)),
             _ => None,
         })
         .collect();
-    let side_spend: f64 = sides.iter().map(|s| crate::meter::side_cost(s)).sum();
-    let spend: f64 = turns.iter().map(|(_, t)| turn_cost(t)).sum::<f64>() + side_spend;
+    let side_spend: f64 = sides
+        .iter()
+        .map(|(ts, s)| crate::meter::side_cost(s, *ts))
+        .sum();
+    let spend: f64 = turns.iter().map(|(ts, t)| turn_cost(*ts, t)).sum::<f64>() + side_spend;
     let unpriced = turns
         .iter()
         .filter(|(_, t)| t.cost_micros.is_none() && price::rates(&t.model).is_none())
         .count() as u64;
     let mut harnesses: BTreeMap<String, f64> = BTreeMap::new();
-    for (_, t) in &turns {
+    for (ts, t) in &turns {
         let h = t.harness.as_deref().unwrap_or("claude-code");
-        *harnesses.entry(h.to_string()).or_default() += turn_cost(t);
+        *harnesses.entry(h.to_string()).or_default() += turn_cost(*ts, t);
     }
     if side_spend > 0.0 {
         *harnesses.entry("claude-code".to_string()).or_default() += side_spend;
@@ -223,8 +226,8 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         "background-agent progress summaries".into(),
         sides
             .iter()
-            .filter(|s| s.source == "agent_summary")
-            .map(|s| crate::meter::side_cost(s))
+            .filter(|(_, s)| s.source == "agent_summary")
+            .map(|(ts, s)| crate::meter::side_cost(s, *ts))
             .sum(),
         "set CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1 in your shell or settings env (checked on Claude Code 2.1.319)".into(),
         "background agents run the same; only their progress line goes",
@@ -266,7 +269,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         let entry = per_skill.entry(skill.as_str()).or_default();
         for i in charged {
             if entry.1.insert(i) {
-                entry.0 += turn_cost(turns[i].1);
+                entry.0 += turn_cost(turns[i].0, turns[i].1);
             }
         }
     }
@@ -286,7 +289,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     let large: f64 = turns
         .iter()
         .filter(|(_, t)| t.cache_read / t.requests.unwrap_or(1).max(1) > LARGE_CONTEXT)
-        .map(|(_, t)| turn_cost(t))
+        .map(|(ts, t)| turn_cost(*ts, t))
         .sum();
     push(
         &mut out,
@@ -316,7 +319,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
                 .and_then(|s| first.get(s))
                 .is_some_and(|f| ts.saturating_sub(*f) > LONG_SESSION)
         })
-        .map(|(_, t)| turn_cost(t))
+        .map(|(ts, t)| turn_cost(*ts, t))
         .sum();
     push(
         &mut out,
@@ -334,8 +337,8 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     // Cache rewrites after idle gaps.
     let rewrites: f64 = turns
         .iter()
-        .filter_map(|(_, t)| {
-            let r = price::rates(&t.model)?;
+        .filter_map(|(ts, t)| {
+            let r = price::rates_at(&t.model, *ts)?;
             let tokens: u64 = t.breaks.iter().map(|b| b.rewritten).sum();
             Some(price::cost(r, 0, 0, 0, tokens))
         })
@@ -363,7 +366,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         let agents: f64 = turns
             .iter()
             .filter(|(_, t)| t.agent && expensive(&t.model))
-            .map(|(_, t)| turn_cost(t))
+            .map(|(ts, t)| turn_cost(*ts, t))
             .sum();
         push(
             &mut out,
@@ -382,12 +385,12 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     let large_output: f64 = turns
         .iter()
         .enumerate()
-        .filter_map(|(i, (_, t))| {
+        .filter_map(|(i, (ts, t))| {
             let tokens: u64 = t.tool_output.values().sum();
             if tokens == 0 {
                 return None;
             }
-            let r = price::turn_rates(&t.model, t.agent)?;
+            let r = price::turn_rates_at(&t.model, t.agent, *ts)?;
             let mut carried = t.requests.unwrap_or(1) as f64 / 2.0;
             if let (Some(s), false) = (&t.session, t.agent) {
                 let mut before = t.context;
@@ -566,7 +569,8 @@ mod tests {
         }
     }
 
-    const SONNET: &str = "claude-sonnet-5-5";
+    /// A model with one price for all time, so test timestamps don't pick a dated rate.
+    const SONNET: &str = "claude-haiku-5-5";
 
     fn in_session(session: &str, agent: bool) -> Turn {
         Turn {
@@ -718,6 +722,19 @@ mod tests {
         // Side queries alone are spend too.
         let alone = advise(&[side(20, "compact", 300_000)], 100, 1000, On::default());
         assert!(close(alone.spend, 0.3), "{}", alone.spend);
+    }
+
+    #[test]
+    fn spend_prices_each_turn_at_the_rates_of_its_day() {
+        const OCT_8: u64 = 1_791_417_600;
+        let sonnet = "claude-sonnet-5-5";
+        let records = [
+            rec(OCT_8 - 60, turn(sonnet, 1_000_000, 0)),
+            rec(OCT_8 + 60, turn(sonnet, 1_000_000, 0)),
+        ];
+        let advice = advise(&records, OCT_8 + 100, 1000, On::default());
+        // $0.20 then $0.10 per million cache reads.
+        assert!(close(advice.spend, 0.30), "{}", advice.spend);
     }
 
     #[test]
@@ -1058,8 +1075,9 @@ mod tests {
         ];
         let a = advise(&records, NOW, WEEK, On::default());
         assert!(a.contributors.iter().all(|c| c.kind != "skill"), "{a:?}");
+        let one = price::cost(price::rates(SONNET).unwrap(), 0, 100_000, 0, 0);
         assert!(
-            (a.spend - 1.0).abs() < 1e-9,
+            (a.spend - one).abs() < 1e-9,
             "only the in-window turn: {}",
             a.spend
         );

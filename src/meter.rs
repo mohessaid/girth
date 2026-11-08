@@ -46,13 +46,13 @@ pub struct Summary {
     pub side_top: Option<String>,
 }
 
-/// Dollars for side queries: Claude Code's own price when it gave one, else list
-/// prices at main-loop rates; 0 for unknown models.
-pub fn side_cost(s: &crate::ledger::Side) -> f64 {
+/// Dollars for side queries recorded at `ts`: Claude Code's own price when it gave one,
+/// else that day's list prices at main-loop rates; 0 for unknown models.
+pub fn side_cost(s: &crate::ledger::Side, ts: u64) -> f64 {
     if let Some(micros) = s.cost_micros {
         return micros as f64 / 1e6;
     }
-    price::rates(&s.model).map_or(0.0, |r| {
+    price::rates_at(&s.model, ts).map_or(0.0, |r| {
         price::cost(r, s.input, s.output, s.cache_read, s.cache_write)
     })
 }
@@ -66,7 +66,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         let t = match &r.event {
             Event::Turn(t) if t.harness.is_none() && project.is_none_or(|p| p == t.project) => t,
             Event::Side(side) if project.is_none_or(|p| p == side.project) => {
-                let cost = side_cost(side);
+                let cost = side_cost(side, r.ts);
                 s.side_requests += side.requests;
                 s.side_cost += cost;
                 s.cost += cost;
@@ -83,7 +83,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.output += t.output;
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
-        let rates = price::turn_rates(&t.model, t.agent);
+        let rates = price::turn_rates_at(&t.model, t.agent, r.ts);
         // Claude Code's own price for the turn's requests, when the mod could add it up.
         let cost = match (t.cost_micros, rates) {
             (Some(micros), _) => micros as f64 / 1e6,
@@ -269,7 +269,7 @@ mod tests {
         ];
         let s = summarise(&records, Some("/a"));
         let opus = price::rates("claude-opus-5-5").unwrap();
-        let sonnet = price::rates("claude-sonnet-5-5").unwrap();
+        let sonnet = price::rates_at("claude-sonnet-5-5", 1).unwrap();
         let listed = price::cost(sonnet, 3_000, 200, 40_000, 0);
         assert_eq!((s.turns, s.requests, s.input), (1, 1, 5));
         assert_eq!(s.side_requests, 8);
@@ -301,6 +301,24 @@ mod tests {
         );
         // Nothing priced, so no source is the largest.
         assert!(!render(&odd).contains("largest"), "{}", render(&odd));
+    }
+
+    #[test]
+    fn each_turn_and_side_query_is_priced_at_the_rates_of_its_day() {
+        const OCT_8: u64 = 1_791_417_600;
+        let mut old = turn("/a", "claude-sonnet-5-5", 0, None);
+        old.ts = OCT_8 - 60;
+        let mut new = turn("/a", "claude-sonnet-5-5", 0, None);
+        new.ts = OCT_8 + 60;
+        let mut early = side("/a", "agent_summary", "claude-sonnet-5-5", None);
+        early.ts = OCT_8 - 60;
+        let s = summarise(&[old, new, early], None);
+        let at = |ts| price::rates_at("claude-sonnet-5-5", ts).unwrap();
+        let want = price::cost(at(OCT_8 - 60), 0, 10, 1_000, 100)
+            + price::cost(at(OCT_8 + 60), 0, 10, 1_000, 100)
+            + price::cost(at(OCT_8 - 60), 3_000, 200, 40_000, 0);
+        assert!((s.cost - want).abs() < 1e-12, "{} vs {want}", s.cost);
+        assert!(at(OCT_8 - 60).cache_read > at(OCT_8 + 60).cache_read);
     }
 
     #[test]
@@ -353,7 +371,7 @@ mod tests {
         assert_eq!(all.lens_turns, 2);
         assert_eq!(all.lens_tokens_saved, 2 * 28_000 / BYTES_PER_TOKEN);
         let opus = price::rates("claude-opus-5-5").unwrap();
-        let sonnet = price::rates("claude-sonnet-5-5").unwrap();
+        let sonnet = price::rates_at("claude-sonnet-5-5", 1).unwrap();
         let want = 2.0 * 0.0
             + price::cost(opus, 5, 10, 1_000, 100)
             + price::cost(opus, 7, 10, 1_000, 100)

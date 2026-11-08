@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- **Each turn is priced at the rates of its own day.** Girth prices turns from stored tokens every time it reports, so before this release a vendor's price change also repriced every earlier turn. The meter and `advise` now look up each turn's and side query's rates as of when it ran. Dated rows so far:
+  - Claude Sonnet 5.5 cache reads were $0.20 before 2026-10-08.
+  - Google doubles Gemini 3.6 and 3.8 Flash on 2027-01-01.
+  Live estimates (X-ray, the keeper) use today's rates. When a dated change starts, it applies without a new release.
+
 ## [0.18.0] - 2026-11-08
 
 ### Added
