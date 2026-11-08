@@ -73,6 +73,10 @@ const side = new Map()
 // The main loop's requests since its last turn: Claude Code's own price for them,
 // kept for the turn when their tokens add up to its usage.
 let main = { requests: 0, tokens: 0, micros: 0, priced: true }
+// The same for subagents' requests since a subagent's turn last matched them; records
+// carry no agent id, so a turn is priced only when the pending requests are all its own.
+let agents = { requests: 0, tokens: 0, micros: 0, priced: true }
+const fresh = () => ({ requests: 0, tokens: 0, micros: 0, priced: true })
 // Sources already counted through turn.complete, and mod forks (Girth's own pings).
 const TURN_SOURCES = new Set(['repl_main_thread', 'sdk', 'hook_prompt', 'plugin_model_complete', 'plugin_model_classify'])
 
@@ -190,11 +194,12 @@ function tally(a) {
   const source = a?.query_source
   const model = a?.model
   if (typeof source !== 'string' || typeof model !== 'string' || model === '') return
-  if (source === 'repl_main_thread' || source === 'sdk') {
-    main.requests += 1
-    main.tokens += count(a.input_tokens) + count(a.output_tokens) + count(a.cache_read_tokens) + count(a.cache_creation_tokens)
-    if (typeof a.cost_usd_micros === 'number' && Number.isFinite(a.cost_usd_micros)) main.micros += a.cost_usd_micros
-    else main.priced = false
+  const loop = source === 'repl_main_thread' || source === 'sdk' ? main : source.startsWith('agent:') ? agents : null
+  if (loop) {
+    loop.requests += 1
+    loop.tokens += count(a.input_tokens) + count(a.output_tokens) + count(a.cache_read_tokens) + count(a.cache_creation_tokens)
+    if (typeof a.cost_usd_micros === 'number' && Number.isFinite(a.cost_usd_micros)) loop.micros += a.cost_usd_micros
+    else loop.priced = false
     return
   }
   if (TURN_SOURCES.has(source) || source.startsWith('agent:')) return
@@ -470,10 +475,15 @@ export function register(on) {
     breaks.delete(e.turnId)
     if (found) turn.breaks = found
     if (e.agentId === undefined && context > 0) turn.context = context
+    const sum = (turn.input ?? 0) + (turn.output ?? 0) + (turn.cache_read ?? 0) + (turn.cache_write ?? 0)
+    const own = e.agentId === undefined ? main : agents
+    if (own.requests > 0 && own.priced && own.tokens === sum) {
+      turn.cost_micros = Math.round(own.micros)
+      if (own === agents) agents = fresh()
+    }
     if (e.agentId === undefined) {
-      const sum = (turn.input ?? 0) + (turn.output ?? 0) + (turn.cache_read ?? 0) + (turn.cache_write ?? 0)
-      if (main.requests > 0 && main.priced && main.tokens === sum) turn.cost_micros = Math.round(main.micros)
-      main = { requests: 0, tokens: 0, micros: 0, priced: true }
+      main = fresh()
+      agents = fresh()
     }
     const note = e.agentId === undefined ? squeeze?.takeNote() : null
     if (note) turn.compacted = note

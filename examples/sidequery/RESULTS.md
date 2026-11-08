@@ -34,6 +34,11 @@ It ran on Claude Code 2.1.319 with `claude-haiku-5-5`.
 4. **`CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1` stops it.** We repeated the background-agent task, four 40-second waits in one subagent, in a fresh session with the variable set. It sent **0** `agent_summary` requests; the first session sent 4. The variable is in the 2.1.319 binary.
 5. **`claude -p` sends no `agent_summary`,** even with a background subagent. Only interactive sessions do, so the interactive runs drove a real session in `tmux`.
 
+6. **Collector records carry no agent id** (2026-11-08, two subagents started in parallel under `claude -p`).
+   - Every request had the same `prompt.id`, there was no trace span, and the two agents' requests interleaved (sequence numbers 34 and 47 for one agent, 38 and 43 for the other).
+   - Each agent's `turn.complete` usage did equal the sum of its own requests: 31,121 = 15,018 + 16,103, and 31,275 = 15,011 + 16,264.
+   - So the mod prices a subagent's turn at Claude Code's figure only when the subagent requests pending since the last match add up exactly to that turn. That is the case when one agent runs at a time. Otherwise the turn keeps list prices.
+
 ## The binary's own lists (2.1.319, `strings`)
 
 - Turn sources: `repl_main_thread`, `sdk`, `agent:custom`, `agent:default`, `agent:builtin`.

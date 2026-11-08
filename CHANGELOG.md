@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- **A subagent's turn is priced at Claude Code's own figure when it can be told apart.** Claude Code's request records don't say which subagent sent them (`examples/sidequery/RESULTS.md`, finding 6). So the mod uses the figure only when the subagent requests since the last match add up exactly to the turn's usage, which they do whenever one subagent runs at a time. Subagents running in parallel keep list prices. Before, every subagent turn used list prices.
+
 ### Added
 - **Search finds DeepSeek Harness skills** in `.dsh/skills` and `~/.dsh/skills`, the folders its own docs name. That makes 80 harnesses. The `skills` CLI's table doesn't list DeepSeek Harness yet, so the folders go in Girth's hand-kept extras.
 

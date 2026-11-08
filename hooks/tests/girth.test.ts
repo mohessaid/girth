@@ -980,3 +980,36 @@ test("a main-loop turn carries Claude Code's own price when its requests add up 
   const turns = runs.filter((r) => r.argv[1] === 'meter').map((r) => JSON.parse(r.stdin!))
   expect(turns.map((t) => t.cost_micros)).toEqual([2200, undefined, undefined, undefined, undefined, 1500])
 })
+
+test("a subagent's turn carries Claude Code's own price when only its requests are pending", async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('telemetry.log', { to: 'collector' }, () => ({ value: undefined }))
+  on('turn.complete', () => ({ text: '' }))
+  const req = (source: string, i: number, o: number, r: number, w: number, micros: number) =>
+    apiRequest(source, micros, { input_tokens: i, output_tokens: o, cache_read_tokens: r, cache_creation_tokens: w })
+  const agent = 'agent:builtin:general-purpose'
+  // One subagent: its two requests add up to its turn (USAGE: 35245 tokens).
+  await $.telemetry.log(req(agent, 1, 3, 8605, 20000, 900))
+  await $.telemetry.log(req(agent, 1, 4, 0, 6631, 400))
+  await $.turn.complete({ turnId: 'a1', agentId: 'one', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // Two at once: the first to finish sees the other's request too, so neither is priced.
+  await $.telemetry.log(req(agent, 2, 7, 8605, 26631, 1000))
+  await $.telemetry.log(req(agent, 2, 7, 8605, 26631, 1100))
+  await $.turn.complete({ turnId: 'a2', agentId: 'two', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // The main loop's turn clears what is left, so the next lone subagent is priced again.
+  await $.turn.complete({ turnId: 'm', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.telemetry.log(req(agent, 2, 7, 8605, 26631, 777))
+  await $.turn.complete({ turnId: 'a3', agentId: 'three', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const turns = runs.filter((r) => r.argv[1] === 'meter').map((r) => JSON.parse(r.stdin!))
+  expect(turns.map((t) => [t.agent, t.cost_micros])).toEqual([
+    [true, 1300],
+    [true, undefined],
+    [false, undefined],
+    [true, 777],
+  ])
+})
