@@ -842,3 +842,107 @@ test('a denied Bash call is not recorded, and the output tail never starts insid
   const first = output.charCodeAt(0)
   expect(first >= 0xdc00 && first <= 0xdfff).toBe(false)
 })
+
+function apiRequest(source: string, micros: number, extra: Record<string, unknown> = {}) {
+  return {
+    to: 'collector' as const,
+    event: 'api_request',
+    loggedAt: '2026-11-08T07:00:00.000Z',
+    attributes: {
+      'user.email': 'someone@example.com',
+      'organization.id': 'org-1',
+      'session.id': 'sess-1',
+      'prompt.id': 'p-1',
+      request_id: 'req-1',
+      model: 'claude-opus-5-5',
+      query_source: source,
+      input_tokens: 600,
+      output_tokens: 20,
+      cache_read_tokens: 100,
+      cache_creation_tokens: 5,
+      cost_usd_micros: micros,
+      ...extra,
+    },
+  }
+}
+
+test('requests outside turns are totalled per source and model, and flushed after a main-loop turn', async ($, on) => {
+  const runs: Run[] = []
+  const passed: string[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('session.id', () => ({ value: 'sess-1' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('telemetry.log', { to: 'collector' }, ($, e) => {
+    passed.push(e.event)
+    return { value: undefined }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  for (const record of [
+    apiRequest('agent_summary', 150),
+    apiRequest('agent_summary', 250, { model: 'claude-haiku-5-5' }),
+    apiRequest('agent_summary', 100),
+    apiRequest('prompt_suggestion', 500),
+    // Turn requests (already in turn.complete) and mod forks (pings) are not side queries.
+    apiRequest('repl_main_thread', 9000),
+    apiRequest('sdk', 9000),
+    apiRequest('agent:builtin:general-purpose', 9000),
+    apiRequest('hook_prompt', 9000),
+    { to: 'collector' as const, event: 'mcp_server_connection', loggedAt: '2026-11-08T07:00:00.000Z', attributes: {} },
+  ]) {
+    await $.telemetry.log(record)
+  }
+  // Every record goes on to the collector.
+  expect(passed.length).toBe(9)
+  // A subagent's turn does not flush.
+  await $.turn.complete({ turnId: 'a', agentId: 'ag1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(runs.filter((r) => r.argv[1] === 'side').length).toBe(0)
+  await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const sides = runs.filter((r) => r.argv[1] === 'side')
+  expect(sides.length).toBe(1)
+  expect(sides[0].argv.slice(1)).toEqual(['side', 'record'])
+  const stdin = sides[0].stdin!
+  for (const secret of ['someone@example.com', 'org-1', 'p-1', 'req-1']) expect(stdin.includes(secret)).toBe(false)
+  const rows = JSON.parse(stdin)
+  expect(rows).toEqual([
+    { project: '/work/app', session: 'sess-1', source: 'agent_summary', model: 'claude-opus-5-5', requests: 2, input: 1200, output: 40, cache_read: 200, cache_write: 10, cost_micros: 250 },
+    { project: '/work/app', session: 'sess-1', source: 'agent_summary', model: 'claude-haiku-5-5', requests: 1, input: 600, output: 20, cache_read: 100, cache_write: 5, cost_micros: 250 },
+    { project: '/work/app', session: 'sess-1', source: 'prompt_suggestion', model: 'claude-opus-5-5', requests: 1, input: 600, output: 20, cache_read: 100, cache_write: 5, cost_micros: 500 },
+  ])
+  // Nothing new: the next turn records no side queries.
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(runs.filter((r) => r.argv[1] === 'side').length).toBe(1)
+})
+
+test('side queries left at the end of a session are flushed then, and odd records are skipped', async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('telemetry.log', { to: 'collector' }, () => ({ value: undefined }))
+  on('session.end', () => ({ sessionId: 'sess-9' }))
+  await $.telemetry.log(apiRequest('compact', 700, { cost_usd_micros: undefined, input_tokens: 'x' }))
+  await $.telemetry.log({ ...apiRequest('agent_summary', 1), attributes: { query_source: 'agent_summary' } })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 'sess-9', resume: { id: 'sess-9' } } as any)
+  const sides = runs.filter((r) => r.argv[1] === 'side')
+  expect(sides.length).toBe(1)
+  const rows = JSON.parse(sides[0].stdin!)
+  // No model: skipped. Missing numbers count as 0, and no price is left out.
+  expect(rows).toEqual([
+    { project: '/work/app', session: 'sess-9', source: 'compact', model: 'claude-opus-5-5', requests: 1, input: 0, output: 20, cache_read: 100, cache_write: 5 },
+  ])
+})
+
+test('a failing side record never disturbs the turn or the telemetry', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => (e.argv[1] === 'side' ? { deny: 'no binary' } : { value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('telemetry.log', { to: 'collector' }, () => ({ value: undefined }))
+  on('turn.complete', () => ({ text: 'kept' }))
+  await $.telemetry.log(apiRequest('agent_summary', 1))
+  const out = await $.turn.complete({ turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(out.text).toBe('kept')
+})

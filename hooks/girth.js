@@ -67,6 +67,11 @@ const BREAK_MIN = 5000
 
 // `girth advise --brief`: one line under the session's first main answer, at most.
 let advised = false
+// Claude Code's requests outside turns (query_source → totals), from its collector
+// records; flushed to `girth side record` after a main-loop turn and at session end.
+const side = new Map()
+// Sources already counted through turn.complete, and mod forks (Girth's own pings).
+const TURN_SOURCES = new Set(['repl_main_thread', 'sdk', 'hook_prompt', 'plugin_model_complete', 'plugin_model_classify'])
 
 const PING_PROMPT = 'Reply with one character: .'
 
@@ -172,6 +177,39 @@ function measure(agentId, tool, text) {
   const tools = large.get(key) ?? {}
   tools[tool] = (tools[tool] ?? 0) + Math.ceil(text.length / 4)
   large.set(key, tools)
+}
+
+const count = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0)
+
+// Add one api_request record's numbers to its source's totals. Only numbers, the
+// model id and the source name are kept: never user, organization or request ids.
+function tally(a) {
+  const source = a?.query_source
+  const model = a?.model
+  if (typeof source !== 'string' || typeof model !== 'string' || model === '') return
+  if (TURN_SOURCES.has(source) || source.startsWith('agent:')) return
+  const key = source + '\u0000' + model
+  const t = side.get(key) ?? { source, model, requests: 0, input: 0, output: 0, cache_read: 0, cache_write: 0, cost_micros: 0 }
+  t.requests += 1
+  t.input += count(a.input_tokens)
+  t.output += count(a.output_tokens)
+  t.cache_read += count(a.cache_read_tokens)
+  t.cache_write += count(a.cache_creation_tokens)
+  // One unpriced request leaves the whole total to Girth's list prices.
+  t.cost_micros = t.cost_micros !== undefined && typeof a.cost_usd_micros === 'number' ? t.cost_micros + a.cost_usd_micros : undefined
+  side.set(key, t)
+}
+
+async function flushSide($, session, timeoutMs = TIMEOUT_MS) {
+  if (side.size === 0) return
+  const project = await $.session.cwd()
+  const rows = [...side.values()].map((t) => ({ project, ...(session ? { session } : {}), ...t }))
+  side.clear()
+  try {
+    await $.process.run([launcher($), 'side', 'record'], { stdin: JSON.stringify(rows), timeoutMs })
+  } catch {
+    // Metering only: a missing binary costs these totals, nothing else.
+  }
 }
 
 function launcher($) {
@@ -358,8 +396,29 @@ export function register(on) {
     return result
   })
 
+  on('telemetry.log', { to: 'collector' }, async ($, e, next) => {
+    try {
+      if (e.event === 'api_request') tally(e.attributes)
+    } catch {
+      // Observing only: the record goes on unchanged.
+    }
+    return next(e)
+  }).catch(async ($, e, next) => next(e))
+
+  on('session.end', async ($, e, next) => {
+    try {
+      const left = next.budget?.remainingMs
+      const budget = typeof left === 'number' ? Math.max(100, Math.min(TIMEOUT_MS, left - 50)) : TIMEOUT_MS
+      await flushSide($, e.sessionId || undefined, budget)
+    } catch {
+      // An exit is never held up by metering.
+    }
+    return next(e)
+  }).catch(async ($, e, next) => next(e))
+
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (e.agentId === undefined) await flushSide($, await sessionId($))
     const calls = bash.get(e.agentId ?? '')
     bash.delete(e.agentId ?? '')
     const big = large.get(e.agentId ?? '')
