@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-13
+
 ### Fixed
 - **`girth import` reads OpenCode 2.** OpenCode 2 removed the `opencode db` command, so Girth imported nothing for anyone on v2 (checked on 2.2.7).
   - Girth now reads the new tables (`session_v2`, `session_message`) directly with `sqlite3 -readonly -json`.
@@ -320,7 +322,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/mohessaid/girth/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/mohessaid/girth/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/mohessaid/girth/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/mohessaid/girth/compare/v0.18.0...v0.19.0
