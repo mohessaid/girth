@@ -235,7 +235,7 @@ The estimate prices the main conversation's cache writes at the 1-hour rate Clau
 Girth keeps a local, append-only ledger (`~/.girth/ledger.jsonl`) of which skills you use, which sections of which source skills your crafted skills keep or drop, and your 👍/👎. Ask *"girth stats"* to see which installed skills actually earn their place, or *"girth review captions"* to remove sections you don't want. Removals become signal too.
 
 **Trials: does a crafted skill help?** `girth trial .claude/skills/girth-pdf --task task.md --check "cargo test -q"` runs the task with and without the skill, three runs each by default. Each run starts from a fresh clone at HEAD, and the check grades it.
-- A task counts as won or lost only when chance would give its gap under 1 time in 20 (Fisher's exact test), so more runs sharpen the verdict. In our SkillsBench pilot, a single-run difference turned out to be noise in both directions.
+- A task counts as won or lost only when chance would give its gap at most 1 time in 20 (Fisher's exact test), so more runs sharpen the verdict. In our SkillsBench pilot, a single-run difference turned out to be noise in both directions.
 - A skill that never fired decides nothing.
 - Cost is shown but not judged.
 - The verdict (admit, reject or undecided) goes to the ledger and shows in `girth stats`.

@@ -1,6 +1,7 @@
 //! `girth trial` end to end, with fake agents (shell scripts) in place of a model.
 
 use assert_cmd::Command;
+use predicates::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -105,7 +106,12 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
         .assert()
         .success();
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
-    for quiet in ["timed out", "ended in an error", "every run failed"] {
+    for quiet in [
+        "timed out",
+        "ended in an error",
+        "every run failed",
+        "no task can be decided",
+    ] {
         assert!(!text.contains(quiet), "{quiet}: {text}");
     }
     // Arms alternate, with-skill first.
@@ -180,6 +186,9 @@ fn a_skill_that_never_fires_is_undecided() {
         .assert()
         .success()
         .stdout(predicates::str::contains("skill used in 0 of 2 runs"))
+        .stdout(predicates::str::contains(
+            "at 2 runs per arm no task can be decided",
+        ))
         .stdout(predicates::str::contains("→ undecided"));
 }
 
@@ -298,7 +307,7 @@ fn agent_errors_and_check_timeouts_count_as_fails_and_say_why() {
         .args(["--task", task, "--check", "true", "--runs", "2"])
         .assert()
         .success()
-        .stdout(predicates::str::contains("claude: not found"));
+        .stdout(predicates::str::contains("claude").and(predicates::str::contains("not found")));
     // The default agent comes from GIRTH_TRIAL_AGENT here (`false`), never a real one.
     trial(&f)
         .args(["--task", task, "--check", "true", "--runs", "2"])
@@ -333,9 +342,10 @@ fn an_interrupted_trial_stops_its_agent_and_the_next_one_sweeps_its_clone() {
         .process_group(0)
         .spawn()
         .unwrap();
+    // Only the agent's own shell: girth's command line holds the marker too.
     let running = |m: &str| {
         std::process::Command::new("pgrep")
-            .args(["-f", m])
+            .args(["-f", &format!("^sh -c sleep 30 # {m}")])
             .output()
             .unwrap()
             .status

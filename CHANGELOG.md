@@ -9,8 +9,9 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - **`girth trial` judges each task with Fisher's one-sided exact test (at 0.05), not a fixed 2-pass gap.**
   - A simulation showed the fixed rule calls a win or a loss on identical coin-flip arms 21% of the time at 3 runs and 50% at 10, so more runs made it worse.
-  - With Fisher's test, false calls stay at or under 5% per task at every run count, and power grows with runs (36% at 3, 94% at 10, for a 0.9-vs-0.2 skill).
-  - At 3 runs, only 3/3 vs 0/3 decides. `--runs` is now 2–50.
+  - With Fisher's test, false calls stay at or under 5% per task at 2–10 runs, and power grows with runs (36% at 3, 94% at 10, for a 0.9-vs-0.2 skill).
+  - At 3 runs, only 3/3 vs 0/3 decides.
+  - `--runs` is now 2–10. Worked exactly over every pass rate, two identical arms get any call at most 4.22% of the time up to 10 runs. At 11 runs that passes 5%, and at 47 it reaches 7.9% (`examples/trial/false_calls.py`).
 - **Agent errors and check timeouts count as fails, and say so.**
   - A non-zero agent exit or an `is_error` result counts as an error, and the output prints the agent's first stderr line.
   - Checks killed at `--check-timeout` (new, default 600 s) are counted.

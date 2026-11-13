@@ -38,16 +38,18 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
 - Tasks and checks pair up in order. A single `--check` may serve every task.
 
 **Each run:**
-1. **The workspace** is a fresh local clone of the project (`git clone --quiet <repo> <tmp>`) at `HEAD`.
+1. **The workspace** is a fresh local clone of the project (`git clone --quiet`) at `HEAD`, under `$GIRTH_HOME/trials/<pid>-<nanos>/`. A later trial sweeps the dirs of runs whose pid `ps -p` can't find.
    - Both arms start from the same files, and uncommitted work never leaks in.
    - Unlike `git archive`, a clone keeps the history, so a task that commits or diffs behaves as it does in the real repo.
 2. **The with-skill arm** copies `<skill-dir>` into `<work>/.claude/skills/<name>/`.
 3. **The without arm** removes any `.claude/skills/<name>/` the tree already has.
 4. **The agent** runs in `<work>`:
    - The prompt goes on stdin.
-   - `GIRTH_HOME` points at a temp dir, and `GIRTH_TRIAL=1` is set.
+   - `GIRTH_HOME` points inside the scratch dir, and `GIRTH_TRIAL=1` is set.
+   - The agent stays in girth's process group, so Ctrl-C stops it too.
+   - A non-zero exit or an `is_error` result is an agent error. The run fails, and the first stderr line is printed.
    - `--timeout` (default 1,800 s) kills a run that hangs. A killed run counts as a fail and is marked `timeout`.
-5. **The check** runs in `<work>` with a 600 s timeout. Its exit status is the verdict. Its output is never stored.
+5. **The check** runs in `<work>` with a `--check-timeout` (default 600 s); a timed-out check fails the run and is counted. Its exit status is the verdict. Its output is never stored.
 
 **The agent:**
 - **The default** is `claude -p --output-format stream-json --verbose --setting-sources project,local --permission-mode acceptEdits --allowedTools Bash,Skill`, plus `--model M` when given.
@@ -68,7 +70,7 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
 - Arms alternate (with, without, with, …), so drift in the model or the network hits both arms alike.
 - Runs are sequential, never in parallel.
 - `--runs` defaults to 3 for each arm and task, chosen from the pilot below.
-- `--runs` is 2–50. At 2 runs no task can be decided (the best gap, 2/2 vs 0/2, has a 1-in-6 chance). It is allowed only so that a cheap first look can show whether the skill fires at all.
+- `--runs` is 2–10. At 2 runs no task can be decided (the best gap, 2/2 vs 0/2, has a 1-in-6 chance). It is allowed only so that a cheap first look can show whether the skill fires at all.
 
 ### The verdict
 
@@ -89,7 +91,7 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
 | 5 | 34% | 2.2% | 55% |
 | 10 | 50% | 4.2% | 94% |
 
-Fisher's false-call rate stays at or under 5% per task at every run count, and its power grows with runs. "Add runs when undecided" is therefore the right advice.
+Worked exactly over every pass rate (`examples/trial/false_calls.py`), the chance that identical arms get any call stays at or under 4.22% up to 10 runs. It passes 5% at 11 runs and reaches 7.9% at 47, so `--runs` stops at 10. Within that range, power grows with runs. "Add runs when undecided" is therefore the right advice.
 - At 3 runs, only 3/3 vs 0/3 decides.
 - With several tasks, the chance that some task gets a false call grows with their number.
 
@@ -113,7 +115,7 @@ The pilot's lesson still holds: one flipped run never decides.
 **Reporting:**
 - Each task prints as raw counts: `edit-pdf: with 3/3 · without 0/3 → won`.
 - Then a total: `skill used in 3 of 3 runs · $0.41 vs $0.38 per run → admit`.
-- A footer says once what a call means: chance would give the gap under 1 time in 20.
+- A footer says once what a call means: chance would give the gap at most 1 time in 20.
 
 ### The ledger
 
@@ -156,7 +158,7 @@ It stores no prompt text, check command or output, just as outcomes store only l
 | software-dependency-audit | 0/2 | 1/2 | 1/3 | 1/5 |
 
 **What it means for the rule:**
-- **`edit-pdf`:** a clear win. The same-day difference is 2 runs, so the task is won.
+- **`edit-pdf`:** a clear win over all runs, 5/5 against 0/3. The same-day 2/2 vs 0/2 alone would be tied under Fisher's test (1 in 6), and the default of 3 runs exists for that reason.
 - **`software-dependency-audit`:** noise in both arms.
   - The three same-day audit runs whose output was inspected (both no-skill runs and the failed skill run) listed 22 findings with dev dependencies included, and failed. The passing skill run listed the 3 production findings. The raw runs have since been deleted.
   - The first run's "the skill turned a pass into a fail" was this coin flip.

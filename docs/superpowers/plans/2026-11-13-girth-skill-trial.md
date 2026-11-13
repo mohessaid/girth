@@ -15,6 +15,9 @@
 **Spec:** `docs/superpowers/specs/2026-11-13-girth-skill-trial-design.md`
 
 ## Global constraints
+
+> Superseded in part by 0.25.1: tasks are judged with Fisher's one-sided exact test at 0.05 (not d ≥ 2), `--runs` is 2–10, the check timeout is `--check-timeout`, and scratch lives in `$GIRTH_HOME/trials`. See the spec.
+
 - `--runs` must be at least 2 (default 3). `--timeout` defaults to 1,800 s, and the check timeout is 600 s.
 - A task is **won** if d ≥ 2 and **lost** if d ≤ −2, where d = with_passed − without_passed.
   - **admit:** at least one task won and none lost.

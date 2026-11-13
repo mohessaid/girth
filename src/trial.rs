@@ -1,6 +1,6 @@
 //! Skill trials: run the same task with and without a skill, grade both with a check
 //! command, and judge whether the skill earned its place. A task is decided only when
-//! chance alone would give its gap under 1 time in 20 (Fisher's exact test), so a
+//! chance alone would give its gap at most 1 time in 20 (Fisher's exact test), so a
 //! flipped run never sets a verdict and more runs only sharpen it. Cost is reported,
 //! never decisive: it varies too much at small n.
 
@@ -65,7 +65,9 @@ fn choose(n: u64, k: u64) -> u128 {
 
 /// Won or lost when Fisher's exact test puts the gap under `ALPHA`, else tied. In the
 /// 2026-11-13 simulation, identical arms got a call at most 4.2% of the time at 2–10
-/// runs, where a fixed 2-pass rule called 21% at 3 runs and 50% at 10.
+/// runs, where a fixed 2-pass rule called 21% at 3 runs and 50% at 10. Worked exactly over
+/// every pass rate (`examples/trial/false_calls.py`), the chance of any call stays at or
+/// under 4.22% up to 10 runs and passes 5% at 11, so `--runs` stops at 10.
 pub fn judge(t: &TaskResult) -> Call {
     if tail(t.with_passed, t.without_passed, t.runs) <= ALPHA {
         Call::Won
@@ -232,6 +234,9 @@ impl Report {
         {
             lines.push("every run failed in both arms: check the task, the check command and the agent before blaming the skill".into());
         }
+        if self.tasks.iter().any(|t| t.runs < 3) {
+            lines.push("at 2 runs per arm no task can be decided (the widest gap, 2/2 vs 0/2, happens 1 time in 6 by chance): use this to see whether the skill fires".into());
+        }
         let with_runs: u64 = self.tasks.iter().map(|t| t.runs).sum();
         let used = match self.fired {
             Some(n) => format!("skill used in {n} of {with_runs} runs"),
@@ -248,7 +253,7 @@ impl Report {
             self.verdict.label()
         ));
         lines.push(
-            "A task counts as won or lost only when chance would give its gap under 1 time in 20 (Fisher's exact test); more runs sharpen it. Cost is shown, not judged."
+            "A task counts as won or lost only when chance would give its gap at most 1 time in 20 (Fisher's exact test); more runs sharpen it. Cost is shown, not judged."
                 .to_string(),
         );
         lines.join("\n")

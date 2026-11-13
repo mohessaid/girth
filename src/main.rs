@@ -191,7 +191,7 @@ enum Command {
     /// Run tasks with and without a skill, grade each run with a check command, and record whether the skill earned its place.
     ///
     /// Each run works in a fresh clone of this repo at HEAD (untracked files and build caches aren't there, so checks may
-    /// rebuild). A task counts as won or lost only when chance would give its gap under 1 time in 20 (Fisher's exact
+    /// rebuild). A task counts as won or lost only when chance would give its gap at most 1 time in 20 (Fisher's exact
     /// test): at 3 runs only 3/3 vs 0/3 decides, and more runs sharpen it. Cost is shown, never judged. The default agent
     /// is Claude Code, headless, with user-level skills, plugins and MCP servers hidden, and Bash pre-approved: the skill's
     /// instructions run with your environment, so trial only skills you'd let run. `--agent` takes any command that
@@ -206,8 +206,8 @@ enum Command {
         /// A shell command run in the work tree after the agent: exit 0 passes. One per --task, or one for all.
         #[arg(long = "check", required = true)]
         checks: Vec<String>,
-        /// Runs per arm and task (2–50).
-        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(2..=50))]
+        /// Runs per arm and task (2–10; at 2 no task can be decided). Above 10, two identical arms could get a call more than 5% of the time.
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(2..=10))]
         runs: u64,
         /// The agent command; it gets the prompt on stdin. Default: headless Claude Code.
         #[arg(long)]
