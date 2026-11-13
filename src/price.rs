@@ -244,6 +244,37 @@ impl Rates {
     }
 }
 
+/// Models billed by prompt length: over `threshold` input tokens per request (cache reads
+/// and writes included), the whole request costs `factor` times every rate. Each request
+/// is priced on its own (platform.claude.com pricing, "Long context pricing", 2026-11-13).
+const LONG_PROMPT: [(&str, u64, f64); 1] = [("claude-haiku-5-5", 100_000, 5.0)];
+
+/// `rates` for a request whose prompt (input, cache reads and cache writes) is `prompt`
+/// tokens: the long-prompt price when `model` has one and the prompt is over its line.
+pub fn long_prompt(rates: Rates, model: &str, prompt: u64) -> Rates {
+    let id = model.split('[').next().unwrap_or(model);
+    match LONG_PROMPT.iter().find(|(m, _, _)| *m == id) {
+        Some((_, threshold, f)) if prompt > *threshold => Rates {
+            input: rates.input * f,
+            output: rates.output * f,
+            cache_read: rates.cache_read * f,
+            cache_write: rates.cache_write * f,
+        },
+        _ => rates,
+    }
+}
+
+/// A recorded turn's rates on its own day, at its long-prompt price when it has one.
+pub fn rates_for_turn(t: &crate::ledger::Turn, ts: u64) -> Option<Rates> {
+    turn_rates_at(&t.model, t.agent, ts).map(|r| long_prompt(r, &t.model, t.prompt()))
+}
+
+/// The average prompt of `requests` requests (at least one) that together read `input`,
+/// `cache_read` and `cache_write` tokens. Usage is kept per turn, not per request.
+pub fn prompt_per_request(requests: u64, input: u64, cache_read: u64, cache_write: u64) -> u64 {
+    (input + cache_read + cache_write) / requests.max(1)
+}
+
 /// Estimated dollars for one usage record.
 pub fn cost(rates: Rates, input: u64, output: u64, cache_read: u64, cache_write: u64) -> f64 {
     (input as f64 * rates.input
@@ -256,6 +287,37 @@ pub fn cost(rates: Rates, input: u64, output: u64, cache_read: u64, cache_write:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn haiku_5_5_prompts_over_100k_tokens_pay_five_times_every_rate() {
+        let base = rates("claude-haiku-5-5").unwrap();
+        // The page's rows: $0.50 / $0.625 (5 min) / $1 (1 h) / $0.05 / $2.50.
+        let long = long_prompt(base, "claude-haiku-5-5", 100_001);
+        assert_eq!((long.input, long.output), (0.5, 2.5));
+        assert!((long.cache_read - 0.05).abs() < 1e-12);
+        assert!((long.cache_write - 1.0).abs() < 1e-12);
+        assert!((long.five_minute().cache_write - 0.625).abs() < 1e-12);
+        // At the line, and for other models, nothing changes.
+        assert_eq!(long_prompt(base, "claude-haiku-5-5", 100_000), base);
+        assert_eq!(long_prompt(base, "claude-haiku-5-5[1m]", 100_001), long);
+        let opus = rates("claude-opus-5-5").unwrap();
+        assert_eq!(long_prompt(opus, "claude-opus-5-5", 900_000), opus);
+        // The probe's request: 148,715 tokens written at $1.00 per million.
+        let c = cost(
+            long_prompt(base, "claude-haiku-5-5", 148_717),
+            2,
+            0,
+            0,
+            148_715,
+        );
+        assert!((c - 0.148716).abs() < 1e-6, "{c}");
+    }
+
+    #[test]
+    fn the_prompt_per_request_is_the_average_input_with_cache() {
+        assert_eq!(prompt_per_request(4, 2, 300_000, 100_002), 100_001);
+        assert_eq!(prompt_per_request(0, 1, 2, 3), 6);
+    }
 
     #[test]
     fn a_turn_is_priced_at_the_rates_of_its_own_day() {

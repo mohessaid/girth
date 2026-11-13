@@ -228,6 +228,19 @@ pub struct Turn {
     pub agent_type: Option<String>,
 }
 
+impl Turn {
+    /// The turn's average prompt per request, input and cache together: what decides a
+    /// long-prompt price (`price::long_prompt`).
+    pub fn prompt(&self) -> u64 {
+        crate::price::prompt_per_request(
+            self.requests.unwrap_or(1),
+            self.input,
+            self.cache_read,
+            self.cache_write,
+        )
+    }
+}
+
 /// A tool result this long (2,000 estimated tokens) is large. `hooks/girth.js` keeps
 /// the same figure.
 pub const LARGE_OUTPUT_CHARS: usize = 8000;

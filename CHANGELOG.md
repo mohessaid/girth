@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.24.3] - 2026-11-13
+
+### Fixed
+- **Claude Haiku 5.5's long-prompt price.** A Haiku 5.5 request whose prompt is over 100,000 tokens, counting cache reads and writes, pays 5× every rate: $0.50 in, $2.50 out, $0.05 cache reads, $1.00 for 1-hour and $0.625 for 5-minute writes (Anthropic's pricing page, "Long context pricing"). Girth priced every Haiku request at the base rates, so a large Haiku conversation cost five times what the meter said.
+  - This applies to turns, side queries, keeper pings, cache rewrites, large tool output and MCP schemas. Turns with Claude Code's own price keep it.
+  - Girth keeps usage per turn, so a turn's prompt is its average per request. A turn whose requests straddle the line is priced as a whole on one side of it.
+  - Checked against Claude Code's own price on 5 Haiku turns, including a 2-request turn: all match to within a millionth of a dollar. Without the tier, the 3 turns over the line came out 5× low.
+
 ## [0.24.2] - 2026-11-13
 
 ### Fixed
@@ -351,7 +359,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.2...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.3...HEAD
+[0.24.3]: https://github.com/mohessaid/girth/compare/v0.24.2...v0.24.3
 [0.24.2]: https://github.com/mohessaid/girth/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/mohessaid/girth/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/mohessaid/girth/compare/v0.23.0...v0.24.0

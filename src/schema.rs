@@ -76,7 +76,9 @@ pub fn mcp_costs(records: &[Record], keep: impl Fn(&Record) -> bool) -> Vec<McpC
             row.tokens = row.tokens.max(server.sent);
             row.requests += requests;
             row.turns += 1;
-            if let Some(rates) = price::turn_rates_at(&t.model, false, r.ts) {
+            let rates = price::turn_rates_at(&t.model, false, r.ts)
+                .map(|rates| price::long_prompt(rates, &t.model, t.prompt()));
+            if let Some(rates) = rates {
                 let reads = if written.insert((&server.server, session)) {
                     row.cost += server.sent as f64 * rates.cache_write / 1e6;
                     requests - 1
@@ -187,6 +189,22 @@ mod tests {
             (g.cost - cost(20_000, 9)).abs() < 1e-12,
             "{}",
             g.cost
+        );
+    }
+
+    #[test]
+    fn schemas_in_a_prompt_over_100k_tokens_pay_haiku_s_long_prompt_price() {
+        let mut t = turn(2, "s", 1, false, &[]);
+        if let Event::Turn(t) = &mut t.event {
+            t.cache_write = 148_715;
+        }
+        let records = vec![schema(1, "s", &[("github", 20_000, 0)]), t];
+        let rows = mcp_costs(&records, |_| true);
+        // Written once at $1.00 per million, not $0.20.
+        assert!(
+            (rows[0].cost - 20_000.0 * 1.0 / 1e6).abs() < 1e-12,
+            "{}",
+            rows[0].cost
         );
     }
 

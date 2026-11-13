@@ -145,7 +145,7 @@ fn turn_cost(ts: u64, t: &Turn) -> f64 {
     if let Some(micros) = t.cost_micros {
         return micros as f64 / 1e6;
     }
-    price::turn_rates_at(&t.model, t.agent, ts).map_or(0.0, |r| {
+    price::rates_for_turn(t, ts).map_or(0.0, |r| {
         price::cost(r, t.input, t.output, t.cache_read, t.cache_write)
     })
 }
@@ -363,7 +363,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     let rewrites: f64 = turns
         .iter()
         .filter_map(|(ts, t)| {
-            let r = price::rates_at(&t.model, *ts)?;
+            let r = price::long_prompt(price::rates_at(&t.model, *ts)?, &t.model, t.prompt());
             let tokens: u64 = t.breaks.iter().map(|b| b.rewritten).sum();
             Some(price::cost(r, 0, 0, 0, tokens))
         })
@@ -415,7 +415,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             if tokens == 0 {
                 return None;
             }
-            let r = price::turn_rates_at(&t.model, t.agent, *ts)?;
+            let r = price::rates_for_turn(t, *ts)?;
             let mut carried = t.requests.unwrap_or(1) as f64 / 2.0;
             if let (Some(s), false) = (&t.session, t.agent) {
                 let mut before = t.context;
@@ -799,6 +799,31 @@ mod tests {
             tool_output: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             ..bash_out(None, 2, 0, 50_000)
         }
+    }
+
+    #[test]
+    fn haiku_turns_over_100k_tokens_per_request_pay_the_long_prompt_price() {
+        let mut t = turn("claude-haiku-5-5", 0, 190);
+        (t.input, t.cache_write, t.requests) = (4, 327_745, Some(2));
+        t.breaks = vec![Break {
+            lost: 150_000,
+            rewritten: 150_000,
+            idle_s: 4_000,
+        }];
+        t.tool_output = [("Bash".to_string(), 10_000)].into_iter().collect();
+        let advice = advise(&[rec(10, t)], 100, 1000, On::default());
+        assert!((advice.spend - 0.328222).abs() < 1e-6, "{}", advice.spend);
+        let get = |k: &str| {
+            advice
+                .contributors
+                .iter()
+                .find(|c| c.kind == k)
+                .unwrap()
+                .cost
+        };
+        assert!((get("rewrites") - 150_000.0 * 1.0 / 1e6).abs() < 1e-12);
+        // 10,000 written at $1.00, then read by one of the turn's two requests at $0.05.
+        assert!((get("tool_output") - (0.01 + 10_000.0 * 0.05 / 1e6)).abs() < 1e-12);
     }
 
     #[test]

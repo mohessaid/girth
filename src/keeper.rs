@@ -209,6 +209,8 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
             Event::Ping(p) if wanted(&p.project) => {
                 s.pings += 1;
                 if let Some(r) = price::rates(&p.model) {
+                    // One ping is one request.
+                    let r = price::long_prompt(r, &p.model, p.input + p.read + p.write);
                     s.ping_cost += price::cost(r, p.input, p.output, p.read, p.write);
                 }
                 pending.insert(&p.project, (&p.model, p.expected));
@@ -219,7 +221,8 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                 s.compact_after += c.after;
             }
             Event::Turn(t) if wanted(&t.project) => {
-                let rates = price::rates(&t.model);
+                let rates =
+                    price::rates(&t.model).map(|r| price::long_prompt(r, &t.model, t.prompt()));
                 for b in &t.breaks {
                     s.breaks += 1;
                     s.rewritten += b.rewritten;
@@ -534,6 +537,22 @@ mod tests {
             ),
         ];
         assert_eq!(summarise(&records, Some("/p")).warm_returns, 0);
+    }
+
+    #[test]
+    fn haiku_pings_and_rewrites_over_100k_tokens_pay_the_long_prompt_price() {
+        let haiku = price::rates("claude-haiku-5-5").unwrap();
+        let long = price::long_prompt(haiku, "claude-haiku-5-5", 100_001);
+        // 1 + 99,999 + 1 tokens: one over the line, counting input, reads and writes.
+        let mut p = ping("/p", 99_999, 150_000);
+        if let Event::Ping(p) = &mut p {
+            (p.model, p.input, p.write) = ("claude-haiku-5-5".into(), 1, 1);
+        }
+        let mut t = turn("claude-haiku-5-5", &[(120_000, 120_000, 9_000)]);
+        t.cache_read = 200_000;
+        let s = summarise(&[rec(1, p), rec(2, Event::Turn(t))], Some("/p"));
+        assert!((s.ping_cost - price::cost(long, 1, 1, 99_999, 1)).abs() < 1e-12);
+        assert!((s.rewrite_cost - 120_000.0 * long.cache_write / 1e6).abs() < 1e-12);
     }
 
     #[test]

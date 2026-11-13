@@ -70,7 +70,9 @@ pub fn side_cost(s: &crate::ledger::Side, ts: u64) -> f64 {
     if let Some(micros) = s.cost_micros {
         return micros as f64 / 1e6;
     }
+    let prompt = price::prompt_per_request(s.requests, s.input, s.cache_read, s.cache_write);
     price::rates_at(&s.model, ts).map_or(0.0, |r| {
+        let r = price::long_prompt(r, &s.model, prompt);
         price::cost(r, s.input, s.output, s.cache_read, s.cache_write)
     })
 }
@@ -109,7 +111,7 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         s.output += t.output;
         s.cache_read += t.cache_read;
         s.cache_write += t.cache_write;
-        let rates = price::turn_rates_at(&t.model, t.agent, r.ts);
+        let rates = price::rates_for_turn(t, r.ts);
         // Claude Code's own price for the turn's requests, when the mod could add it up.
         let cost = match (t.cost_micros, rates) {
             (Some(micros), _) => micros as f64 / 1e6,
@@ -442,6 +444,26 @@ mod tests {
         // s1 and s2: 3,000 tokens written at $8 per million.
         assert!(text.contains("; s3 ≈ 3,000 tokens × 1 request · called in 0 turns · ≈ $0.0240; 2 more ≈ $0.0240 (--json lists them)"), "{text}");
         assert_eq!(s.mcp_schemas.len(), 7);
+    }
+
+    #[test]
+    fn haiku_turns_and_side_queries_over_100k_tokens_per_request_pay_five_times() {
+        // The 2-request turn Claude Code priced at $0.328223 (2.1.323).
+        let mut t = turn("/a", "claude-haiku-5-5", 4, None);
+        if let Event::Turn(t) = &mut t.event {
+            (t.output, t.cache_read, t.cache_write, t.requests) = (190, 0, 327_745, Some(2));
+        }
+        assert!((summarise(&[t.clone()], None).cost - 0.328222).abs() < 1e-6);
+        // The same tokens over 4 requests average under the line: base prices.
+        if let Event::Turn(t) = &mut t.event {
+            t.requests = Some(4);
+        }
+        assert!((summarise(&[t], None).cost - 0.328222 / 5.0).abs() < 1e-6);
+        let mut s = side("/a", "compact", "claude-haiku-5-5", None);
+        if let Event::Side(s) = &mut s.event {
+            (s.requests, s.input, s.output, s.cache_read) = (1, 120_000, 0, 0);
+        }
+        assert!((summarise(&[s], None).side_cost - 120_000.0 * 0.5 / 1e6).abs() < 1e-12);
     }
 
     #[test]
