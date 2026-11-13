@@ -10,6 +10,8 @@ fn girth() -> Command {
     );
     // Tests run inside Claude Code too; the output default must not follow it.
     cmd.env_remove("CLAUDECODE").env_remove("GIRTH_OUTPUT_DIR");
+    // `girth trial` must never start a real agent from a test.
+    cmd.env("GIRTH_TRIAL_AGENT", "false");
     // `girth import` must never read this machine's own harness logs.
     let none = std::env::temp_dir().join("girth-test-no-harness");
     cmd.env("CODEX_HOME", &none)

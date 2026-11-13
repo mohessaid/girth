@@ -104,4 +104,4 @@ The other two are equivalent:
 - `kept > cursor` replaced with `>=`. That only rewrites an unchanged cursor.
 
 ## trial (0.25.0)
-- `src/main.rs` `run_trial`: `checks.len() != 1` → `==` times out rather than failing. With one check, the refusal path is skipped and a real trial runs past the test timeout; with one check per task, the mutant refuses. Caught as a timeout.
+- `src/main.rs` `run_trial`: `checks.len() != 1` → `==` timed out under 0.25.0. It skipped the refusal, so the test ran a trial with the default agent: three real `claude -p` runs, about $0.38. Since 0.25.1, the tests set `GIRTH_TRIAL_AGENT=false` and drop `claude` from the PATH, so the mutant fails fast instead.

@@ -72,9 +72,19 @@ const HAS_SKILL: &str =
     "test \"$(cat .claude/skills/pdf-fix/SKILL.md 2>/dev/null | head -c 3)\" = '---'";
 const FIRE: &str = r#"echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"pdf-fix"}}]}}'"#;
 
-fn trial(f: &Fixture) -> Command {
+/// girth with a ledger in the fixture, and no way to reach a real agent: the default
+/// agent is replaced and `claude` is off the PATH.
+fn base(f: &Fixture) -> Command {
     let mut cmd = Command::cargo_bin("girth").unwrap();
-    cmd.env("GIRTH_HOME", &f.home).current_dir(&f.repo);
+    cmd.env("GIRTH_HOME", &f.home)
+        .env("GIRTH_TRIAL_AGENT", "false")
+        .env("PATH", "/usr/bin:/bin");
+    cmd
+}
+
+fn trial(f: &Fixture) -> Command {
+    let mut cmd = base(f);
+    cmd.current_dir(&f.repo);
     cmd.arg("trial").arg(&f.skill);
     cmd
 }
@@ -123,7 +133,8 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
     assert!(!ledger.contains("test -f ok"), "{ledger}");
     // The clones are gone, and the real repo was never touched.
     assert_eq!(fs::read_to_string(f.repo.join("ok")).unwrap(), "leaked\n");
-    // Clones live in a scratch dir, never in the repo.
+    // Clones live in a scratch dir, removed afterwards, never in the repo.
+    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 0);
     let mut entries: Vec<String> = fs::read_dir(&f.repo)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
@@ -146,10 +157,10 @@ fn a_skill_that_breaks_the_task_is_rejected() {
     );
     trial(&f)
         .args(["--task", f.root.join("task.md").to_str().unwrap()])
-        .args(["--check", "test -f ok", "--agent", &a, "--runs", "2"])
+        .args(["--check", "test -f ok", "--agent", &a])
         .assert()
         .success()
-        .stdout(predicates::str::contains("with 0/2 · without 2/2 → lost"))
+        .stdout(predicates::str::contains("with 0/3 · without 3/3 → lost"))
         .stdout(predicates::str::contains("→ reject"));
 }
 
@@ -181,9 +192,10 @@ fn a_hanging_agent_is_killed_and_fails_and_a_plain_agent_reports_unknowns() {
         .assert()
         .success()
         .stdout(predicates::str::contains("with 0/2 · without 0/2 → tied"))
-        .stdout(predicates::str::contains("4 runs timed out"))
+        .stdout(predicates::str::contains("4 agent runs timed out"))
+        .stdout(predicates::str::contains("every run failed in both arms"))
         .stdout(predicates::str::contains(
-            "skill use unknown · cost unknown → undecided",
+            "skill use unknown (the agent's output didn't say; the verdict assumes it ran) · cost unknown → undecided",
         ));
     assert!(started.elapsed().as_secs() < 20);
 }
@@ -220,8 +232,7 @@ fn one_check_serves_every_task_and_mismatched_counts_are_refused() {
 fn outside_a_git_repo_or_without_a_skill_it_refuses() {
     let f = fixture();
     let task = f.root.join("task.md");
-    let mut cmd = Command::cargo_bin("girth").unwrap();
-    cmd.env("GIRTH_HOME", &f.home)
+    base(&f)
         .current_dir(&f.root)
         .arg("trial")
         .arg(&f.skill)
@@ -233,8 +244,7 @@ fn outside_a_git_repo_or_without_a_skill_it_refuses() {
         .args(["--task", "/nonexistent/task.md", "--check", "true"])
         .assert()
         .code(2);
-    let mut cmd = Command::cargo_bin("girth").unwrap();
-    cmd.env("GIRTH_HOME", &f.home)
+    base(&f)
         .current_dir(&f.repo)
         .args(["trial", f.root.to_str().unwrap()])
         .args(["--task", task.to_str().unwrap(), "--check", "true"])
@@ -242,4 +252,108 @@ fn outside_a_git_repo_or_without_a_skill_it_refuses() {
         .code(2)
         .stderr(predicates::str::contains("SKILL.md"));
     assert!(!f.home.join("ledger.jsonl").exists());
+}
+
+#[test]
+fn agent_errors_and_check_timeouts_count_as_fails_and_say_why() {
+    let f = fixture();
+    let task = f.root.join("task.md");
+    let task = task.to_str().unwrap();
+    trial(&f)
+        .args(["--task", task, "--check", "true", "--runs", "2"])
+        .args(["--agent", "echo 'Invalid API key' >&2; exit 1"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "4 agent runs ended in an error (counted as fails): Invalid API key",
+        ))
+        .stdout(predicates::str::contains("with 0/2 · without 0/2"));
+    trial(&f)
+        .args(["--task", task, "--check", "sleep 20", "--runs", "2"])
+        .args(["--agent", "true", "--check-timeout", "1"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "4 checks timed out (counted as fails)",
+        ));
+    // An `is_error` result fails the run even when the agent exits 0.
+    let a = agent(
+        &f,
+        "e.sh",
+        r#"echo '{"type":"result","is_error":true,"result":"Not logged in"}'"#,
+    );
+    trial(&f)
+        .args([
+            "--task", task, "--check", "true", "--runs", "2", "--agent", &a,
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("4 agent runs ended in an error"));
+    // The default agent comes from GIRTH_TRIAL_AGENT here (`false`), never a real one.
+    trial(&f)
+        .args(["--task", task, "--check", "true", "--runs", "2"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("4 agent runs ended in an error"));
+}
+
+#[cfg(unix)]
+#[test]
+fn an_interrupted_trial_stops_its_agent_and_the_next_one_sweeps_its_clone() {
+    use std::os::unix::process::CommandExt;
+    let f = fixture();
+    let marker = format!("girth-trial-marker-{}", std::process::id());
+    let bin = assert_cmd::cargo::cargo_bin("girth");
+    let mut child = std::process::Command::new(bin)
+        .env("GIRTH_HOME", &f.home)
+        .env("GIRTH_TRIAL_AGENT", "false")
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(&f.repo)
+        .arg("trial")
+        .arg(&f.skill)
+        .args([
+            "--task",
+            f.root.join("task.md").to_str().unwrap(),
+            "--check",
+            "true",
+        ])
+        .args(["--agent", &format!("sleep 30 # {marker}")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let running = |m: &str| {
+        std::process::Command::new("pgrep")
+            .args(["-f", m])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    };
+    let start = std::time::Instant::now();
+    while !running(&marker) && start.elapsed().as_secs() < 10 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(running(&marker), "the agent never started");
+    // Ctrl-C reaches the whole foreground process group.
+    std::process::Command::new("kill")
+        .args(["-INT", "--", &format!("-{}", child.id())])
+        .status()
+        .unwrap();
+    child.wait().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!running(&marker), "the agent outlived girth");
+    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 1);
+    trial(&f)
+        .args([
+            "--task",
+            f.root.join("task.md").to_str().unwrap(),
+            "--check",
+            "true",
+        ])
+        .args(["--agent", "true", "--runs", "2"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 0);
 }

@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-11-13
+
+### Fixed
+- **`girth trial` judges each task with Fisher's one-sided exact test (at 0.05), not a fixed 2-pass gap.**
+  - A simulation showed the fixed rule calls a win or a loss on identical coin-flip arms 21% of the time at 3 runs and 50% at 10, so more runs made it worse.
+  - With Fisher's test, false calls stay at or under 5% per task at every run count, and power grows with runs (36% at 3, 94% at 10, for a 0.9-vs-0.2 skill).
+  - At 3 runs, only 3/3 vs 0/3 decides. `--runs` is now 2–50.
+- **Agent errors and check timeouts count as fails, and say so.**
+  - A non-zero agent exit or an `is_error` result counts as an error, and the output prints the agent's first stderr line.
+  - Checks killed at `--check-timeout` (new, default 600 s) are counted.
+  - When every run of both arms fails, the output says to fix the setup before blaming the skill.
+- **An interrupted trial no longer leaves its agent running.** Agent runs stay in girth's process group, so Ctrl-C stops them, and a timeout kills the whole process tree. Scratch clones now live in `$GIRTH_HOME/trials`, and the next trial sweeps those left by dead runs.
+- **Tests can no longer start a real agent.** A mutation-testing run of 0.25.0 started three real `claude -p` runs, about $0.38: a mutant skipped a refusal that guards the default agent. `GIRTH_TRIAL_AGENT` now replaces the default agent, and the tests set it and run with `claude` off the PATH.
+
+### Changed
+- **For other harnesses, `--agent` puts the skill in `.agents/skills` as well as `.claude/skills`.** Verified with Codex 0.164: 3/3 vs 0/3. A real default-agent trial on Claude Haiku 5.5 also ran: 6 runs, 72 s, about $0.03, admit.
+- **The help and `references/trial.md` now warn that the default agent pre-approves Bash,** so trial only skills you'd let run.
+
 ## [0.25.0] - 2026-11-13
 
 ### Added
@@ -380,7 +398,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.1...HEAD
+[0.25.1]: https://github.com/mohessaid/girth/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/mohessaid/girth/compare/v0.24.4...v0.25.0
 [0.24.4]: https://github.com/mohessaid/girth/compare/v0.24.3...v0.24.4
 [0.24.3]: https://github.com/mohessaid/girth/compare/v0.24.2...v0.24.3

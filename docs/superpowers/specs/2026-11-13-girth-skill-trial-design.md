@@ -56,13 +56,19 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
   - From the stream, Girth reads two things:
     - **Whether the skill fired:** a `Skill` tool use naming it.
     - **The run's cost:** the result line's `total_cost_usd`.
-- **`--agent`** replaces the default with any command that reads a prompt on stdin, such as Codex's `codex exec -` or `gemini -p`. Girth targets every harness, so the runner is not tied to one. For those agents, firing and cost are reported as unknown.
+- **`--agent`** replaces the default with any command that reads a prompt on stdin. Girth targets every harness, so the runner is not tied to one.
+  - The skill goes into both `.claude/skills/<name>` and `.agents/skills/<name>`, and both are cleared in the without arm.
+  - For these agents, firing and cost are reported as unknown, and the output says the verdict assumes the skill ran.
+  - **Verified 2026-11-13** with Codex 0.164 (`codex exec --skip-git-repo-check -s workspace-write -`): the skill was found in `.agents/skills`, 3/3 vs 0/3.
+- **`GIRTH_TRIAL_AGENT`** replaces the default agent. The tests set it, and run with `claude` off the PATH, so no test or mutant can start a real, auto-approved run. Before this, a mutation-testing run started three real `claude -p` runs, about $0.38.
+
+**Safety:** the default agent pre-approves Bash. A trial lets the skill's instructions run shell commands with the user's environment, so `--help` and `references/trial.md` say to trial only skills the user would let run.
 
 **Order and repeats:**
 - Arms alternate (with, without, with, …), so drift in the model or the network hits both arms alike.
 - Runs are sequential, never in parallel.
 - `--runs` defaults to 3 for each arm and task, chosen from the pilot below.
-- `--runs` must be at least 2. With one run, no task could reach the 2-run difference below.
+- `--runs` is 2–50. At 2 runs no task can be decided (the best gap, 2/2 vs 0/2, has a 1-in-6 chance). It is allowed only so that a cheap first look can show whether the skill fires at all.
 
 ### The verdict
 
@@ -70,12 +76,24 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
 - Each `TaskResult` holds `with_passed`, `without_passed` and `runs`, all integers.
 - `fired` is how many with-skill runs used the skill, when Girth could tell.
 
-**Each task is judged on integer passes,** `d = with_passed − without_passed`:
-- **won** when d ≥ 2;
-- **lost** when d ≤ −2;
+**Each task is judged with Fisher's one-sided exact test** on its pass counts:
+- **won** when the chance that identical arms would show a gap at least this large in the skill's favour is at most 0.05;
+- **lost** when the same holds against the skill;
 - **tied** otherwise.
 
-A single flipped run never decides a task. That is the pilot's lesson: the paper's "any positive gain" rule, mirrored, would have rejected a skill on one lucky no-skill run.
+**Why not a fixed gap.** An earlier draft used "won when the difference is at least 2 passes". A simulation (2026-11-13, 20,000 trials per cell) shows that rule calls a win or a loss on identical coin-flip arms 21% of the time at 3 runs, and 50% at 10. So more runs would make it *worse*.
+
+| runs per arm | fixed 2-pass rule: false calls (p = 0.5) | Fisher at 0.05: false calls (p = 0.5) | Fisher's power, 0.9 vs 0.2 |
+|---|---|---|---|
+| 3 | 21% | 3.0% | 36% |
+| 5 | 34% | 2.2% | 55% |
+| 10 | 50% | 4.2% | 94% |
+
+Fisher's false-call rate stays at or under 5% per task at every run count, and its power grows with runs. "Add runs when undecided" is therefore the right advice.
+- At 3 runs, only 3/3 vs 0/3 decides.
+- With several tasks, the chance that some task gets a false call grows with their number.
+
+The pilot's lesson still holds: one flipped run never decides.
 
 | Condition | Verdict |
 |---|---|
@@ -85,7 +103,7 @@ A single flipped run never decides a task. That is the pilot's lesson: the paper
 | none won or lost, or some of each | **undecided** |
 
 **Known limits, stated in `--help`:**
-- A skill that adds one pass on every task (+1, +1, +1, +1) is undecided. That is conservative on purpose; more runs settle it.
+- A small lift is undecided at 3 runs. That is conservative on purpose, and more runs settle it.
 - When every run of both arms fails, the task can't tell the arms apart, and the output says so.
 
 **Cost is reported, never decisive.**
@@ -95,7 +113,7 @@ A single flipped run never decides a task. That is the pilot's lesson: the paper
 **Reporting:**
 - Each task prints as raw counts: `edit-pdf: with 3/3 · without 0/3 → won`.
 - Then a total: `skill used in 3 of 3 runs · $0.41 vs $0.38 per run → admit`.
-- There is no significance language. A footer says once that a task needs a 2-run difference to count.
+- A footer says once what a call means: chance would give the gap under 1 time in 20.
 
 ### The ledger
 
@@ -140,9 +158,9 @@ It stores no prompt text, check command or output, just as outcomes store only l
 **What it means for the rule:**
 - **`edit-pdf`:** a clear win. The same-day difference is 2 runs, so the task is won.
 - **`software-dependency-audit`:** noise in both arms.
-  - Every run, with or without the skill, either listed the 3 production findings (pass) or 22 findings with dev dependencies included (fail).
+  - The three same-day audit runs whose output was inspected (both no-skill runs and the failed skill run) listed 22 findings with dev dependencies included, and failed. The passing skill run listed the 3 production findings. The raw runs have since been deleted.
   - The first run's "the skill turned a pass into a fail" was this coin flip.
-  - The paper's "any positive gain" rule would have admitted on today's runs and rejected on October's. Needing a 2-run difference, the task is tied both times.
+  - The paper's "any positive gain" rule would have admitted on today's runs and rejected on October's. Under Fisher's exact test, the task is tied both times.
 - **The skill fired** (a `Skill` call naming it) in every girth run. The trajectories show it; BenchFlow's own counter reads 0. So firing has to be read from the agent's stream, not assumed.
 - **Cost noise:** output tokens for the same arm and task varied by 17–35% between runs.
-- **The default stays at 3 runs** per arm and task, with a task decided only by a 2-run difference. A user who wants a sharper verdict raises `--runs`.
+- **The default stays at 3 runs** per arm and task, judged with Fisher's exact test. A user who wants a sharper verdict raises `--runs`.

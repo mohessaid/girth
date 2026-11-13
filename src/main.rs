@@ -190,10 +190,13 @@ enum Command {
     },
     /// Run tasks with and without a skill, grade each run with a check command, and record whether the skill earned its place.
     ///
-    /// Each run works in a fresh clone of this repo at HEAD. A task counts as won or lost only by a difference of 2 or more
-    /// passes, so one flipped run never decides: a skill that adds a single pass on every task stays undecided until more
-    /// runs settle it. Cost is shown, never judged. The default agent is Claude Code, headless, with user-level skills,
-    /// plugins and MCP servers hidden; `--agent` takes any command that reads the prompt on stdin. Runs spend model usage.
+    /// Each run works in a fresh clone of this repo at HEAD (untracked files and build caches aren't there, so checks may
+    /// rebuild). A task counts as won or lost only when chance would give its gap under 1 time in 20 (Fisher's exact
+    /// test): at 3 runs only 3/3 vs 0/3 decides, and more runs sharpen it. Cost is shown, never judged. The default agent
+    /// is Claude Code, headless, with user-level skills, plugins and MCP servers hidden, and Bash pre-approved: the skill's
+    /// instructions run with your environment, so trial only skills you'd let run. `--agent` takes any command that
+    /// reads the prompt on stdin (the skill is placed in .claude/skills and .agents/skills; whether it fired is then
+    /// unknown). Runs spend model usage.
     Trial {
         /// The skill folder (with a SKILL.md), usually a crafted girth-* skill.
         skill_dir: PathBuf,
@@ -203,8 +206,8 @@ enum Command {
         /// A shell command run in the work tree after the agent: exit 0 passes. One per --task, or one for all.
         #[arg(long = "check", required = true)]
         checks: Vec<String>,
-        /// Runs per arm and task (at least 2).
-        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(2..))]
+        /// Runs per arm and task (2–50).
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(2..=50))]
         runs: u64,
         /// The agent command; it gets the prompt on stdin. Default: headless Claude Code.
         #[arg(long)]
@@ -215,6 +218,9 @@ enum Command {
         /// Seconds before a hung agent run is killed and counted as a fail.
         #[arg(long, default_value_t = 1800)]
         timeout: u64,
+        /// Seconds before a check is killed and its run counted as a fail.
+        #[arg(long, default_value_t = 600)]
+        check_timeout: u64,
     },
     /// Check crafted skills against the Girth contract.
     Validate {
@@ -764,7 +770,7 @@ fn run_trial(
     runs: u64,
     agent: Option<String>,
     model: Option<String>,
-    timeout: u64,
+    (timeout, check_timeout): (u64, u64),
     ctx: &Context,
     out: &mut String,
 ) -> ExitCode {
@@ -803,7 +809,14 @@ fn run_trial(
             Err(e) => return refuse(format!("{}: {e}", task.display())),
         }
     }
-    let agent = agent.unwrap_or_else(|| match model {
+    // `GIRTH_TRIAL_AGENT` replaces the default agent (the tests set it, so no test can
+    // ever start a real, auto-approved model run).
+    let default = ctx
+        .env
+        .get("GIRTH_TRIAL_AGENT")
+        .filter(|a| !a.is_empty())
+        .cloned();
+    let agent = agent.or(default).unwrap_or_else(|| match model {
         Some(m) => format!("{} --model {m}", girth::trial::DEFAULT_AGENT),
         None => girth::trial::DEFAULT_AGENT.to_string(),
     });
@@ -813,6 +826,8 @@ fn run_trial(
         runs,
         agent,
         timeout: std::time::Duration::from_secs(timeout),
+        check_timeout: std::time::Duration::from_secs(check_timeout),
+        scratch_root: girth_home(ctx).join("trials"),
     };
     let report = match girth::trial::run(&top, &opts, |line| eprintln!("girth trial: {line}")) {
         Ok(r) => r,
@@ -1364,8 +1379,17 @@ fn main() -> ExitCode {
             agent,
             model,
             timeout,
+            check_timeout,
         } => run_trial(
-            skill_dir, tasks, checks, runs, agent, model, timeout, &ctx, &mut out,
+            skill_dir,
+            tasks,
+            checks,
+            runs,
+            agent,
+            model,
+            (timeout, check_timeout),
+            &ctx,
+            &mut out,
         ),
         Command::Drift { roots, skill_dirs } => {
             let installed = discover_skills(&resolve_roots(&roots, &ctx, &mut warnings));

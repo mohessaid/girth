@@ -83,7 +83,7 @@ This was the pilot for `girth trial` (`docs/superpowers/specs/2026-11-13-girth-s
 | software-dependency-audit | 0/2 | 1/2 | 1/3 | 1/5 |
 
 **Correction.** The first run read "the dependency-audit skills turned a pass into a fail". That was a coin flip, and both arms flip.
-- Every run either listed the 3 production findings, which passes, or 22 findings with dev dependencies included, which fails.
+- Of the same-day audit runs, those whose output was inspected (both no-skill runs and the failed skill run) listed 22 findings with dev dependencies included, and failed. The passing skill run listed the 3 production findings. The raw runs weren't kept.
 - The October girth runs kept only summaries, so their failure reason isn't known.
 
 **What holds:**

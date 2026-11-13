@@ -1,7 +1,8 @@
 //! Skill trials: run the same task with and without a skill, grade both with a check
-//! command, and judge whether the skill earned its place. A task is decided only by a
-//! difference of two or more passes, so a single flipped run never sets a verdict (the
-//! 2026-11-13 pilot). Cost is reported, never decisive: it varies too much at n = 3.
+//! command, and judge whether the skill earned its place. A task is decided only when
+//! chance alone would give its gap under 1 time in 20 (Fisher's exact test), so a
+//! flipped run never sets a verdict and more runs only sharpen it. Cost is reported,
+//! never decisive: it varies too much at small n.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -43,12 +44,32 @@ impl Verdict {
     }
 }
 
-/// Won by two or more passes, lost by two or more, else tied.
+/// The most a task's call may be wrong by chance: a gap is decisive only when two
+/// identical arms would show one at least that large less than 1 time in 20.
+pub const ALPHA: f64 = 0.05;
+
+/// Fisher's one-sided exact test: the chance that, of the `a + b` passes across two arms
+/// of `runs` runs each, the first arm gets `a` or more if the arms were the same.
+pub fn tail(a: u64, b: u64, runs: u64) -> f64 {
+    let total = a + b;
+    let hits: u128 = (a..=runs.min(total))
+        .filter(|x| total - x <= runs)
+        .map(|x| choose(runs, x) * choose(runs, total - x))
+        .sum();
+    hits as f64 / choose(2 * runs, total) as f64
+}
+
+fn choose(n: u64, k: u64) -> u128 {
+    (0..k as u128).fold(1, |acc, i| acc * (n as u128 - i) / (i + 1))
+}
+
+/// Won or lost when Fisher's exact test puts the gap under `ALPHA`, else tied. In the
+/// 2026-11-13 simulation, identical arms got a call at most 4.2% of the time at 2–10
+/// runs, where a fixed 2-pass rule called 21% at 3 runs and 50% at 10.
 pub fn judge(t: &TaskResult) -> Call {
-    let d = t.with_passed as i64 - t.without_passed as i64;
-    if d >= 2 {
+    if tail(t.with_passed, t.without_passed, t.runs) <= ALPHA {
         Call::Won
-    } else if d <= -2 {
+    } else if tail(t.without_passed, t.with_passed, t.runs) <= ALPHA {
         Call::Lost
     } else {
         Call::Tied
@@ -76,6 +97,8 @@ pub fn verdict(tasks: &[TaskResult], fired: Option<u64>) -> Verdict {
 pub struct Stream {
     pub fired: Option<bool>,
     pub cost: Option<f64>,
+    /// The result said the run errored (`is_error`), such as a login or API failure.
+    pub error: bool,
 }
 
 /// Reads Claude Code's `stream-json` lines (or one `json` result object).
@@ -110,6 +133,7 @@ pub fn read_stream(stdout: &str, skill: &str) -> Stream {
                 }
             }
             "result" => {
+                out.error |= v.get("is_error").and_then(|e| e.as_bool()) == Some(true);
                 out.cost = v
                     .get("total_cost_usd")
                     .and_then(|c| c.as_f64())
@@ -125,9 +149,6 @@ pub fn read_stream(stdout: &str, skill: &str) -> Stream {
 /// user-level skills, plugins and MCP servers hidden so the skill is the only difference.
 pub const DEFAULT_AGENT: &str = "claude -p --output-format stream-json --verbose --setting-sources project,local --permission-mode acceptEdits --allowedTools Bash,Skill";
 
-/// How long a check may run.
-pub const CHECK_TIMEOUT: Duration = Duration::from_secs(600);
-
 pub struct Options {
     pub skill_dir: PathBuf,
     /// (prompt, check command) per task.
@@ -135,6 +156,9 @@ pub struct Options {
     pub runs: u64,
     pub agent: String,
     pub timeout: Duration,
+    pub check_timeout: Duration,
+    /// Where scratch clones go (`$GIRTH_HOME/trials`); stale ones there are swept.
+    pub scratch_root: PathBuf,
 }
 
 /// What a trial found, before it becomes a ledger event.
@@ -145,7 +169,13 @@ pub struct Report {
     pub fired: Option<u64>,
     pub with_cost: Option<f64>,
     pub without_cost: Option<f64>,
+    /// Agent runs killed at the timeout, checks killed at theirs, and agent runs that
+    /// ended in an error (non-zero exit or an `is_error` result). All count as fails.
     pub timed_out: u64,
+    pub check_timed_out: u64,
+    pub errored: u64,
+    /// The first line an erroring agent printed to stderr, to say why.
+    pub error_line: Option<String>,
     pub verdict: Verdict,
 }
 
@@ -173,14 +203,40 @@ impl Report {
             .collect();
         if self.timed_out > 0 {
             lines.push(format!(
-                "{} runs timed out (counted as fails)",
+                "{} agent runs timed out (counted as fails)",
                 self.timed_out
             ));
+        }
+        if self.check_timed_out > 0 {
+            lines.push(format!(
+                "{} checks timed out (counted as fails)",
+                self.check_timed_out
+            ));
+        }
+        if self.errored > 0 {
+            let why = self
+                .error_line
+                .as_deref()
+                .map(|l| format!(": {l}"))
+                .unwrap_or_default();
+            lines.push(format!(
+                "{} agent runs ended in an error (counted as fails){why}",
+                self.errored
+            ));
+        }
+        if !self.tasks.is_empty()
+            && self
+                .tasks
+                .iter()
+                .all(|t| t.with_passed + t.without_passed == 0)
+        {
+            lines.push("every run failed in both arms: check the task, the check command and the agent before blaming the skill".into());
         }
         let with_runs: u64 = self.tasks.iter().map(|t| t.runs).sum();
         let used = match self.fired {
             Some(n) => format!("skill used in {n} of {with_runs} runs"),
-            None => "skill use unknown".to_string(),
+            None => "skill use unknown (the agent's output didn't say; the verdict assumes it ran)"
+                .to_string(),
         };
         let cost = match (self.with_cost, self.without_cost) {
             (Some(a), Some(b)) => format!("${a:.4} vs ${b:.4} per run"),
@@ -192,12 +248,16 @@ impl Report {
             self.verdict.label()
         ));
         lines.push(
-            "A task counts as won or lost only by a difference of 2 or more passes; cost is shown, not judged."
+            "A task counts as won or lost only when chance would give its gap under 1 time in 20 (Fisher's exact test); more runs sharpen it. Cost is shown, not judged."
                 .to_string(),
         );
         lines.join("\n")
     }
 }
+
+/// Skill folders a run places the skill in (and clears in the without arm): Claude Code's
+/// and the shared `.agents/skills` that Codex and other harnesses read.
+pub const SKILL_FOLDERS: [&str; 2] = [".claude/skills", ".agents/skills"];
 
 /// Runs every task `runs` times in each arm, alternating arms, each run in a fresh clone
 /// of `project` at HEAD. `log` hears one line per run.
@@ -208,12 +268,14 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
         .and_then(|n| n.to_str())
         .ok_or("the skill folder has no name")?
         .to_string();
-    let scratch = scratch_dir()?;
+    sweep(&opts.scratch_root);
+    let scratch = scratch_dir(&opts.scratch_root)?;
     let result = (|| {
         let mut tasks = Vec::new();
         let (mut fired, mut fired_known) = (0u64, true);
         let (mut with_costs, mut without_costs) = (Vec::new(), Vec::new());
-        let mut timed_out = 0;
+        let (mut timed_out, mut check_timed_out, mut errored) = (0, 0, 0);
+        let mut error_line = None;
         for (i, (prompt, check)) in opts.tasks.iter().enumerate() {
             let mut t = TaskResult {
                 with_passed: 0,
@@ -224,35 +286,56 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
                 let with = n % 2 == 0;
                 let work = scratch.join(format!("t{i}-r{n}"));
                 clone(project, &work)?;
-                let target = work.join(".claude/skills").join(&skill);
-                if target.exists() {
-                    std::fs::remove_dir_all(&target).map_err(|e| e.to_string())?;
-                }
-                if with {
-                    copy_dir(&opts.skill_dir, &target)?;
+                for folder in SKILL_FOLDERS {
+                    let target = work.join(folder).join(&skill);
+                    if target.exists() {
+                        std::fs::remove_dir_all(&target).map_err(|e| e.to_string())?;
+                    }
+                    if with {
+                        copy_dir(&opts.skill_dir, &target)?;
+                    }
                 }
                 let out = scratch.join(format!("t{i}-r{n}.out"));
+                let err = scratch.join(format!("t{i}-r{n}.err"));
                 let agent = shell(
                     &opts.agent,
                     &work,
                     Some(prompt),
                     &out,
+                    &err,
                     &scratch,
                     opts.timeout,
                 )?;
                 let stream =
                     read_stream(&std::fs::read_to_string(&out).unwrap_or_default(), &skill);
-                // A run that timed out fails, whatever it left behind.
-                let passed = agent != Exit::TimedOut
-                    && shell(
+                let failed = agent == Exit::Failed || stream.error;
+                if failed {
+                    errored += 1;
+                    if error_line.is_none() {
+                        error_line = std::fs::read_to_string(&err).ok().and_then(|e| {
+                            e.lines()
+                                .find(|l| !l.trim().is_empty())
+                                .map(|l| l.chars().take(200).collect())
+                        });
+                    }
+                }
+                let checked = if agent == Exit::TimedOut || failed {
+                    Exit::Failed
+                } else {
+                    let devnull = scratch.join("check.out");
+                    shell(
                         check,
                         &work,
                         None,
-                        &scratch.join("check.out"),
+                        &devnull,
+                        &devnull,
                         &scratch,
-                        CHECK_TIMEOUT,
-                    )? == Exit::Ok;
+                        opts.check_timeout,
+                    )?
+                };
                 timed_out += u64::from(agent == Exit::TimedOut);
+                check_timed_out += u64::from(checked == Exit::TimedOut);
+                let passed = checked == Exit::Ok;
                 if with {
                     t.with_passed += u64::from(passed);
                     match stream.fired {
@@ -284,6 +367,9 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
             with_cost: mean(&with_costs),
             without_cost: mean(&without_costs),
             timed_out,
+            check_timed_out,
+            errored,
+            error_line,
         })
     })();
     let _ = std::fs::remove_dir_all(&scratch);
@@ -298,14 +384,39 @@ fn mean(costs: &[Option<f64>]) -> Option<f64> {
         .map(|k| k.iter().sum::<f64>() / k.len() as f64)
 }
 
-fn scratch_dir() -> Result<PathBuf, String> {
+/// `<root>/<pid>-<nanos>`, so a later trial can tell a dead run's leftovers by its pid.
+fn scratch_dir(root: &Path) -> Result<PathBuf, String> {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let dir = std::env::temp_dir().join(format!("girth-trial-{}-{nanos}", std::process::id()));
+    let dir = root.join(format!("{}-{nanos}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     Ok(dir)
+}
+
+/// Removes scratch dirs left by trials whose process is gone (interrupted ones).
+fn sweep(root: &Path) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(pid) = name.split('-').next().and_then(|p| p.parse::<u32>().ok()) else {
+            continue;
+        };
+        if pid != std::process::id() && !alive(pid) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+fn alive(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 fn clone(project: &Path, work: &Path) -> Result<(), String> {
@@ -342,20 +453,22 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
 
 #[derive(Debug, PartialEq, Eq)]
 enum Exit {
-    /// Exit 0 (for a check: pass).
+    /// Exit 0.
     Ok,
-    /// Ran to the end with another status (an agent's own status isn't judged).
+    /// Ran to the end with another status.
     Failed,
     TimedOut,
 }
 
-/// Runs `cmd` with `sh -c` in `dir`, `stdin` from a file, stdout to `out`, in its own
-/// process group so a timeout kills everything it started.
+/// Runs `cmd` with `sh -c` in `dir`, `stdin` from a file, stdout to `out` and stderr to
+/// `err`. It stays in girth's process group, so Ctrl-C stops it with girth; a timeout
+/// kills its whole process tree.
 fn shell(
     cmd: &str,
     dir: &Path,
     stdin: Option<&str>,
     out: &Path,
+    err: &Path,
     scratch: &Path,
     timeout: Duration,
 ) -> Result<Exit, String> {
@@ -367,20 +480,23 @@ fn shell(
         }
         None => Stdio::null(),
     };
-    let file = std::fs::File::create(out).map_err(|e| e.to_string())?;
-    let mut command = Command::new("sh");
-    command
+    let stdout = std::fs::File::create(out).map_err(|e| e.to_string())?;
+    let stderr = if err == out {
+        stdout.try_clone().map_err(|e| e.to_string())?
+    } else {
+        std::fs::File::create(err).map_err(|e| e.to_string())?
+    };
+    let mut child = Command::new("sh")
         .arg("-c")
         .arg(cmd)
         .current_dir(dir)
         .env("GIRTH_HOME", scratch.join("home"))
         .env("GIRTH_TRIAL", "1")
         .stdin(input)
-        .stdout(file)
-        .stderr(Stdio::null());
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    let mut child = command.spawn().map_err(|e| format!("sh: {e}"))?;
+        .stdout(stdout)
+        .stderr(stderr)
+        .spawn()
+        .map_err(|e| format!("sh: {e}"))?;
     let start = Instant::now();
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
@@ -391,17 +507,39 @@ fn shell(
             });
         }
         if start.elapsed() >= timeout {
-            let _ = Command::new("kill")
-                .args(["-KILL", "--", &format!("-{}", child.id())])
-                .stderr(Stdio::null())
-                .status();
-            let _ = child.kill();
+            kill_tree(child.id());
             let _ = child.wait();
             return Ok(Exit::TimedOut);
         }
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// Kills `pid` and every process it started, children first found, then the parent.
+fn kill_tree(pid: u32) {
+    let children = Command::new("pgrep")
+        .args(["-P", &pid.to_string()])
+        .stderr(Stdio::null())
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    // Stop the parent first so it can't start more children while they go.
+    let _ = Command::new("kill")
+        .args(["-STOP", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status();
+    for child in children
+        .lines()
+        .filter_map(|l| l.trim().parse::<u32>().ok())
+    {
+        kill_tree(child);
+    }
+    let _ = Command::new("kill")
+        .args(["-KILL", &pid.to_string()])
+        .stderr(Stdio::null())
+        .status();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,13 +553,38 @@ mod tests {
     }
 
     #[test]
-    fn a_task_needs_two_passes_of_difference() {
+    fn the_tail_is_fisher_s_one_sided_exact_probability() {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-5;
+        assert!(close(tail(3, 0, 3), 0.05));
+        assert!(close(tail(2, 0, 3), 0.2));
+        assert!(close(tail(3, 1, 3), 0.2));
+        assert!(close(tail(7, 2, 10), 0.03489));
+        assert!(close(tail(6, 2, 10), 0.0849));
+        assert!(close(tail(5, 0, 5), 0.00397));
+        assert!(close(tail(0, 0, 3), 1.0));
+        assert!(close(tail(0, 3, 3), 1.0));
+    }
+
+    fn n(with_passed: u64, without_passed: u64, runs: u64) -> TaskResult {
+        TaskResult {
+            with_passed,
+            without_passed,
+            runs,
+        }
+    }
+
+    #[test]
+    fn a_task_is_called_only_when_chance_would_give_that_gap_under_1_in_20() {
         assert_eq!(judge(&t(3, 0)), Call::Won);
-        assert_eq!(judge(&t(2, 0)), Call::Won);
+        assert_eq!(judge(&t(2, 0)), Call::Tied);
         assert_eq!(judge(&t(0, 1)), Call::Tied);
-        assert_eq!(judge(&t(2, 1)), Call::Tied);
-        assert_eq!(judge(&t(0, 2)), Call::Lost);
-        assert_eq!(judge(&t(1, 3)), Call::Lost);
+        assert_eq!(judge(&t(0, 3)), Call::Lost);
+        assert_eq!(judge(&t(1, 3)), Call::Tied);
+        // More runs make smaller gaps decisive, never larger ones less so.
+        assert_eq!(judge(&n(7, 2, 10)), Call::Won);
+        assert_eq!(judge(&n(6, 2, 10)), Call::Tied);
+        assert_eq!(judge(&n(2, 7, 10)), Call::Lost);
+        assert_eq!(judge(&n(4, 0, 5)), Call::Won);
     }
 
     #[test]
@@ -456,7 +619,8 @@ mod tests {
             read_stream(SMOKE, "greeting-file"),
             Stream {
                 fired: Some(true),
-                cost: Some(0.00221888)
+                cost: Some(0.00221888),
+                error: false
             }
         );
         let namespaced = SMOKE.replace("\"greeting-file\"", "\"plug:greeting-file\"");
@@ -476,7 +640,8 @@ mod tests {
             read_stream(json, "x"),
             Stream {
                 fired: None,
-                cost: Some(0.5)
+                cost: Some(0.5),
+                error: false
             }
         );
         assert_eq!(
