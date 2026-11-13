@@ -1,8 +1,8 @@
 //! What MCP tool schemas cost: each server's schema tokens that every main-loop request
-//! carries (from `schema` ledger events), times the requests of its session's turns, at
-//! cache-read rates. The tokens are Claude Code's own estimate, and cache-read pricing
-//! is the lowest the cost could be, so the figure is a floor. It is already part of the
-//! turns' cost; this names the share.
+//! carries (from `schema` ledger events), times the requests of its session's turns. A
+//! session writes them to the cache once, then reads them: any cache break writes them
+//! again, so the figure is a floor. The tokens are Claude Code's own estimate. They are
+//! already part of the turns' cost; this names the share.
 
 use std::collections::BTreeMap;
 
@@ -23,7 +23,8 @@ pub struct McpCost {
     pub turns: u64,
     /// Turns (main loop or subagent) of those sessions that called one of its tools.
     pub called: u64,
-    /// Dollars at cache-read rates: the least those tokens cost.
+    /// Dollars for one cache write per session and cache reads after: the least those
+    /// tokens cost.
     pub cost: f64,
 }
 
@@ -39,13 +40,14 @@ pub fn mcp_costs(records: &[Record], keep: impl Fn(&Record) -> bool) -> Vec<McpC
         }
     }
     let mut out: BTreeMap<&str, McpCost> = BTreeMap::new();
+    let mut written: std::collections::BTreeSet<(&str, &str)> = Default::default();
     for r in records.iter().filter(|r| keep(r)) {
         let Event::Turn(t) = &r.event else { continue };
-        let Some(list) = t
+        let Some((session, list)) = t
             .session
             .as_deref()
             .filter(|_| t.harness.is_none())
-            .and_then(|s| schemas.get(s))
+            .and_then(|s| Some((s, schemas.get(s)?)))
         else {
             continue;
         };
@@ -75,7 +77,13 @@ pub fn mcp_costs(records: &[Record], keep: impl Fn(&Record) -> bool) -> Vec<McpC
             row.requests += requests;
             row.turns += 1;
             if let Some(rates) = price::turn_rates_at(&t.model, false, r.ts) {
-                row.cost += (server.sent * requests) as f64 * rates.cache_read / 1e6;
+                let reads = if written.insert((&server.server, session)) {
+                    row.cost += server.sent as f64 * rates.cache_write / 1e6;
+                    requests - 1
+                } else {
+                    requests
+                };
+                row.cost += (server.sent * reads) as f64 * rates.cache_read / 1e6;
             }
         }
     }
@@ -149,6 +157,12 @@ mod tests {
         price::rates("claude-haiku-5-5").unwrap().cache_read
     }
 
+    /// One main-loop cache write and `reads` cache reads of `tokens`.
+    fn cost(tokens: u64, reads: u64) -> f64 {
+        let r = price::turn_rates("claude-haiku-5-5", false).unwrap();
+        (tokens as f64 * r.cache_write + (tokens * reads) as f64 * r.cache_read) / 1e6
+    }
+
     #[test]
     fn sent_schemas_cost_tokens_times_requests_at_cache_read_rates() {
         let records = vec![
@@ -169,7 +183,8 @@ mod tests {
             ("github", 20_000, 10, 2, 1)
         );
         assert!(
-            (g.cost - 200_000.0 * rate() / 1e6).abs() < 1e-12,
+            // Written once, then read by the other 9 requests.
+            (g.cost - cost(20_000, 9)).abs() < 1e-12,
             "{}",
             g.cost
         );
@@ -186,11 +201,13 @@ mod tests {
         let rows = mcp_costs(&records, |_| true);
         let get = |s: &str| rows.iter().find(|r| r.server == s).unwrap();
         assert_eq!((get("github").tokens, get("github").requests), (5_000, 3));
-        // 1,000 × 1 request, then 5,000 × 2.
-        assert!((get("github").cost - 11_000.0 * rate() / 1e6).abs() < 1e-12);
+        // 1,000 written; then 5,000 × 2 read, since the session already wrote
+        // github once (a floor).
+        let want = cost(1_000, 0) + 10_000.0 * rate() / 1e6;
+        assert!((get("github").cost - want).abs() < 1e-12);
         assert_eq!(get("linear").requests, 2);
-        // Costliest first.
-        assert_eq!(rows[0].server, "github");
+        // Costliest first: linear's one write costs more than github's reads.
+        assert_eq!(rows[0].server, "linear");
     }
 
     #[test]

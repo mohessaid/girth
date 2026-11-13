@@ -4,11 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-11-13
+
+### Fixed
+- **The MCP schema cost was far too low on short sessions.** 0.24.0 priced every request's schemas at cache-read rates, but a session's first request writes them to the cache. On a one-request run with tool search off, it showed $0.0013 where Claude Code charged $0.18. Each session now pays one cache write per server, then reads. It is still a floor: a cache break writes them again.
+- The meter names the five costliest servers and totals the rest (`--json` lists them all), and says `1 request`, not `1 requests`.
+
 ## [0.24.0] - 2026-11-13
 
 ### Added
 - **What MCP tool schemas cost.** Girth's mod now reads Claude Code's context breakdown (what `/context` shows) after each main-loop turn, and records each MCP server's schema tokens, sent and deferred, whenever they change. It keeps server ids and numbers, never tool names or schemas.
-  - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≥ $X`, costliest first. The cost is at cache-read rates, so it is a floor.
+  - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≥ $X`, costliest first.
   - `girth advise` has a new contributor, `mcp_schemas`: keep tool search on, and disable the servers never called.
   - Measured on Claude Code 2.1.323 (`examples/mcpcost/RESULTS.md`): with `ENABLE_TOOL_SEARCH=false` and 11 servers connected, `Reply with the word ok.` took 148,717 tokens instead of 23,740, and cost $0.149 instead of $0.0026. GitHub's server alone is 19,427 tokens.
   - Claude Code marks most tools not loaded even when tool search is off, so Girth counts every schema as sent when nothing is deferred.
@@ -338,7 +344,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/mohessaid/girth/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/mohessaid/girth/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/mohessaid/girth/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/mohessaid/girth/compare/v0.21.0...v0.22.0

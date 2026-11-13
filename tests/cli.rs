@@ -1003,9 +1003,9 @@ fn schema_record_names_the_mcp_servers_every_request_carried() {
         .assert()
         .success();
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
-    // 20,000 tokens × 10 requests at Opus 5.5's $0.20 cache read.
+    // 20,000 tokens written once at Opus 5.5's $8 (1-hour), then read by 9 requests at $0.20.
     assert!(
-        text.contains("meter: MCP schemas sent with every request (part of the cost above): claude_ai_github ≈ 20,000 tokens × 10 requests · called in 0 turns · ≥ $0.0400"),
+        text.contains("meter: MCP schemas sent with every request (part of the cost above): claude_ai_github ≈ 20,000 tokens × 10 requests · called in 0 turns · ≥ $0.1960"),
         "{text}"
     );
     assert!(!text.contains("pencil"), "{text}");

@@ -8,6 +8,8 @@ use crate::price;
 
 /// Bytes per token for the Lens estimate (a conservative English-text ratio).
 pub const BYTES_PER_TOKEN: u64 = 4;
+/// The meter names this many MCP servers, costliest first, and totals the rest.
+pub const MCP_ROWS: usize = 5;
 
 #[derive(Debug, Default, Serialize, PartialEq)]
 pub struct Summary {
@@ -239,21 +241,32 @@ pub fn render(summary: &Summary) -> String {
         text.push_str(&format!("\nmeter: subagents: {}", rows.join("; ")));
     }
     if !summary.mcp_schemas.is_empty() {
-        let rows: Vec<String> = summary
+        let s = |n: u64| if n == 1 { "" } else { "s" };
+        let mut rows: Vec<String> = summary
             .mcp_schemas
             .iter()
+            .take(MCP_ROWS)
             .map(|r| {
                 format!(
-                    "{} ≈ {} tokens × {} requests · called in {} turn{} · ≥ ${:.4}",
+                    "{} ≈ {} tokens × {} request{} · called in {} turn{} · ≥ ${:.4}",
                     r.server,
                     thousands(r.tokens),
                     thousands(r.requests),
+                    s(r.requests),
                     r.called,
-                    if r.called == 1 { "" } else { "s" },
+                    s(r.called),
                     r.cost
                 )
             })
             .collect();
+        let rest = &summary.mcp_schemas[summary.mcp_schemas.len().min(MCP_ROWS)..];
+        if !rest.is_empty() {
+            rows.push(format!(
+                "{} more ≥ ${:.4} (--json lists them)",
+                rest.len(),
+                rest.iter().map(|r| r.cost).sum::<f64>()
+            ));
+        }
         text.push_str(&format!(
             "\nmeter: MCP schemas sent with every request (part of the cost above): {}",
             rows.join("; ")
@@ -393,6 +406,42 @@ mod tests {
         assert_eq!(s.mcp_schemas[0].requests, 3);
         assert!(render(&s).contains("github ≈ 20,000 tokens × 3 requests · called in 0 turns"));
         assert_eq!(summarise(&records, None).mcp_schemas[0].requests, 10);
+    }
+
+    #[test]
+    fn the_meter_names_five_mcp_servers_and_totals_the_rest() {
+        let servers = (1..=7)
+            .map(|i| crate::ledger::ServerSchema {
+                server: format!("s{i}"),
+                tools: 1,
+                sent: i * 1_000,
+                deferred: 0,
+            })
+            .collect();
+        let schema = Record {
+            v: 1,
+            ts: 1,
+            event: Event::Schema(crate::ledger::Schema {
+                project: "/a".into(),
+                session: Some("s".into()),
+                servers,
+            }),
+        };
+        let mut one = turn("/a", "claude-opus-5-5", 5, None);
+        if let Event::Turn(t) = &mut one.event {
+            t.session = Some("s".into());
+            t.requests = Some(1);
+            t.mcp = vec!["s7".into()];
+        }
+        let s = summarise(&[schema, one], None);
+        let text = render(&s);
+        assert!(
+            text.contains(": s7 ≈ 7,000 tokens × 1 request · called in 1 turn · ≥ $0.0560; s6 "),
+            "{text}"
+        );
+        // s1 and s2: 3,000 tokens written at $8 per million.
+        assert!(text.contains("; s3 ≈ 3,000 tokens × 1 request · called in 0 turns · ≥ $0.0240; 2 more ≥ $0.0240 (--json lists them)"), "{text}");
+        assert_eq!(s.mcp_schemas.len(), 7);
     }
 
     #[test]
