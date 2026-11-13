@@ -284,7 +284,7 @@ mod tests {
                 rec(Event::Use { skill: skill.clone(), project: project.clone(), session: None, agent: false, harness: None }),
                 rec(Event::Feedback { skill: skill.clone(), project: project.clone(), rating: Rating::Up, note: Some(note.clone()) }),
                 rec(Event::Seen { names: vec![skill.clone(), note.clone()] }),
-                rec(Event::Turn(crate::ledger::Turn {
+                rec(Event::Turn(crate::ledger::Turn { agent_id: None, agent_type: None,
                     harness: None,
                     premium: None,
                     cost_micros: None,

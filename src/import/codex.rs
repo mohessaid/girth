@@ -138,6 +138,8 @@ fn entry<'a>(
 
 fn new_turn(session: &Option<String>) -> Turn {
     Turn {
+        agent_id: None,
+        agent_type: None,
         project: String::new(),
         session: session.clone(),
         model: String::new(),

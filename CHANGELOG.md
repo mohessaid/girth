@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **What each kind of subagent costs.** Claude Code 2.1.323 removed `subagentStatusLine`, the only place it showed a subagent's cost (issue #109446). Girth's mod now labels each subagent turn with its agent's type (`Explore`, `general-purpose`, a plugin's agent) and opaque id, which it learns when the agent spawns. It never keeps the agent's prompt or description.
+  - `/girth-meter` and `girth stats --meter` add a line such as `meter: subagents: general-purpose 3 agents · 9 turns · ≈ $1.20 (claude-opus-5-5); Explore 5 agents · 12 turns · ≈ $0.31 (claude-haiku-5-5)`, costliest first.
+  - Subagent turns recorded before this release show as `(unlabelled)`.
+
 ## [0.22.0] - 2026-11-13
 
 ### Fixed

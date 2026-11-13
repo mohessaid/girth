@@ -155,6 +155,8 @@ fn turn(requests: &[&Value], project: &str, session: &Option<String>) -> Turn {
     };
     let cached = sum("cached");
     Turn {
+        agent_id: None,
+        agent_type: None,
         project: project.to_string(),
         session: session.clone(),
         model: requests

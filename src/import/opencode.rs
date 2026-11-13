@@ -194,6 +194,8 @@ fn turn(session: &str, agent: bool, dir: &str, requests: &[Value]) -> Turn {
     let priced = costs.len() == requests.len() && costs.iter().all(|c| *c > 0.0);
     let last = requests.last().cloned().unwrap_or_default();
     Turn {
+        agent_id: None,
+        agent_type: None,
         project: last["path"]["cwd"].as_str().unwrap_or(dir).to_string(),
         session: Some(session.to_string()),
         model: last["modelID"].as_str().unwrap_or_default().to_string(),

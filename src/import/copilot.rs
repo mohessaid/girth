@@ -444,6 +444,8 @@ pub fn parse(text: &str, done: Cursor) -> (Vec<(u64, Event)>, Cursor) {
 
 fn turn(model: &str, u: &Usage, cwd: &str, session: &Option<String>) -> Turn {
     Turn {
+        agent_id: None,
+        agent_type: None,
         project: cwd.to_string(),
         session: session.clone(),
         model: model_id(model),

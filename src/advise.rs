@@ -524,6 +524,8 @@ mod tests {
 
     fn turn(model: &str, cache_read: u64, output: u64) -> Turn {
         Turn {
+            agent_id: None,
+            agent_type: None,
             harness: None,
             premium: None,
             cost_micros: None,

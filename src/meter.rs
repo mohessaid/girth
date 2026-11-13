@@ -44,6 +44,19 @@ pub struct Summary {
     pub side_cost: f64,
     /// The side-query source that cost the most.
     pub side_top: Option<String>,
+    /// Subagent turns by agent type, costliest first.
+    pub subagents: Vec<Subagents>,
+}
+
+/// One agent type's subagent turns: how many agents (ids the mod saw), turns, their cost,
+/// and the model most of its turns ran on.
+#[derive(Debug, Default, Serialize, PartialEq)]
+pub struct Subagents {
+    pub kind: String,
+    pub agents: u64,
+    pub turns: u64,
+    pub cost: f64,
+    pub model: String,
 }
 
 /// Dollars for side queries recorded at `ts`: Claude Code's own price when it gave one,
@@ -62,6 +75,14 @@ pub fn side_cost(s: &crate::ledger::Side, ts: u64) -> f64 {
 pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     let mut s = Summary::default();
     let mut by_source: std::collections::BTreeMap<&str, f64> = Default::default();
+    // Per agent type: agent ids, turns, cost, turns per model.
+    type Kind<'a> = (
+        std::collections::BTreeSet<&'a str>,
+        u64,
+        f64,
+        std::collections::BTreeMap<&'a str, u64>,
+    );
+    let mut kinds: std::collections::BTreeMap<&str, Kind> = Default::default();
     for r in records {
         let t = match &r.event {
             Event::Turn(t) if t.harness.is_none() && project.is_none_or(|p| p == t.project) => t,
@@ -95,6 +116,17 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
         };
         s.cost += cost;
         s.since_commit += cost;
+        if t.agent {
+            let k = kinds
+                .entry(t.agent_type.as_deref().unwrap_or("(unlabelled)"))
+                .or_default();
+            if let Some(id) = &t.agent_id {
+                k.0.insert(id);
+            }
+            k.1 += 1;
+            k.2 += cost;
+            *k.3.entry(t.model.as_str()).or_default() += 1;
+        }
         let mut committed = false;
         for outcome in &t.outcomes {
             match outcome {
@@ -123,6 +155,27 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
     if s.commits > 0 {
         s.per_commit = (s.cost - s.since_commit) / s.commits as f64;
     }
+    s.subagents = kinds
+        .into_iter()
+        .map(|(kind, (ids, turns, cost, models))| Subagents {
+            kind: kind.to_string(),
+            agents: ids.len() as u64,
+            turns,
+            cost,
+            model: models
+                .into_iter()
+                .max_by(|a, b| a.1.cmp(&b.1).then_with(|| b.0.cmp(a.0)))
+                .map(|(m, _)| m.split('[').next().unwrap_or(m).to_string())
+                .unwrap_or_default(),
+        })
+        .collect();
+    // Costliest first; turns from before the mod labelled agents go last.
+    s.subagents.sort_by(|a, b| {
+        (a.kind == "(unlabelled)")
+            .cmp(&(b.kind == "(unlabelled)"))
+            .then_with(|| b.cost.total_cmp(&a.cost))
+            .then_with(|| a.kind.cmp(&b.kind))
+    });
     s.side_top = by_source
         .into_iter()
         .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(a.0)))
@@ -155,6 +208,28 @@ pub fn render(summary: &Summary) -> String {
             thousands(summary.lens_tokens_saved),
             summary.lens_cost_saved,
         ));
+    }
+    if !summary.subagents.is_empty() {
+        let plural = |n: u64, one: &str| format!("{n} {one}{}", if n == 1 { "" } else { "s" });
+        let rows: Vec<String> = summary
+            .subagents
+            .iter()
+            .map(|r| {
+                let agents = if r.agents > 0 {
+                    format!("{} · ", plural(r.agents, "agent"))
+                } else {
+                    String::new()
+                };
+                format!(
+                    "{} {agents}{} · ≈ ${:.2} ({})",
+                    r.kind,
+                    plural(r.turns, "turn"),
+                    r.cost,
+                    r.model
+                )
+            })
+            .collect();
+        text.push_str(&format!("\nmeter: subagents: {}", rows.join("; ")));
     }
     if summary.side_requests > 0 {
         text.push_str(&format!(
@@ -215,6 +290,8 @@ mod tests {
             v: 1,
             ts: 1,
             event: Event::Turn(Turn {
+                agent_id: None,
+                agent_type: None,
                 harness: None,
                 premium: None,
                 cost_micros: None,
@@ -334,6 +411,64 @@ mod tests {
         assert!((s.cost - 0.5).abs() < 1e-12, "{}", s.cost);
         // A model Girth can't price is priced by Claude Code's figure.
         assert_eq!(s.unpriced_turns, 0);
+    }
+
+    #[test]
+    fn subagents_are_totalled_by_type_with_their_agents_turns_cost_and_model() {
+        let agent = |id: Option<&str>, kind: Option<&str>, model: &str| {
+            let mut r = turn("/a", model, 1_000, None);
+            if let Event::Turn(t) = &mut r.event {
+                t.agent = true;
+                t.agent_id = id.map(Into::into);
+                t.agent_type = kind.map(Into::into);
+            }
+            r
+        };
+        let records = vec![
+            turn("/a", "claude-opus-5-5", 5, None),
+            agent(Some("a1"), Some("Explore"), "claude-haiku-5-5"),
+            agent(Some("a1"), Some("Explore"), "claude-haiku-5-5"),
+            agent(Some("a2"), Some("Explore"), "claude-haiku-5-5"),
+            agent(Some("a3"), Some("general-purpose"), "claude-opus-5-5"),
+            // Older turns have no labels.
+            agent(None, None, "claude-opus-5-5"),
+        ];
+        let s = summarise(&records, None);
+        let cost = |m: &str| {
+            price::cost(
+                price::turn_rates_at(m, true, 1).unwrap(),
+                1_000,
+                10,
+                1_000,
+                100,
+            )
+        };
+        let rows: Vec<_> = s
+            .subagents
+            .iter()
+            .map(|r| (r.kind.as_str(), r.agents, r.turns, r.model.as_str()))
+            .collect();
+        // Costliest first.
+        assert_eq!(
+            rows,
+            [
+                ("general-purpose", 1, 1, "claude-opus-5-5"),
+                ("Explore", 2, 3, "claude-haiku-5-5"),
+                ("(unlabelled)", 0, 1, "claude-opus-5-5"),
+            ]
+        );
+        assert!((s.subagents[1].cost - 3.0 * cost("claude-haiku-5-5")).abs() < 1e-12);
+        let text = render(&s);
+        assert!(
+            text.contains(&format!(
+                "meter: subagents: general-purpose 1 agent · 1 turn · ≈ ${:.2} (claude-opus-5-5)",
+                cost("claude-opus-5-5")
+            )),
+            "{text}"
+        );
+        assert!(text.contains("Explore 2 agents · 3 turns"), "{text}");
+        // No subagent turns: no line.
+        assert!(!render(&summarise(&records[..1], None)).contains("subagents"));
     }
 
     #[test]

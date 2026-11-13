@@ -265,6 +265,8 @@ pub fn parse(c: &Conversation, cursor: usize, idle: bool) -> (Vec<(u64, Event)>,
         let sum = |f: fn(&Generation) -> u64| idx.iter().map(|&i| f(&gens[i])).sum::<u64>();
         let last = &gens[*idx.last().expect("non-empty")];
         let turn = Turn {
+            agent_id: None,
+            agent_type: None,
             project: project.clone(),
             session: None,
             model: last.model.clone(),

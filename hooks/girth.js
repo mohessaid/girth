@@ -67,6 +67,8 @@ const BREAK_MIN = 5000
 
 // `girth advise --brief`: one line under the session's first main answer, at most.
 let advised = false
+// Subagent id → its type (`Explore`, `general-purpose`), from agent.spawn.
+const kinds = new Map()
 // Claude Code's requests outside turns (query_source → totals), from its collector
 // records; flushed to `girth side record` after a main-loop turn and at session end.
 const side = new Map()
@@ -260,6 +262,24 @@ async function sessionId($) {
   }
 }
 
+// The subagent model a built-in subagent runs on, when the user configured one.
+async function agentModel($, e) {
+  if (e.model !== undefined || e.subagentType === 'fork' || e.provider?.plugin !== 'engine') return e
+  if (agentSettings === null) {
+    agentSettings = {}
+    try {
+      const run = await $.process.run([launcher($), 'settings', '--project', await $.session.cwd()], {
+        timeoutMs: TIMEOUT_MS,
+      })
+      if (run.exitCode === 0) agentSettings = JSON.parse(run.stdout)
+    } catch {
+      // No settings: the subagent keeps its model.
+    }
+  }
+  const model = agentSettings?.agents?.model
+  return typeof model === 'string' && model !== '' ? { ...e, model } : e
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     advised = false
@@ -450,6 +470,8 @@ export function register(on) {
       cache_read: usage.cache_read_input_tokens,
       cache_write: usage.cache_creation_input_tokens,
       agent: e.agentId !== undefined,
+      ...(e.agentId !== undefined ? { agent_id: e.agentId } : {}),
+      ...(kinds.has(e.agentId) ? { agent_type: kinds.get(e.agentId) } : {}),
       aborted: e.isAborted === true,
     }
     if (lens.size > 0 && e.agentId === undefined) {
@@ -545,16 +567,10 @@ export function register(on) {
   }).catch(async ($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
-    if (e.model !== undefined || e.subagentType === 'fork' || e.provider?.plugin !== 'engine') return next(e)
-    if (agentSettings === null) {
-      agentSettings = {}
-      const run = await $.process.run([launcher($), 'settings', '--project', await $.session.cwd()], {
-        timeoutMs: TIMEOUT_MS,
-      })
-      if (run.exitCode === 0) agentSettings = JSON.parse(run.stdout)
-    }
-    const model = agentSettings?.agents?.model
-    return typeof model === 'string' && model !== '' ? next({ ...e, model }) : next(e)
+    const result = await next(await agentModel($, e))
+    // Its type labels its turns in the meter; the prompt and description never leave here.
+    if (typeof result?.agentId === 'string' && typeof e.subagentType === 'string') kinds.set(result.agentId, e.subagentType)
+    return result
   }).catch(async ($, e, next) => next(e))
 
   on('command.run', { command: 'girth-meter' }, async ($, e) => {

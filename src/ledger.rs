@@ -48,6 +48,9 @@ pub enum Rating {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
+// `Turn` is the large variant and also the common one: boxing it would add an allocation
+// per ledger line for no saving.
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     Use {
         skill: String,
@@ -194,6 +197,12 @@ pub struct Turn {
     /// tool, at 4 characters per token. Every harness measures every tool's result text.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tool_output: BTreeMap<String, u64>,
+    /// A subagent turn's agent: Claude Code's opaque agent id and its type (`Explore`,
+    /// `general-purpose`), from the mod. Never its prompt or description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
 }
 
 /// A tool result this long (2,000 estimated tokens) is large. `hooks/girth.js` keeps
@@ -412,6 +421,8 @@ mod tests {
             names: vec!["a".into(), "plug:b".into()],
         };
         let turn = Event::Turn(Turn {
+            agent_id: None,
+            agent_type: None,
             harness: None,
             premium: None,
             cost_micros: None,
@@ -584,6 +595,8 @@ mod tests {
 
     fn turn_fixture() -> Turn {
         Turn {
+            agent_id: None,
+            agent_type: None,
             harness: None,
             premium: None,
             cost_micros: None,

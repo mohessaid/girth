@@ -1013,3 +1013,31 @@ test("a subagent's turn carries Claude Code's own price when only its requests a
     [true, 777],
   ])
 })
+
+test("a subagent's turns carry its type and id, never its prompt or description", async ($, on) => {
+  const runs: Run[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($, e) => {
+    runs.push({ argv: e.argv, stdin: e.init?.stdin })
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  let n = 0
+  on('agent.spawn', ($, e) => ({ model: e.model ?? 'inherit', agentId: `ag${++n}` }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.agent.spawn(spawnInput({ subagentType: 'Explore', description: 'secret task words', prompt: 'secret prompt' }))
+  await $.agent.spawn(spawnInput({ subagentType: 'fork', model: 'opus' }))
+  await $.turn.complete({ turnId: 'a', agentId: 'ag1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 'b', agentId: 'ag2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // An agent the mod never saw spawn (started before a reload) has an id but no type.
+  await $.turn.complete({ turnId: 'c', agentId: 'old', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 'm', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  const meters = runs.filter((r) => r.argv[1] === 'meter')
+  for (const r of meters) expect(r.stdin!.includes('secret')).toBe(false)
+  const turns = meters.map((r) => JSON.parse(r.stdin!))
+  expect(turns.map((t) => [t.agent_id, t.agent_type])).toEqual([
+    ['ag1', 'Explore'],
+    ['ag2', 'fork'],
+    ['old', undefined],
+    [undefined, undefined],
+  ])
+})

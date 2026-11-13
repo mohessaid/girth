@@ -233,6 +233,8 @@ If the user's request might be served by one of these servers, call ToolSearch.
         rec(
             ts,
             Event::Turn(Turn {
+                agent_id: None,
+                agent_type: None,
                 harness: None,
                 premium: None,
                 cost_micros: None,

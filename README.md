@@ -195,6 +195,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - your usage for the project;
 - an estimated cost;
 - how much Lens kept out of the prompt;
+- what each kind of subagent cost (`Explore`, `general-purpose`, a plugin's agents): agents, turns, cost and model, the view Claude Code 2.1.323 took out of its status line;
 - **side queries,** the requests Claude Code sends outside the conversation:
   - background agents' progress summaries (`agent_summary`), sent about every 30 s with none of their input cached
   - prompt suggestions, session titles, compaction

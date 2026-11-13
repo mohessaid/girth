@@ -282,6 +282,8 @@ mod tests {
 
     fn turn(model: &str, breaks: &[(u64, u64, u64)]) -> Turn {
         Turn {
+            agent_id: None,
+            agent_type: None,
             harness: None,
             premium: None,
             cost_micros: None,
