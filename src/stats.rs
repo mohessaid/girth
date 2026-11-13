@@ -24,6 +24,18 @@ pub struct CraftedRow {
     pub up: u64,
     pub down: u64,
     pub sources: Vec<SourceRow>,
+    /// The latest `girth trial` of this skill in this project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trial: Option<TrialRow>,
+}
+
+/// A trial's verdict and its passes summed over tasks.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TrialRow {
+    pub verdict: crate::trial::Verdict,
+    pub with_passed: u64,
+    pub without_passed: u64,
+    pub runs: u64,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -83,6 +95,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
                             up: 0,
                             down: 0,
                             sources: Vec::new(),
+                            trial: None,
                         });
                         crafted.len() - 1
                     }
@@ -106,7 +119,8 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
             | Event::Ping(_)
             | Event::Compact(_)
             | Event::Side(_)
-            | Event::Schema(_) => {}
+            | Event::Schema(_)
+            | Event::Trial(_) => {}
         }
     }
     for record in records {
@@ -132,6 +146,16 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
                         Rating::Up => crafted[i].up += 1,
                         Rating::Down => crafted[i].down += 1,
                     }
+                }
+            }
+            Event::Trial(t) => {
+                if let Some(i) = row_for(&mut crafted, &t.skill, &t.project) {
+                    crafted[i].trial = Some(TrialRow {
+                        verdict: t.verdict,
+                        with_passed: t.tasks.iter().map(|x| x.with_passed).sum(),
+                        without_passed: t.tasks.iter().map(|x| x.without_passed).sum(),
+                        runs: t.tasks.iter().map(|x| x.runs).sum(),
+                    });
                 }
             }
             Event::Craft { .. }
@@ -196,6 +220,16 @@ pub fn render(stats: &Stats) -> String {
             if !row.sources.is_empty() {
                 let sources: Vec<String> = row.sources.iter().map(coverage).collect();
                 lines.push(format!("    from {}", sources.join(" · ")));
+            }
+            if let Some(t) = &row.trial {
+                lines.push(format!(
+                    "    trial: {} (with {}/{} · without {}/{})",
+                    t.verdict.label(),
+                    t.with_passed,
+                    t.runs,
+                    t.without_passed,
+                    t.runs
+                ));
             }
         }
     }
@@ -276,6 +310,63 @@ mod tests {
             rating,
             note: None,
         })
+    }
+
+    fn trial(
+        skill: &str,
+        project: &str,
+        with: u64,
+        without: u64,
+        verdict: crate::trial::Verdict,
+    ) -> Record {
+        rec(Event::Trial(crate::ledger::Trial {
+            project: project.into(),
+            skill: skill.into(),
+            tasks: vec![
+                crate::trial::TaskResult {
+                    with_passed: with,
+                    without_passed: without,
+                    runs: 3,
+                },
+                crate::trial::TaskResult {
+                    with_passed: 1,
+                    without_passed: 1,
+                    runs: 3,
+                },
+            ],
+            fired: Some(3),
+            with_cost_micros: None,
+            without_cost_micros: None,
+            verdict,
+        }))
+    }
+
+    #[test]
+    fn a_crafted_row_shows_its_latest_trial_in_that_project() {
+        use crate::trial::Verdict;
+        let records = vec![
+            craft("girth-pdf", "/p", 2, 0, vec![]),
+            trial("girth-pdf", "/p", 0, 3, Verdict::Reject),
+            trial("girth-pdf", "/p", 3, 0, Verdict::Admit),
+            trial("girth-pdf", "/other", 0, 3, Verdict::Reject),
+            trial("not-crafted", "/p", 0, 3, Verdict::Reject),
+        ];
+        let stats = compute(&records, Sharing::Unset);
+        assert_eq!(stats.crafted.len(), 1);
+        assert_eq!(
+            stats.crafted[0].trial,
+            Some(TrialRow {
+                verdict: Verdict::Admit,
+                with_passed: 4,
+                without_passed: 1,
+                runs: 6
+            })
+        );
+        assert!(
+            render(&stats).contains("    trial: admit (with 4/6 · without 1/6)"),
+            "{}",
+            render(&stats)
+        );
     }
 
     #[test]

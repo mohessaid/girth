@@ -116,7 +116,8 @@ pub fn payload(records: &[Record]) -> SharePayload {
             | Event::Ping(_)
             | Event::Compact(_)
             | Event::Side(_)
-            | Event::Schema(_) => {}
+            | Event::Schema(_)
+            | Event::Trial(_) => {}
         }
     }
     for sources in latest.values() {
@@ -305,9 +306,15 @@ mod tests {
                 rec(Event::Compact(crate::ledger::Compact {
                     project: project.clone(), model: heading.clone(), before: 999_001, after: 999_002,
                 })),
+                rec(Event::Trial(crate::ledger::Trial {
+                    project: project.clone(), skill: skill.clone(),
+                    tasks: vec![crate::trial::TaskResult { with_passed: 666_001, without_passed: 0, runs: 666_002 }],
+                    fired: Some(666_003), with_cost_micros: None, without_cost_micros: None,
+                    verdict: crate::trial::Verdict::Admit,
+                })),
             ];
             let json = serde_json::to_string(&payload(&records)).unwrap();
-            for secret in [&skill, &project, &heading, &note, &"vm#timing".to_string(), &"c-timing".to_string(), &"777_00".replace('_', ""), &"888_00".replace('_', ""), &"999_00".replace('_', ""), &"test_fail".to_string()] {
+            for secret in [&skill, &project, &heading, &note, &"vm#timing".to_string(), &"c-timing".to_string(), &"777_00".replace('_', ""), &"888_00".replace('_', ""), &"999_00".replace('_', ""), &"666_00".replace('_', ""), &"admit".to_string(), &"test_fail".to_string()] {
                 prop_assert!(!json.contains(secret.as_str()), "leaked {secret} in {json}");
             }
         }

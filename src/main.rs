@@ -188,6 +188,34 @@ enum Command {
         #[arg(long, default_value = "all")]
         from: String,
     },
+    /// Run tasks with and without a skill, grade each run with a check command, and record whether the skill earned its place.
+    ///
+    /// Each run works in a fresh clone of this repo at HEAD. A task counts as won or lost only by a difference of 2 or more
+    /// passes, so one flipped run never decides: a skill that adds a single pass on every task stays undecided until more
+    /// runs settle it. Cost is shown, never judged. The default agent is Claude Code, headless, with user-level skills,
+    /// plugins and MCP servers hidden; `--agent` takes any command that reads the prompt on stdin. Runs spend model usage.
+    Trial {
+        /// The skill folder (with a SKILL.md), usually a crafted girth-* skill.
+        skill_dir: PathBuf,
+        /// A prompt file; repeatable.
+        #[arg(long = "task", required = true)]
+        tasks: Vec<PathBuf>,
+        /// A shell command run in the work tree after the agent: exit 0 passes. One per --task, or one for all.
+        #[arg(long = "check", required = true)]
+        checks: Vec<String>,
+        /// Runs per arm and task (at least 2).
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u64).range(2..))]
+        runs: u64,
+        /// The agent command; it gets the prompt on stdin. Default: headless Claude Code.
+        #[arg(long)]
+        agent: Option<String>,
+        /// The model for the default agent.
+        #[arg(long)]
+        model: Option<String>,
+        /// Seconds before a hung agent run is killed and counted as a fail.
+        #[arg(long, default_value_t = 1800)]
+        timeout: u64,
+    },
     /// Check crafted skills against the Girth contract.
     Validate {
         /// Don't record a craft event in the ledger.
@@ -723,8 +751,88 @@ fn only_harness(records: &mut Vec<Record>, h: &str) {
         Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
         Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
         Event::Side(_) | Event::Schema(_) => h == "claude-code",
+        // Trials, crafts, feedback: not tied to the harness that spends.
         _ => true,
     });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_trial(
+    skill_dir: PathBuf,
+    tasks: Vec<PathBuf>,
+    checks: Vec<String>,
+    runs: u64,
+    agent: Option<String>,
+    model: Option<String>,
+    timeout: u64,
+    ctx: &Context,
+    out: &mut String,
+) -> ExitCode {
+    let refuse = |msg: String| {
+        eprintln!("girth trial: {msg}");
+        ExitCode::from(2)
+    };
+    if checks.len() != 1 && checks.len() != tasks.len() {
+        return refuse("give one --check for every --task, or a single one for all".into());
+    }
+    let skill_dir = ctx.cwd.join(skill_dir);
+    if !skill_dir.join("SKILL.md").is_file() {
+        return refuse(format!("{} has no SKILL.md", skill_dir.display()));
+    }
+    let top = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(&ctx.cwd)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()));
+    let Some(top) = top else {
+        return refuse(
+            "run it inside a git repository with a commit: each run starts from a clone at HEAD"
+                .into(),
+        );
+    };
+    let mut pairs = Vec::new();
+    for (i, task) in tasks.iter().enumerate() {
+        match std::fs::read_to_string(ctx.cwd.join(task)) {
+            Ok(prompt) => pairs.push((
+                prompt,
+                checks[if checks.len() == 1 { 0 } else { i }].clone(),
+            )),
+            Err(e) => return refuse(format!("{}: {e}", task.display())),
+        }
+    }
+    let agent = agent.unwrap_or_else(|| match model {
+        Some(m) => format!("{} --model {m}", girth::trial::DEFAULT_AGENT),
+        None => girth::trial::DEFAULT_AGENT.to_string(),
+    });
+    let opts = girth::trial::Options {
+        skill_dir,
+        tasks: pairs,
+        runs,
+        agent,
+        timeout: std::time::Duration::from_secs(timeout),
+    };
+    let report = match girth::trial::run(&top, &opts, |line| eprintln!("girth trial: {line}")) {
+        Ok(r) => r,
+        Err(e) => return refuse(e),
+    };
+    let micros = |c: Option<f64>| c.map(|c| (c * 1e6).round() as u64);
+    let _ = ledger::append(
+        &girth_home(ctx),
+        Event::Trial(girth::ledger::Trial {
+            project: ctx.cwd.display().to_string(),
+            skill: report.skill.clone(),
+            tasks: report.tasks.clone(),
+            fired: report.fired,
+            with_cost_micros: micros(report.with_cost),
+            without_cost_micros: micros(report.without_cost),
+            verdict: report.verdict,
+        }),
+    );
+    let _ = writeln!(out, "{}", report.render());
+    ExitCode::SUCCESS
 }
 
 fn run_stats(
@@ -1248,6 +1356,17 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
+        Command::Trial {
+            skill_dir,
+            tasks,
+            checks,
+            runs,
+            agent,
+            model,
+            timeout,
+        } => run_trial(
+            skill_dir, tasks, checks, runs, agent, model, timeout, &ctx, &mut out,
+        ),
         Command::Drift { roots, skill_dirs } => {
             let installed = discover_skills(&resolve_roots(&roots, &ctx, &mut warnings));
             let records = ledger::read(&girth_home(&ctx));

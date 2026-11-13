@@ -94,6 +94,26 @@ pub enum Event {
     Side(Side),
     /// The MCP tool schemas a session's requests carry, per server, when they changed.
     Schema(Schema),
+    /// A skill trial: the same tasks run with and without a skill, and the verdict.
+    Trial(Trial),
+}
+
+/// A `girth trial` result. Pass counts, costs and the verdict only; never task text,
+/// check commands or output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Trial {
+    pub project: String,
+    pub skill: String,
+    pub tasks: Vec<crate::trial::TaskResult>,
+    /// With-skill runs that used the skill, when the agent's output said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fired: Option<u64>,
+    /// Mean cost per run of each arm, in millionths of a dollar, when reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub with_cost_micros: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub without_cost_micros: Option<u64>,
+    pub verdict: crate::trial::Verdict,
 }
 
 /// A session's MCP tool schemas per server, as Claude Code's context breakdown estimates

@@ -27,5 +27,6 @@ pub mod stats;
 pub mod taste;
 #[cfg(test)]
 pub(crate) mod testutil;
+pub mod trial;
 pub mod validate;
 pub mod xray;

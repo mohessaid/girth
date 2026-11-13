@@ -111,7 +111,7 @@ It stores no prompt text, check command or output, just as outcomes store only l
 ### Where the verdict shows
 
 - **`girth stats`**: each crafted skill's row gains `trial: admit (3/3 vs 1/3, 2026-11-13)`, from that skill's latest trial in the project.
-- **`girth advise`** gains a line for a skill whose latest trial was **reject** and which is still installed in the project: "trial says it hurts; remove it or re-craft it".
+- **`girth advise`:** deferred. Its contributors are shares of spend, worked out from the ledger without reading the filesystem. "A rejected skill is still installed" fits neither, and belongs in a later skill-hygiene pass.
 
 ### Advisory, not a gate
 

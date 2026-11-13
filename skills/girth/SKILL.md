@@ -5,9 +5,9 @@ description: Use when a task needs specialised domain know-how (library conventi
 
 # Girth: just-in-time project skills
 
-Girth distils large installed skills into small project-scoped ones (a cache: pay once, reuse cheaply) and keeps a local ledger of what gets used.
+Girth distils large installed skills into small, cached project-scoped ones and keeps a local ledger of what gets used.
 
-Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run each call as a single command, without `cd` or pipes.
+Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run each call alone, without `cd` or pipes.
 
 ## Other intents
 | The user wants to… | Follow |
@@ -18,6 +18,7 @@ Run the helper as `<this skill's base directory>/scripts/girth <command>`. Run e
 | change or inspect sharing | `references/sharing.md` |
 | remember or forget a preference, or see past choices | `references/taste.md` |
 | cut usage or costs | `references/advise.md` |
+| trial a crafted skill | `references/trial.md` |
 
 Otherwise, craft:
 

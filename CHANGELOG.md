@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth trial`: does a crafted skill earn its place?** It runs the same task with and without a skill, grades each run with a check command you give, and records admit, reject or undecided.
+  - Each run starts from a fresh clone of the repo at HEAD. The arms alternate, the runs go one at a time, and a hung agent is killed at `--timeout`.
+  - **A task counts as won or lost only by a difference of 2 or more passes** (3 runs per arm by default). In a SkillsBench pilot, both arms of `software-dependency-audit` flipped between pass and fail. The rule from 2611.13144 (Student-Aware Teaching), admit on any positive gain, would have admitted that skill on one day's runs and rejected it on October's. `edit-pdf` was a clear win: 0/3 without the skill, 5/5 with it.
+  - **A skill that never fired decides nothing.** The default agent, headless Claude Code with user-level skills, plugins and MCP servers hidden, reports whether the skill ran and what each run cost. Any other harness's agent works through `--agent`, with those two reported as unknown.
+  - **Cost is shown, never judged.** Output tokens for the same arm and task varied by 17–35% between runs.
+  - The ledger keeps pass counts, costs and the verdict, never prompts, checks or output. `girth stats` shows each crafted skill's latest verdict. `girth validate` is unchanged: a skill with no trial, or a rejected one, is still valid.
+
 ## [0.24.4] - 2026-11-13
 
 ### Added

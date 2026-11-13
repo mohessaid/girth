@@ -234,6 +234,13 @@ The estimate prices the main conversation's cache writes at the 1-hour rate Clau
 
 Girth keeps a local, append-only ledger (`~/.girth/ledger.jsonl`) of which skills you use, which sections of which source skills your crafted skills keep or drop, and your 👍/👎. Ask *"girth stats"* to see which installed skills actually earn their place, or *"girth review captions"* to remove sections you don't want. Removals become signal too.
 
+**Trials: does a crafted skill help?** `girth trial .claude/skills/girth-pdf --task task.md --check "cargo test -q"` runs the task with and without the skill, three runs each by default. Each run starts from a fresh clone at HEAD, and the check grades it.
+- A task counts as won or lost only when the arms differ by at least 2 passes. In our SkillsBench pilot, a single-run difference turned out to be noise in both directions.
+- A skill that never fired decides nothing.
+- Cost is shown but not judged.
+- The verdict (admit, reject or undecided) goes to the ledger and shows in `girth stats`.
+- It uses headless Claude Code by default; `--agent` takes any harness's command-line agent.
+
 **Sharing is opt-in and anonymous.** Girth asks once. If you allow it, only **content hashes of public skill sections plus counts** (used / kept / removed / up / down) would be shared, never names, paths, text, notes or anything from your project. Nothing is uploaded until the Girth index launches. Run `girth share preview` to see exactly what would be sent.
 
 ## Taste memory
@@ -256,6 +263,7 @@ target/release/girth search "caption timing" --json
 target/release/girth validate .claude/skills/girth-captions   # also records to the ledger
 target/release/girth drift .claude/skills/girth-captions      # source sections changed since then? exit 1 if so
 target/release/girth stats                                      # what the ledger says
+target/release/girth trial .claude/skills/girth-pdf --task task.md --check "make test"   # with vs without the skill
 target/release/girth share preview                              # exactly what would be shared
 target/release/girth taste add launch-video "End on the logo with the URL."
 target/release/girth made launch-video palette=paper-ink music=lo-fi

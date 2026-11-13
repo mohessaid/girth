@@ -1,0 +1,226 @@
+//! `girth trial` end to end, with fake agents (shell scripts) in place of a model.
+
+use assert_cmd::Command;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
+
+struct Fixture {
+    _tmp: TempDir,
+    repo: PathBuf,
+    skill: PathBuf,
+    home: PathBuf,
+    root: PathBuf,
+}
+
+fn git(dir: &Path, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .args(["-c", "user.email=t@t", "-c", "user.name=t"])
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+fn fixture() -> Fixture {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().to_path_buf();
+    let repo = root.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    fs::write(repo.join("README"), "hi\n").unwrap();
+    // A committed copy of the skill: the without arm must remove it.
+    fs::create_dir_all(repo.join(".claude/skills/pdf-fix")).unwrap();
+    fs::write(repo.join(".claude/skills/pdf-fix/SKILL.md"), "old\n").unwrap();
+    git(&repo, &["init", "-q"]);
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-qm", "init"]);
+    // Uncommitted work must not reach the trial's clones.
+    fs::write(repo.join("ok"), "leaked\n").unwrap();
+    let skill = root.join("pdf-fix");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: pdf-fix\ndescription: Use when fixing PDFs.\n---\nWrite ok.\n",
+    )
+    .unwrap();
+    fs::write(root.join("task.md"), "Fix the PDF.\n").unwrap();
+    Fixture {
+        home: root.join("home"),
+        _tmp: tmp,
+        repo,
+        skill,
+        root,
+    }
+}
+
+/// A fake agent: a stream-json init line, then `body`, then a result line costing `cost`.
+fn agent(f: &Fixture, name: &str, body: &str) -> String {
+    let path = f.root.join(name);
+    fs::write(
+        &path,
+        format!(
+            "cat > prompt.txt\necho '{{\"type\":\"system\"}}'\n{body}\necho '{{\"type\":\"result\",\"total_cost_usd\":0.25}}'\n"
+        ),
+    )
+    .unwrap();
+    format!("sh {}", path.display())
+}
+
+const HAS_SKILL: &str =
+    "test \"$(cat .claude/skills/pdf-fix/SKILL.md 2>/dev/null | head -c 3)\" = '---'";
+const FIRE: &str = r#"echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"pdf-fix"}}]}}'"#;
+
+fn trial(f: &Fixture) -> Command {
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", &f.home).current_dir(&f.repo);
+    cmd.arg("trial").arg(&f.skill);
+    cmd
+}
+
+#[test]
+fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
+    let f = fixture();
+    // Passes only with the trial's skill (not the committed stub), and only from the
+    // prompt on stdin.
+    let a = agent(
+        &f,
+        "a.sh",
+        &format!("if {HAS_SKILL}; then {FIRE}; grep -q PDF prompt.txt && echo yes > ok; fi"),
+    );
+    let out = trial(&f)
+        .args(["--task", f.root.join("task.md").to_str().unwrap()])
+        .args(["--check", "test -f ok", "--agent", &a])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(
+        text.contains("task 1: with 3/3 · without 0/3 → won"),
+        "{text}"
+    );
+    assert!(
+        text.contains("skill used in 3 of 3 runs · $0.2500 vs $0.2500 per run → admit"),
+        "{text}"
+    );
+    let ledger = fs::read_to_string(f.home.join("ledger.jsonl")).unwrap();
+    assert!(ledger.contains(r#""kind":"trial""#), "{ledger}");
+    assert!(ledger.contains(r#""verdict":"admit""#), "{ledger}");
+    assert!(ledger.contains(r#""with_cost_micros":250000"#), "{ledger}");
+    assert!(!ledger.contains("Fix the PDF"), "{ledger}");
+    assert!(!ledger.contains("test -f ok"), "{ledger}");
+    // The clones are gone, and the real repo was never touched.
+    assert_eq!(fs::read_to_string(f.repo.join("ok")).unwrap(), "leaked\n");
+    assert_eq!(
+        fs::read_to_string(f.repo.join(".claude/skills/pdf-fix/SKILL.md")).unwrap(),
+        "old\n"
+    );
+}
+
+#[test]
+fn a_skill_that_breaks_the_task_is_rejected() {
+    let f = fixture();
+    let a = agent(
+        &f,
+        "a.sh",
+        &format!("if {HAS_SKILL}; then {FIRE}; else echo yes > ok; fi"),
+    );
+    trial(&f)
+        .args(["--task", f.root.join("task.md").to_str().unwrap()])
+        .args(["--check", "test -f ok", "--agent", &a, "--runs", "2"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("with 0/2 · without 2/2 → lost"))
+        .stdout(predicates::str::contains("→ reject"));
+}
+
+#[test]
+fn a_skill_that_never_fires_is_undecided() {
+    let f = fixture();
+    let a = agent(
+        &f,
+        "a.sh",
+        &format!("if {HAS_SKILL}; then echo yes > ok; fi"),
+    );
+    trial(&f)
+        .args(["--task", f.root.join("task.md").to_str().unwrap()])
+        .args(["--check", "test -f ok", "--agent", &a, "--runs", "2"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("skill used in 0 of 2 runs"))
+        .stdout(predicates::str::contains("→ undecided"));
+}
+
+#[test]
+fn a_hanging_agent_is_killed_and_fails_and_a_plain_agent_reports_unknowns() {
+    let f = fixture();
+    let started = std::time::Instant::now();
+    trial(&f)
+        .args(["--task", f.root.join("task.md").to_str().unwrap()])
+        .args(["--check", "test -f ok", "--agent", "touch ok; sleep 30"])
+        .args(["--runs", "2", "--timeout", "1"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("with 0/2 · without 0/2 → tied"))
+        .stdout(predicates::str::contains("4 runs timed out"))
+        .stdout(predicates::str::contains(
+            "skill use unknown · cost unknown → undecided",
+        ));
+    assert!(started.elapsed().as_secs() < 20);
+}
+
+#[test]
+fn one_check_serves_every_task_and_mismatched_counts_are_refused() {
+    let f = fixture();
+    let task = f.root.join("task.md");
+    let task = task.to_str().unwrap();
+    trial(&f)
+        .args([
+            "--task", task, "--task", task, "--check", "true", "--agent", "true",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "task 2: with 3/3 · without 3/3 → tied",
+        ));
+    trial(&f)
+        .args(["--task", task, "--task", task])
+        .args(["--check", "true", "--check", "true", "--check", "true"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains(
+            "one --check for every --task, or a single one",
+        ));
+    trial(&f)
+        .args(["--task", task, "--check", "true", "--runs", "1"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn outside_a_git_repo_or_without_a_skill_it_refuses() {
+    let f = fixture();
+    let task = f.root.join("task.md");
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", &f.home)
+        .current_dir(&f.root)
+        .arg("trial")
+        .arg(&f.skill)
+        .args(["--task", task.to_str().unwrap(), "--check", "true"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("git repository"));
+    trial(&f)
+        .args(["--task", "/nonexistent/task.md", "--check", "true"])
+        .assert()
+        .code(2);
+    let mut cmd = Command::cargo_bin("girth").unwrap();
+    cmd.env("GIRTH_HOME", &f.home)
+        .current_dir(&f.repo)
+        .args(["trial", f.root.to_str().unwrap()])
+        .args(["--task", task.to_str().unwrap(), "--check", "true"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("SKILL.md"));
+    assert!(!f.home.join("ledger.jsonl").exists());
+}
