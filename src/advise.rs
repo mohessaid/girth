@@ -15,6 +15,9 @@ pub const BRIEF_SHARE: f64 = 0.15;
 pub const LARGE_CONTEXT: u64 = 150_000;
 /// The `--brief` line is shown at session start; keep it short.
 pub const BRIEF_MAX_CHARS: usize = 120;
+/// A cache break this soon after the previous request cannot be an expiry (the shortest
+/// prompt-cache lifetime is 5 minutes): the prompt changed.
+pub const LIVE_CACHE_SECS: u64 = 300;
 /// Turns taken more than this many seconds after a session's first turn are late.
 pub const LONG_SESSION: u64 = 8 * 3600;
 
@@ -114,8 +117,8 @@ fn output_fix(turns: &[(u64, &Turn)], harness: Option<&str>) -> (String, String)
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Contributor {
-    /// `agent_summary`, `mcp_schemas`, `skill`, `context`, `sessions`, `rewrites`, `subagents`
-    /// or `tool_output`.
+    /// `agent_summary`, `mcp_schemas`, `skill`, `context`, `sessions`, `prompt_changes`,
+    /// `rewrites`, `subagents` or `tool_output`.
     pub kind: &'static str,
     pub label: String,
     /// Share of spend in the window, 0–1.
@@ -359,15 +362,43 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         ),
     );
 
-    // Cache rewrites after idle gaps.
-    let rewrites: f64 = turns
-        .iter()
-        .filter_map(|(ts, t)| {
-            let r = price::long_prompt(price::rates_at(&t.model, *ts)?, &t.model, t.prompt());
-            let tokens: u64 = t.breaks.iter().map(|b| b.rewritten).sum();
-            Some(price::cost(r, 0, 0, 0, tokens))
-        })
-        .sum();
+    // Cache rewrites: after a gap the cache may have expired (the keeper's case); within
+    // LIVE_CACHE_SECS it could not have, so the prompt changed in front of the cached part.
+    let rewritten = |live: bool| -> f64 {
+        turns
+            .iter()
+            .filter_map(|(ts, t)| {
+                let r = price::long_prompt(price::rates_at(&t.model, *ts)?, &t.model, t.prompt());
+                let tokens: u64 = t
+                    .breaks
+                    .iter()
+                    .filter(|b| (b.idle_s < LIVE_CACHE_SECS) == live)
+                    .map(|b| b.rewritten)
+                    .sum();
+                Some(price::cost(r, 0, 0, 0, tokens))
+            })
+            .sum()
+    };
+    let (fix, guard) = if schemas.is_empty() {
+        (
+            "keep the start of the prompt fixed within a session: switching models, editing CLAUDE.md or settings, or connecting MCP servers rewrites everything after it",
+            "make those changes between sessions; nothing else changes",
+        )
+    } else {
+        (
+            "keep tool search on (leave ENABLE_TOOL_SEARCH unset): with it off, an MCP server whose tools arrive after the first request changes the tools at the start of the prompt",
+            "every tool stays available: tool search finds and loads it when a task calls for it",
+        )
+    };
+    push(
+        &mut out,
+        "prompt_changes",
+        "cache rewrites while the cache was live".into(),
+        rewritten(true),
+        fix.into(),
+        guard,
+    );
+    let rewrites = rewritten(false);
     let fix = if !on.keeper {
         Some("turn the girth keeper on: it keeps the cache warm while you are away")
     } else if !on.compact_idle {
@@ -1167,6 +1198,59 @@ mod tests {
         assert!(
             c.fix.contains("/clear") && c.fix.contains("/compact"),
             "{c:?}"
+        );
+    }
+
+    #[test]
+    fn rewrites_while_the_cache_was_live_are_prompt_changes_not_idle() {
+        let mut t = turn(SONNET, 0, 0);
+        // Under Haiku 5.5's 100,000-token line: base prices.
+        t.cache_write = 50_000;
+        let brk = |idle_s, rewritten| Break {
+            lost: rewritten,
+            rewritten,
+            idle_s,
+        };
+        // Two seconds apart: the cache cannot have expired. Five minutes: it may have.
+        t.breaks = vec![brk(2, 200_000), brk(LIVE_CACHE_SECS, 100_000)];
+        t.session = Some("s".into());
+        let mut records = vec![rec(NOW - 90, t)];
+        let get = |records: &[Record], kind: &str| {
+            advise(records, NOW, WEEK, On::default())
+                .contributors
+                .into_iter()
+                .find(|c| c.kind == kind)
+        };
+        let r = price::rates(SONNET).unwrap();
+        let changed = get(&records, "prompt_changes").unwrap();
+        assert!((changed.cost - price::cost(r, 0, 0, 0, 200_000)).abs() < 1e-12);
+        let idle = get(&records, "rewrites").unwrap().cost;
+        assert!((idle - price::cost(r, 0, 0, 0, 100_000)).abs() < 1e-12);
+        assert!(
+            changed.fix.contains("keep the start of the prompt"),
+            "{}",
+            changed.fix
+        );
+        // With MCP schemas sent in the window, the fix is tool search.
+        records.push(Record {
+            v: 1,
+            ts: NOW - 95,
+            event: Event::Schema(crate::ledger::Schema {
+                project: "/p".into(),
+                session: Some("s".into()),
+                servers: vec![crate::ledger::ServerSchema {
+                    server: "github".into(),
+                    tools: 1,
+                    sent: 1_000,
+                    deferred: 0,
+                }],
+            }),
+        });
+        let changed = get(&records, "prompt_changes").unwrap();
+        assert!(
+            changed.fix.starts_with("keep tool search on"),
+            "{}",
+            changed.fix
         );
     }
 

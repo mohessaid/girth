@@ -26,6 +26,10 @@ pub struct Snapshot {
     pub model: String,
     #[serde(default)]
     pub parts: Vec<Part>,
+    /// The last main-loop request's prompt in tokens, cache included, when the mod saw
+    /// one: it decides a long-prompt price.
+    #[serde(default)]
+    pub context: u64,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -47,7 +51,8 @@ pub fn report(snapshot: &Snapshot) -> Report {
     parts.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
     let bytes: u64 = parts.iter().map(|p| p.bytes).sum();
     let tokens = bytes / BYTES_PER_TOKEN;
-    let rates = price::rates(&snapshot.model);
+    let rates = price::rates(&snapshot.model)
+        .map(|r| price::long_prompt(r, &snapshot.model, snapshot.context));
     Report {
         model: snapshot.model.clone(),
         bytes,
@@ -132,6 +137,7 @@ mod tests {
     fn probe() -> Snapshot {
         Snapshot {
             model: "claude-opus-5-5".into(),
+            context: 0,
             parts: vec![
                 part("attachment", "mcp_instructions_delta", 287, Some(14_258)),
                 part("attachment", "skill_listing", 7_869, Some(30_027)),
@@ -161,6 +167,17 @@ mod tests {
             ..probe()
         });
         assert_eq!((unknown.read_cost, unknown.write_cost), (None, None));
+        // A Haiku 5.5 prompt over 100,000 tokens pays five times.
+        let haiku = |context| {
+            report(&Snapshot {
+                model: "claude-haiku-5-5".into(),
+                context,
+                ..probe()
+            })
+            .write_cost
+            .unwrap()
+        };
+        assert!((haiku(100_001) - 5.0 * haiku(100_000)).abs() < 1e-12);
     }
 
     #[test]
@@ -197,6 +214,7 @@ mod tests {
         let mut s = Snapshot {
             model: "mystery".into(),
             parts: vec![],
+            context: 0,
         };
         for i in 0..20 {
             s.parts.push(part("tool", &format!("t{i}"), 100 + i, None));

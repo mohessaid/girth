@@ -372,6 +372,7 @@ test('/girth-xray sends the parts of the last request, with Lens sizes and the m
   const out = await $.command.run({ command: 'girth-xray', args: '' })
   expect(out.text).toBe('x-ray: table')
   expect(snapshot.model).toBe('claude-opus-5-5')
+  expect(typeof snapshot.context).toBe('number')
   expect(snapshot.parts).toEqual([
     { kind: 'attachment', name: 'skill_listing', bytes: REWRITTEN.length, before: LISTING.length },
     { kind: 'attachment', name: 'todo_reminder', bytes: 13 },

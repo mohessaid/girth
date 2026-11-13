@@ -171,6 +171,7 @@ pub fn doctor_line(turn: &Turn) -> Option<String> {
         short_tokens(worst.rewritten)
     );
     if let Some(r) = price::rates(&turn.model) {
+        let r = price::long_prompt(r, &turn.model, turn.prompt());
         line.push_str(&format!(
             " (≈ ${:.2})",
             worst.rewritten as f64 * r.cache_write / 1e6
@@ -238,6 +239,8 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
                     if t.breaks.is_empty() {
                         s.warm_returns += 1;
                         if let Some(r) = price::rates(model) {
+                            // The ping's expected read is the next request's prompt.
+                            let r = price::long_prompt(r, model, expected);
                             s.warm_saved += expected as f64 * (r.cache_write - r.cache_read) / 1e6;
                         }
                     }
@@ -549,10 +552,28 @@ mod tests {
             (p.model, p.input, p.write) = ("claude-haiku-5-5".into(), 1, 1);
         }
         let mut t = turn("claude-haiku-5-5", &[(120_000, 120_000, 9_000)]);
-        t.cache_read = 200_000;
-        let s = summarise(&[rec(1, p), rec(2, Event::Turn(t))], Some("/p"));
+        (t.cache_read, t.requests) = (200_000, Some(1));
+        assert_eq!(
+            doctor_line(&t).unwrap(),
+            "the prompt cache had expired (idle 2h 30m); this turn re-wrote 120K tokens (≈ $0.12)"
+        );
+        let s = summarise(&[rec(1, p.clone()), rec(2, Event::Turn(t))], Some("/p"));
         assert!((s.ping_cost - price::cost(long, 1, 1, 99_999, 1)).abs() < 1e-12);
         assert!((s.rewrite_cost - 120_000.0 * long.cache_write / 1e6).abs() < 1e-12);
+        // A warm return saves the expected 150,000-token write, at the long-prompt price.
+        let warm = summarise(
+            &[
+                rec(1, p),
+                rec(2, Event::Turn(turn("claude-haiku-5-5", &[]))),
+            ],
+            Some("/p"),
+        );
+        let saved = 150_000.0 * (long.cache_write - long.cache_read) / 1e6;
+        assert!(
+            (warm.warm_saved - saved).abs() < 1e-12,
+            "{}",
+            warm.warm_saved
+        );
     }
 
     #[test]

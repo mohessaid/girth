@@ -577,11 +577,16 @@ export function register(on) {
       squeeze.start(report.keeper, context)
     }
     if (e.agentId !== undefined) return result
+    // After the turn is recorded, and never holding the answer up for long; the timer is
+    // cancelled once the race is over, so it never keeps a run alive.
+    const stop = typeof AbortController === 'function' ? new AbortController() : null
     try {
-      // After the turn is recorded, and never holding the answer up for long.
-      await Promise.race([recordSchemas($, turn.project, turn.session), $.clock.sleep(TIMEOUT_MS)])
+      const timer = $.clock.sleep(TIMEOUT_MS, stop ? { signal: stop.signal } : undefined).catch(() => {})
+      await Promise.race([recordSchemas($, turn.project, turn.session), timer])
     } catch {
       // Metering only.
+    } finally {
+      stop?.abort()
     }
     const lines = typeof report.line === 'string' ? [report.line] : []
     if (!advised) {
@@ -620,7 +625,7 @@ export function register(on) {
 
   on('command.run', { command: 'girth-xray' }, async ($, e) => {
     const run = await $.process.run([launcher($), 'xray'], {
-      stdin: JSON.stringify({ model, parts: [...parts.values()] }),
+      stdin: JSON.stringify({ model, context, parts: [...parts.values()] }),
       timeoutMs: TIMEOUT_MS,
     })
     return { text: run.exitCode === 0 ? run.stdout.trimEnd() : 'girth: the x-ray is unavailable right now' }

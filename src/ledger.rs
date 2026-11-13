@@ -230,14 +230,16 @@ pub struct Turn {
 
 impl Turn {
     /// The turn's average prompt per request, input and cache together: what decides a
-    /// long-prompt price (`price::long_prompt`).
+    /// long-prompt price (`price::long_prompt`). Without a request count, the last
+    /// request's prompt (`context`) when known, else 0: a whole turn's tokens are not
+    /// one request's.
     pub fn prompt(&self) -> u64 {
-        crate::price::prompt_per_request(
-            self.requests.unwrap_or(1),
-            self.input,
-            self.cache_read,
-            self.cache_write,
-        )
+        match self.requests {
+            Some(n) => {
+                crate::price::prompt_per_request(n, self.input, self.cache_read, self.cache_write)
+            }
+            None => self.context.unwrap_or(0),
+        }
     }
 }
 
@@ -374,6 +376,39 @@ mod tests {
             session: None,
             agent: false,
         }
+    }
+
+    #[test]
+    fn a_turn_s_prompt_is_its_average_request_or_its_last_without_a_count() {
+        let mut t = Turn {
+            agent_id: None,
+            agent_type: None,
+            harness: None,
+            premium: None,
+            cost_micros: None,
+            context: None,
+            tool_output: Default::default(),
+            project: "/p".into(),
+            session: None,
+            model: "m".into(),
+            input: 10,
+            output: 5,
+            cache_read: 290_000,
+            cache_write: 10_000,
+            agent: false,
+            aborted: false,
+            lens_before: None,
+            lens_after: None,
+            requests: Some(3),
+            mcp: vec![],
+            breaks: vec![],
+            outcomes: vec![],
+        };
+        assert_eq!(t.prompt(), 100_003);
+        t.requests = None;
+        assert_eq!(t.prompt(), 0, "unknown: no long-prompt price");
+        t.context = Some(120_000);
+        assert_eq!(t.prompt(), 120_000);
     }
 
     #[test]
