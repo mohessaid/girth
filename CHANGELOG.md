@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-13
+
 ### Added
 - **What each kind of subagent costs.** Claude Code 2.1.323 removed `subagentStatusLine`, the only place it showed a subagent's cost (issue #109446). Girth's mod now labels each subagent turn with its agent's type (`Explore`, `general-purpose`, a plugin's agent) and opaque id, which it learns when the agent spawns. It never keeps the agent's prompt or description.
   - `/girth-meter` and `girth stats --meter` add a line such as `meter: subagents: general-purpose 3 agents · 9 turns · ≈ $1.20 (claude-opus-5-5); Explore 5 agents · 12 turns · ≈ $0.31 (claude-haiku-5-5)`, costliest first.
@@ -327,7 +329,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/mohessaid/girth/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/mohessaid/girth/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/mohessaid/girth/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/mohessaid/girth/compare/v0.19.0...v0.20.0
