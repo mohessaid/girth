@@ -12,10 +12,12 @@ Load it with `claude --plugin-dir examples/mcpcost/probe`. It ran on Claude Code
 
 1. **The breakdown names each MCP tool's server and schema tokens.** `serverName` is the same id as the tool prefix (`mcp__claude_ai_github__…` → `claude_ai_github`), so it joins the ledger's per-turn `mcp` list. GitHub's server came to 19,427 tokens (`full`) and 17,089 (`summary`): the 19.4k figure.
 2. **With tool search on (the default), every schema is deferred.** The request was 23,740 tokens and cost $0.0026. The breakdown has an `MCP tools (deferred)` row of kind `deferred`.
-3. **With `ENABLE_TOOL_SEARCH=false`, every schema is sent.** The same prompt became one request of **148,717** tokens, all cache-written, costing **$0.149: 57×.** The row became `MCP tools`, kind `used`, 131,821 tokens.
+3. **With `ENABLE_TOOL_SEARCH=false`, every schema is sent.** The same prompt became one request of **148,717** tokens: **6.3×.** It cost $0.149, 57× the dollars, because the request was all cache writes and crossed Haiku 5.5's 100k-token line, above which the whole request is billed at $0.50 input instead of $0.10. The row became `MCP tools`, kind `used`, 131,821 tokens.
 4. **The per-tool `isLoaded` flag is wrong when tool search is off.** It said 541 of 131,821 tokens were loaded. Only the category is right. So Girth counts a server's schemas as sent when `isLoaded` is true, or when the breakdown has no `deferred` row at all.
 5. **The figures are estimates.** `summary` overstates: its `used` rows sum to 168,817 tokens against the real 148,717 (+13.5%). `full` sums to 188,843 (+27%). Girth records `summary`, which costs nothing, and labels what it shows as an estimate.
 
 ## For Girth
 
 Record each session's MCP schema tokens per server, sent and deferred. In the meter and `advise`, multiply a sent server's tokens by the session's requests, price them, and set that against how often the server's tools were called. The fix for a sent server that is never called is to turn tool search back on (unset `ENABLE_TOOL_SEARCH`) or disable the server in `/mcp`.
+
+**Timing (2.1.323, 228 MCP tools):** `$.session.usage({ breakdown: 'summary' })` took 50 ms; `'full'` took 587 ms. The mod uses `summary` after the turn is recorded, bounded at 5 s.

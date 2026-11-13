@@ -292,7 +292,8 @@ test('main turns record MCP schema tokens per server when they change, sent or d
   const asked: any[] = []
   let shape = breakdown(true, [['pencil', 400, false], ['github', 300, true], ['github', 200.4, false], ['bad', NaN, true], ['neg', -5, true]])
   on('session.cwd', () => ({ value: '/work/app' }))
-  on('session.id', () => ({ value: 's-1' }))
+  let sid = 's-1'
+  on('session.id', () => ({ value: sid }))
   on('session.usage', ($, e) => {
     asked.push(e)
     return { value: { startedAt: 0, context: { window: 1_000_000, breakdown: shape } } as any }
@@ -323,7 +324,12 @@ test('main turns record MCP schema tokens per server when they change, sent or d
   // Tool search off: nothing is deferred, so every schema is sent whatever isLoaded says.
   shape = breakdown(false, [['pencil', 400, false], ['github', 500, false]])
   await $.turn.complete({ turnId: 't4', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
-  expect(schemas.length).toBe(2)
+  // A new session with the same servers records its own.
+  sid = 's-2'
+  await $.turn.complete({ turnId: 't5', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(schemas.length).toBe(3)
+  expect(schemas[2].body.session).toBe('s-2')
+  expect(schemas[2].body.servers).toEqual(schemas[1].body.servers)
   expect(schemas[1].body.servers).toEqual([
     { server: 'github', tools: 1, sent: 500, deferred: 0 },
     { server: 'pencil', tools: 1, sent: 400, deferred: 0 },

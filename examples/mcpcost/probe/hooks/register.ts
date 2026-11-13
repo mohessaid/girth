@@ -18,7 +18,9 @@ export const register: Register = (on) => {
     const r = await next(e);
     try {
       for (const detail of ['summary', 'full'] as const) {
+        const t0 = Date.now();
         const u: any = await $.session.usage({ breakdown: detail });
+        rows.push(JSON.stringify({ k: 'ms', detail, ms: Date.now() - t0 }));
         const b = u.context?.breakdown;
         rows.push(JSON.stringify({ k: 'ctx', detail, agent: e.agentId ?? null, tokens: u.context?.tokens,
           categories: b?.categories?.map((c: any) => [c.name, c.kind, c.tokens]),

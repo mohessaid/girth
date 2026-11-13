@@ -1,7 +1,7 @@
 //! What MCP tool schemas cost: each server's schema tokens that every main-loop request
 //! carries (from `schema` ledger events), times the requests of its session's turns. A
-//! session writes them to the cache once, then reads them: any cache break writes them
-//! again, so the figure is a floor. The tokens are Claude Code's own estimate. They are
+//! session writes them to the cache once, then reads them (a cache break writes them
+//! again). The tokens are Claude Code's own estimate, so the figure is one too. They are
 //! already part of the turns' cost; this names the share.
 
 use std::collections::BTreeMap;
@@ -23,8 +23,8 @@ pub struct McpCost {
     pub turns: u64,
     /// Turns (main loop or subagent) of those sessions that called one of its tools.
     pub called: u64,
-    /// Dollars for one cache write per session and cache reads after: the least those
-    /// tokens cost.
+    /// Dollars for one cache write per session and cache reads after. Cache breaks add
+    /// writes, and Claude Code's estimate runs about 13% over the real count: an estimate.
     pub cost: f64,
 }
 

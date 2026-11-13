@@ -250,7 +250,8 @@ async function recordSchemas($, project, session) {
     by.set(t.serverName, row)
   }
   const list = [...by.values()].sort((x, y) => (x.server < y.server ? -1 : 1))
-  const key = JSON.stringify(list)
+  // A new session (after /clear, say) records its own, even when the servers are the same.
+  const key = (session ?? '') + '\u0000' + JSON.stringify(list)
   if (key === schemaKey) return
   schemaKey = key
   await $.process.run([launcher($), 'schema', 'record'], {
@@ -537,13 +538,6 @@ export function register(on) {
       main = fresh()
       agents = fresh()
     }
-    if (e.agentId === undefined) {
-      try {
-        await recordSchemas($, turn.project, turn.session)
-      } catch {
-        // Metering only.
-      }
-    }
     const note = e.agentId === undefined ? squeeze?.takeNote() : null
     if (note) turn.compacted = note
     const run = await $.process.run([launcher($), 'meter', 'record'], {
@@ -583,6 +577,12 @@ export function register(on) {
       squeeze.start(report.keeper, context)
     }
     if (e.agentId !== undefined) return result
+    try {
+      // After the turn is recorded, and never holding the answer up for long.
+      await Promise.race([recordSchemas($, turn.project, turn.session), $.clock.sleep(TIMEOUT_MS)])
+    } catch {
+      // Metering only.
+    }
     const lines = typeof report.line === 'string' ? [report.line] : []
     if (!advised) {
       advised = true

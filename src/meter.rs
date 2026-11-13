@@ -248,7 +248,7 @@ pub fn render(summary: &Summary) -> String {
             .take(MCP_ROWS)
             .map(|r| {
                 format!(
-                    "{} ≈ {} tokens × {} request{} · called in {} turn{} · ≥ ${:.4}",
+                    "{} ≈ {} tokens × {} request{} · called in {} turn{} · ≈ ${:.4}",
                     r.server,
                     thousands(r.tokens),
                     thousands(r.requests),
@@ -262,7 +262,7 @@ pub fn render(summary: &Summary) -> String {
         let rest = &summary.mcp_schemas[summary.mcp_schemas.len().min(MCP_ROWS)..];
         if !rest.is_empty() {
             rows.push(format!(
-                "{} more ≥ ${:.4} (--json lists them)",
+                "{} more ≈ ${:.4} (--json lists them)",
                 rest.len(),
                 rest.iter().map(|r| r.cost).sum::<f64>()
             ));
@@ -436,11 +436,11 @@ mod tests {
         let s = summarise(&[schema, one], None);
         let text = render(&s);
         assert!(
-            text.contains(": s7 ≈ 7,000 tokens × 1 request · called in 1 turn · ≥ $0.0560; s6 "),
+            text.contains(": s7 ≈ 7,000 tokens × 1 request · called in 1 turn · ≈ $0.0560; s6 "),
             "{text}"
         );
         // s1 and s2: 3,000 tokens written at $8 per million.
-        assert!(text.contains("; s3 ≈ 3,000 tokens × 1 request · called in 0 turns · ≥ $0.0240; 2 more ≥ $0.0240 (--json lists them)"), "{text}");
+        assert!(text.contains("; s3 ≈ 3,000 tokens × 1 request · called in 0 turns · ≈ $0.0240; 2 more ≈ $0.0240 (--json lists them)"), "{text}");
         assert_eq!(s.mcp_schemas.len(), 7);
     }
 

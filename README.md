@@ -196,7 +196,7 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - an estimated cost;
 - how much Lens kept out of the prompt;
 - what each kind of subagent cost (`Explore`, `general-purpose`, a plugin's agents): agents, turns, cost and model, the view Claude Code 2.1.323 took out of its status line;
-- **MCP tool schemas sent with every request,** per server: estimated tokens, requests, how often its tools were called, and the least they cost. With tool search on (Claude Code's default) schemas wait until a tool is needed. With `ENABLE_TOOL_SEARCH=false`, one short prompt with 11 servers connected grew from 23,740 to 148,717 tokens, 57× the cost (`examples/mcpcost/RESULTS.md`). `girth advise` names the servers never called. The figures are Claude Code's own estimates, from its `/context` breakdown;
+- **MCP tool schemas sent with every request,** per server: estimated tokens, requests, how often its tools were called, and an estimated cost. With tool search on (Claude Code's default) schemas wait until a tool is needed. With `ENABLE_TOOL_SEARCH=false`, one short prompt with 11 servers connected grew from 23,740 to 148,717 tokens, 6.3× (`examples/mcpcost/RESULTS.md`). `girth advise` names the servers never called. The figures are Claude Code's own estimates, from its `/context` breakdown;
 - **side queries,** the requests Claude Code sends outside the conversation:
   - background agents' progress summaries (`agent_summary`), sent about every 30 s with none of their input cached
   - prompt suggestions, session titles, compaction

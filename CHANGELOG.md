@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-11-13
+
+### Fixed
+- **MCP schemas are recorded for each session.** When a new session started in the same process with the same servers, the mod wrote nothing for it, so its turns went uncounted.
+- **The schema breakdown no longer runs before the turn is recorded,** and it gives up after 5 seconds.
+- **The schema cost reads `≈`, not `≥`.** Claude Code's estimate runs about 13% over the real token count, so the figure is not a floor.
+
 ## [0.24.1] - 2026-11-13
 
 ### Fixed
@@ -14,9 +21,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 - **What MCP tool schemas cost.** Girth's mod now reads Claude Code's context breakdown (what `/context` shows) after each main-loop turn, and records each MCP server's schema tokens, sent and deferred, whenever they change. It keeps server ids and numbers, never tool names or schemas.
-  - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≥ $X`, costliest first.
+  - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≈ $X`, costliest first.
   - `girth advise` has a new contributor, `mcp_schemas`: keep tool search on, and disable the servers never called.
-  - Measured on Claude Code 2.1.323 (`examples/mcpcost/RESULTS.md`): with `ENABLE_TOOL_SEARCH=false` and 11 servers connected, `Reply with the word ok.` took 148,717 tokens instead of 23,740, and cost $0.149 instead of $0.0026. GitHub's server alone is 19,427 tokens.
+  - Measured on Claude Code 2.1.323 (`examples/mcpcost/RESULTS.md`): with `ENABLE_TOOL_SEARCH=false` and 11 servers connected, `Reply with the word ok.` took 148,717 tokens instead of 23,740 (6.3×). It cost $0.149 instead of $0.0026, partly because the request crossed Haiku 5.5's long-prompt price line. GitHub's server alone is 19,427 tokens.
   - Claude Code marks most tools not loaded even when tool search is off, so Girth counts every schema as sent when nothing is deferred.
 
 ## [0.23.0] - 2026-11-13
@@ -344,7 +351,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.2...HEAD
+[0.24.2]: https://github.com/mohessaid/girth/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/mohessaid/girth/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/mohessaid/girth/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/mohessaid/girth/compare/v0.22.0...v0.23.0
