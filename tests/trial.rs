@@ -105,7 +105,9 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
         .assert()
         .success();
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
-    assert!(!text.contains("timed out"), "{text}");
+    for quiet in ["timed out", "ended in an error", "every run failed"] {
+        assert!(!text.contains(quiet), "{quiet}: {text}");
+    }
     // Arms alternate, with-skill first.
     let log = String::from_utf8_lossy(&out.get_output().stderr).to_string();
     let runs: Vec<&str> = log.lines().take(2).collect();
@@ -289,6 +291,14 @@ fn agent_errors_and_check_timeouts_count_as_fails_and_say_why() {
         .assert()
         .success()
         .stdout(predicates::str::contains("4 agent runs ended in an error"));
+    // An empty GIRTH_TRIAL_AGENT falls back to the default agent, which isn't on this
+    // PATH, so the run fails at once instead of reaching a model.
+    trial(&f)
+        .env("GIRTH_TRIAL_AGENT", "")
+        .args(["--task", task, "--check", "true", "--runs", "2"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("claude: not found"));
     // The default agent comes from GIRTH_TRIAL_AGENT here (`false`), never a real one.
     trial(&f)
         .args(["--task", task, "--check", "true", "--runs", "2"])
@@ -336,6 +346,9 @@ fn an_interrupted_trial_stops_its_agent_and_the_next_one_sweeps_its_clone() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert!(running(&marker), "the agent never started");
+    // A live process's scratch dir (pid 1 never exits) must survive the sweep.
+    let live = f.home.join("trials/1-0");
+    fs::create_dir_all(&live).unwrap();
     // Ctrl-C reaches the whole foreground process group.
     std::process::Command::new("kill")
         .args(["-INT", "--", &format!("-{}", child.id())])
@@ -344,7 +357,7 @@ fn an_interrupted_trial_stops_its_agent_and_the_next_one_sweeps_its_clone() {
     child.wait().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
     assert!(!running(&marker), "the agent outlived girth");
-    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 2);
     trial(&f)
         .args([
             "--task",
@@ -355,5 +368,9 @@ fn an_interrupted_trial_stops_its_agent_and_the_next_one_sweeps_its_clone() {
         .args(["--agent", "true", "--runs", "2"])
         .assert()
         .success();
-    assert_eq!(fs::read_dir(f.home.join("trials")).unwrap().count(), 0);
+    let left: Vec<_> = fs::read_dir(f.home.join("trials"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    assert_eq!(left, [live]);
 }

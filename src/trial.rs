@@ -411,9 +411,12 @@ fn sweep(root: &Path) {
     }
 }
 
+/// Whether `pid` is running. `ps -p` works for other users' processes too, where
+/// `kill -0` fails with a permission error and would read as dead.
 fn alive(pid: u32) -> bool {
-    Command::new("kill")
-        .args(["-0", &pid.to_string()])
+    Command::new("ps")
+        .args(["-p", &pid.to_string()])
+        .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|s| s.success())

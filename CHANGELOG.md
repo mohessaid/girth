@@ -15,7 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
   - A non-zero agent exit or an `is_error` result counts as an error, and the output prints the agent's first stderr line.
   - Checks killed at `--check-timeout` (new, default 600 s) are counted.
   - When every run of both arms fails, the output says to fix the setup before blaming the skill.
-- **An interrupted trial no longer leaves its agent running.** Agent runs stay in girth's process group, so Ctrl-C stops them, and a timeout kills the whole process tree. Scratch clones now live in `$GIRTH_HOME/trials`, and the next trial sweeps those left by dead runs.
+- **An interrupted trial no longer leaves its agent running.** Agent runs stay in girth's process group, so Ctrl-C stops them, and a timeout kills the whole process tree. Scratch clones now live in `$GIRTH_HOME/trials`, and the next trial sweeps those left by dead runs. A run counts as dead only when `ps -p` can't find it: `kill -0` fails on another user's process and would have swept a live one.
 - **Tests can no longer start a real agent.** A mutation-testing run of 0.25.0 started three real `claude -p` runs, about $0.38: a mutant skipped a refusal that guards the default agent. `GIRTH_TRIAL_AGENT` now replaces the default agent, and the tests set it and run with `claude` off the PATH.
 
 ### Changed
