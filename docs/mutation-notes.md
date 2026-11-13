@@ -102,3 +102,6 @@ A rerun caught all 34 mutants in the decoder and `names`; its 2 timeouts are mut
 The other two are equivalent:
 - `import_antigravity`'s `out.status.success()` guard replaced with `true`. A failed `sqlite3` prints no rows, so the conversation parses to nothing either way.
 - `kept > cursor` replaced with `>=`. That only rewrites an unchanged cursor.
+
+## trial (0.25.0)
+- `src/main.rs` `run_trial`: `checks.len() != 1` → `==` times out rather than failing. With one check, the refusal path is skipped and a real trial runs past the test timeout; with one check per task, the mutant refuses. Caught as a timeout.

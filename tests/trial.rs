@@ -95,6 +95,18 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
         .assert()
         .success();
     let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(!text.contains("timed out"), "{text}");
+    // Arms alternate, with-skill first.
+    let log = String::from_utf8_lossy(&out.get_output().stderr).to_string();
+    let runs: Vec<&str> = log.lines().take(2).collect();
+    assert_eq!(
+        runs,
+        [
+            "girth trial: task 1 run 1 (with): pass",
+            "girth trial: task 1 run 1 (without): fail"
+        ],
+        "{log}"
+    );
     assert!(
         text.contains("task 1: with 3/3 · without 0/3 → won"),
         "{text}"
@@ -111,6 +123,13 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
     assert!(!ledger.contains("test -f ok"), "{ledger}");
     // The clones are gone, and the real repo was never touched.
     assert_eq!(fs::read_to_string(f.repo.join("ok")).unwrap(), "leaked\n");
+    // Clones live in a scratch dir, never in the repo.
+    let mut entries: Vec<String> = fs::read_dir(&f.repo)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    entries.sort();
+    assert_eq!(entries, [".claude", ".git", "README", "ok"]);
     assert_eq!(
         fs::read_to_string(f.repo.join(".claude/skills/pdf-fix/SKILL.md")).unwrap(),
         "old\n"

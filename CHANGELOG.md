@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-13
+
 ### Added
 - **`girth trial`: does a crafted skill earn its place?** It runs the same task with and without a skill, grades each run with a check command you give, and records admit, reject or undecided.
   - Each run starts from a fresh clone of the repo at HEAD. The arms alternate, the runs go one at a time, and a hung agent is killed at `--timeout`.
@@ -378,7 +380,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.4...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/mohessaid/girth/compare/v0.24.4...v0.25.0
 [0.24.4]: https://github.com/mohessaid/girth/compare/v0.24.3...v0.24.4
 [0.24.3]: https://github.com/mohessaid/girth/compare/v0.24.2...v0.24.3
 [0.24.2]: https://github.com/mohessaid/girth/compare/v0.24.1...v0.24.2
