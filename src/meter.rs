@@ -467,6 +467,18 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("Explore 2 agents · 3 turns"), "{text}");
+        // Unlabelled turns have no agent count.
+        assert!(text.contains("(unlabelled) 1 turn · "), "{text}");
+        // The model is the one most of the type's turns ran on.
+        let mixed = vec![
+            agent(Some("b1"), Some("Plan"), "claude-sonnet-5-5"),
+            agent(Some("b1"), Some("Plan"), "claude-sonnet-5-5"),
+            agent(Some("b2"), Some("Plan"), "claude-haiku-5-5"),
+        ];
+        assert_eq!(
+            summarise(&mixed, None).subagents[0].model,
+            "claude-sonnet-5-5"
+        );
         // No subagent turns: no line.
         assert!(!render(&summarise(&records[..1], None)).contains("subagents"));
     }
