@@ -4,14 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.25.2] - 2026-11-13
+
+### Fixed
+- **`girth trial --runs` is capped at 10.** Worked exactly over every pass rate, two identical arms get any won or lost call at most 4.22% of the time up to 10 runs. At 11 runs that passes 5%, and at 47 it reaches 7.9% (`examples/trial/false_calls.py`). 0.25.1 allowed up to 50 and claimed under 5% at every run count.
+- **The wording now says "at most 1 time in 20".** At 3 runs, 3/3 vs 0/3 is exactly 1 in 20.
+- **A trial at 2 runs per arm says it can't decide anything.** Use it to see whether the skill fires.
+- **`references/trial.md` tells the agent to run a trial in the background,** or with a long command timeout.
+
+### Added
+- **`examples/trial/`:** the false-call script, `greeting.sh` (a minimal real trial), and `RESULTS.md` with the real Claude Haiku 5.5 and Codex 0.164 trials.
+
 ## [0.25.1] - 2026-11-13
 
 ### Fixed
 - **`girth trial` judges each task with Fisher's one-sided exact test (at 0.05), not a fixed 2-pass gap.**
   - A simulation showed the fixed rule calls a win or a loss on identical coin-flip arms 21% of the time at 3 runs and 50% at 10, so more runs made it worse.
-  - With Fisher's test, false calls stay at or under 5% per task at 2–10 runs, and power grows with runs (36% at 3, 94% at 10, for a 0.9-vs-0.2 skill).
-  - At 3 runs, only 3/3 vs 0/3 decides.
-  - `--runs` is now 2–10. Worked exactly over every pass rate, two identical arms get any call at most 4.22% of the time up to 10 runs. At 11 runs that passes 5%, and at 47 it reaches 7.9% (`examples/trial/false_calls.py`).
+  - With Fisher's test, false calls stay at or under 5% per task at 2–10 runs (above that, see 0.25.2), and power grows with runs (36% at 3, 94% at 10, for a 0.9-vs-0.2 skill).
+  - At 3 runs, only 3/3 vs 0/3 decides. `--runs` was 2–50 (capped at 10 in 0.25.2).
 - **Agent errors and check timeouts count as fails, and say so.**
   - A non-zero agent exit or an `is_error` result counts as an error, and the output prints the agent's first stderr line.
   - Checks killed at `--check-timeout` (new, default 600 s) are counted.
@@ -399,7 +409,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.1...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.2...HEAD
+[0.25.2]: https://github.com/mohessaid/girth/compare/v0.25.1...v0.25.2
 [0.25.1]: https://github.com/mohessaid/girth/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/mohessaid/girth/compare/v0.24.4...v0.25.0
 [0.24.4]: https://github.com/mohessaid/girth/compare/v0.24.3...v0.24.4
