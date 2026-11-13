@@ -2,7 +2,7 @@
 
 Use this only when no installed skill covers the need.
 
-1. Run `npx skills find "<need>"` to list public skills (`owner/repo@skill` or `owner/repo`). If the command is unavailable or offline, stop here and report no source found.
+1. Run `npx skills@1.8.1 find "<need>"` to list public skills (`owner/repo@skill` or `owner/repo`). If the command is unavailable or offline, stop here and report no source found.
 2. Pick at most two candidates whose names and descriptions clearly fit. Tell the user in one line which repos you are fetching.
 3. Run `scripts/girth fetch <owner>/<repo>[/<path>]`. It prints `fetched: <dir>`, a shallow clone in an untrusted scratch dir.
 4. Run `scripts/girth search "<need>" --json --roots <dir>`, then read the `matched_headings` with `scripts/girth show <path> --heading "<heading>"`.

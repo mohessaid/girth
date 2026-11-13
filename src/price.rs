@@ -27,7 +27,7 @@ pub struct Rates {
 
 /// A model's rates while `from <= ts < until` (unix seconds), over its `rates` row: a
 /// vendor's dated price change, before or after it happens.
-const PERIODS: [(&str, u64, u64, Rates); 4] = [
+const PERIODS: [(&str, u64, u64, Rates); 6] = [
     // Anthropic halved Sonnet 5.5's cache hits to $0.10 on 2026-10-08.
     (
         "claude-sonnet-5-5",
@@ -59,6 +59,19 @@ const PERIODS: [(&str, u64, u64, Rates); 4] = [
         u64::MAX,
         google(1.50, 0.15, 7.50),
     ),
+    // And Gemini 4 Carbon and Argon on 2026-12-01.
+    (
+        "gemini-4-carbon",
+        1_796_083_200,
+        u64::MAX,
+        google(4.0, 0.20, 20.0),
+    ),
+    (
+        "gemini-4-argon",
+        1_796_083_200,
+        u64::MAX,
+        google(4.0, 0.20, 20.0),
+    ),
 ];
 
 /// Today's rates for a model id: see `rates_at`.
@@ -79,7 +92,7 @@ pub fn rates_at(model: &str, ts: u64) -> Option<Rates> {
 
 /// The table's rates for an id with no bracketed suffix.
 fn listed(id: &str) -> Option<Rates> {
-    const TABLE: [(&str, Rates); 22] = [
+    const TABLE: [(&str, Rates); 27] = [
         (
             "claude-opus-5-5",
             Rates {
@@ -116,6 +129,25 @@ fn listed(id: &str) -> Option<Rates> {
                 cache_write: 20.0,
             },
         ),
+        // Fable 5.2 and Mythos 5.2 (2026-11-09; docs.claude.com pricing read 2026-11-13).
+        (
+            "claude-fable-5-2",
+            Rates {
+                input: 8.0,
+                output: 40.0,
+                cache_read: 0.20,
+                cache_write: 16.0,
+            },
+        ),
+        (
+            "claude-mythos-5-2",
+            Rates {
+                input: 8.0,
+                output: 40.0,
+                cache_read: 0.20,
+                cache_write: 16.0,
+            },
+        ),
         // Earlier models GitHub Copilot CLI sessions ran (Copilot logs them as `claude-sonnet-4.6`).
         ("claude-sonnet-4-6", anthropic(3.0, 0.30, 15.0)),
         ("claude-opus-4-6", anthropic(5.0, 0.50, 25.0)),
@@ -137,6 +169,11 @@ fn listed(id: &str) -> Option<Rates> {
         ("gemini-3.8-flash", google(0.75, 0.075, 3.75)),
         ("gemini-3.8-flash-n", google(0.75, 0.075, 3.75)),
         ("gemini-3.6-flash", google(0.75, 0.075, 3.75)),
+        // Gemini 4 (ai.google.dev pricing read 2026-11-13): Carbon and Argon through
+        // 2026-11-30 (see PERIODS for December on), Hydrogen.
+        ("gemini-4-carbon", google(2.0, 0.10, 10.0)),
+        ("gemini-4-argon", google(2.0, 0.10, 10.0)),
+        ("gemini-4-hydrogen", google(1.50, 0.075, 7.50)),
         ("gpt-6-astra", openai(10.0, 1.0, 12.5, 50.0)),
         ("gpt-6.1-sol", openai(2.0, 0.10, 2.5, 10.0)),
         ("gpt-6-sol", openai(2.0, 0.20, 2.5, 10.0)),
@@ -246,6 +283,29 @@ mod tests {
             );
             assert_eq!(later.cache_write, later.input, "{id}");
         }
+        // Google doubles Gemini 4 Carbon and Argon on 2026-12-01; Hydrogen has one price.
+        const DEC_1: u64 = 1_796_083_200;
+        for id in ["gemini-4-carbon", "gemini-4-argon"] {
+            let now = rates_at(id, DEC_1 - 1).unwrap();
+            let later = rates_at(id, DEC_1).unwrap();
+            assert_eq!(
+                (now.input, now.output, now.cache_read, now.cache_write),
+                (2.0, 10.0, 0.10, 2.0),
+                "{id}"
+            );
+            assert_eq!(
+                (
+                    later.input,
+                    later.output,
+                    later.cache_read,
+                    later.cache_write
+                ),
+                (4.0, 20.0, 0.20, 4.0),
+                "{id}"
+            );
+        }
+        let h = rates_at("gemini-4-hydrogen", DEC_1).unwrap();
+        assert_eq!((h.input, h.output, h.cache_read), (1.50, 7.50, 0.075));
         // Models without a dated change keep one price; unknown ones have none.
         assert_eq!(
             rates_at("claude-opus-5-5", 0),
@@ -379,6 +439,20 @@ mod tests {
         assert_eq!(sonnet.five_minute().cache_write, 2.5);
         assert_eq!(rates("claude-haiku-5-5").unwrap().input, 0.10);
         assert_eq!(rates("claude-fable-5-1").unwrap().cache_read, 0.25);
+        // Fable 5.2 and Mythos 5.2 (2026-11-09): $8/$40, 1-hour writes $16, hits $0.20.
+        for id in [
+            "claude-fable-5-2",
+            "claude-fable-5-2[1m]",
+            "claude-mythos-5-2",
+        ] {
+            let r = rates(id).unwrap_or_else(|| panic!("{id}"));
+            assert_eq!(
+                (r.input, r.output, r.cache_read, r.cache_write),
+                (8.0, 40.0, 0.20, 16.0),
+                "{id}"
+            );
+            assert_eq!(r.five_minute().cache_write, 10.0, "{id}");
+        }
         assert_eq!(rates("gpt-6"), None);
         assert_eq!(rates(""), None);
         // A longer id must not be matched by a shorter one's prefix.

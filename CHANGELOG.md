@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **List prices for Claude Fable 5.2 and Mythos 5.2** (launched 2026-11-09; Fable 5.2 is now Claude Code's default Fable): $8 input, $40 output, $16 for 1-hour and $10 for 5-minute cache writes, $0.20 cache reads. Main-loop turns already used Claude Code's own price, so this release covers Fable 5.2 subagent turns that ran in parallel, and turns from other harnesses.
+- **List prices for Gemini 4 Carbon, Argon and Hydrogen.** Carbon and Argon cost $2/$10 with $0.10 cache reads until 2026-11-30, and double from 2026-12-01; the change is dated in Girth's price table. Hydrogen costs $1.50/$7.50 with $0.075 cache reads.
+
+### Fixed
+- **NVIDIA's SkillSpector scanner rates Girth's skill safe.** Before, a static scan (`--no-llm`, v2.13.4) rated it HIGH risk and DO_NOT_INSTALL. No finding was a real problem, but someone vetting Girth before install would see that verdict. What changed:
+  - One sentence in `references/taste.md` made the scanner give up on that file as "obfuscated", and it is reworded.
+  - "Never compact or clear without asking" was flagged as autonomous action, and now reads "Ask before you compact or clear".
+  - The skills CLI is pinned (`npx skills@1.8.1`).
+  - The launcher uses `chmod +x`.
+
+  It now scores 7/100 (LOW, SAFE) with every file inspected. The one finding left asks for an `allowed-tools` field. In Claude Code that field pre-approves tools rather than limiting them, so Girth leaves it out.
+
 ## [0.20.0] - 2026-11-08
 
 ### Changed

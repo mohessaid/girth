@@ -64,7 +64,7 @@ download() {
     echo "girth: checksum mismatch for girth-$t v$GIRTH_VERSION; refusing to run it." >&2
     exit 1
   fi
-  chmod 755 "$tmp"
+  chmod +x "$tmp"
   mv "$tmp" "$bin_dir/girth"
   rm -f "$sums"
   trap - EXIT INT TERM HUP

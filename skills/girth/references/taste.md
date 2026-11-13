@@ -6,7 +6,7 @@ Girth keeps house rules and recent choices per domain, so recurring deliverables
 When the user states a lasting preference ("always", "never", "every time", "from now on"), run `scripts/girth taste add <domain> "<rule>"` and confirm in one line ("Remembered for launch-video: …"). Keep the rule's scope in its text ("when there is narration, …"). Add `--project` when it only applies to this project. Only record what the user said, never what you inferred.
 
 ## Forget
-Run `scripts/girth taste show <domain>`, find the rule's number, then `scripts/girth taste drop <domain> <n>` (add `--project` for a project rule).
+`scripts/girth taste show <domain>` numbers the rules. Drop one by its number: `scripts/girth taste drop <domain> <n>` (with `--project` for a project rule).
 
 ## Show
 `scripts/girth taste` lists domains; `scripts/girth taste show <domain>` shows rules and the last values per key.
