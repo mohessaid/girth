@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-13
+
 ### Added
 - **What MCP tool schemas cost.** Girth's mod now reads Claude Code's context breakdown (what `/context` shows) after each main-loop turn, and records each MCP server's schema tokens, sent and deferred, whenever they change. It keeps server ids and numbers, never tool names or schemas.
   - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≥ $X`, costliest first. The cost is at cache-read rates, so it is a floor.
@@ -336,7 +338,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/mohessaid/girth/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/mohessaid/girth/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/mohessaid/girth/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/mohessaid/girth/compare/v0.20.0...v0.21.0
