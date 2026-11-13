@@ -71,15 +71,21 @@ The same harness (`run.sh`), crafted skills (`crafted/`) and model (claude-sonne
 
 \*BenchFlow's token counts under subscription login are partial (see above). Read them as relative.
 
-## The no-skill arm, 2 more runs (2026-11-13)
+## Both arms, 2 more runs each (2026-11-13)
 
-This was the pilot for `girth trial` (`docs/superpowers/specs/2026-11-13-girth-skill-trial-design.md`). It used the same harness, model and SkillsBench revision (`f860ecf`), with the none arm only.
+This was the pilot for `girth trial` (`docs/superpowers/specs/2026-11-13-girth-skill-trial-design.md`).
+- It used the same harness, model and SkillsBench revision (`f860ecf`).
+- Each arm ran twice per task, the arms on the same day.
 
-| task | none: 10-15 | none: 11-13 r2 | none: 11-13 r3 | girth: 3 runs |
+| task | none, 11-13 | girth, 11-13 | none, all runs | girth, all runs |
 |---|---|---|---|---|
-| edit-pdf | fail | fail | fail | 3/3 pass |
-| software-dependency-audit | pass | fail | fail | 0/3 |
+| edit-pdf | 0/2 | 2/2 | 0/3 | 5/5 |
+| software-dependency-audit | 0/2 | 1/2 | 1/3 | 1/5 |
 
-**Correction.** The first run read "the dependency-audit skills turned a pass into a fail". That was one no-skill run: over three runs the no-skill arm passes 1/3 and the skill arm 0/3.
-- The two new fails were near misses. The agent listed 22 findings, dev dependencies included, and the grader expects only the production ones.
-- So the evidence that the skill hurts is a single flipped run. The evidence that the `edit-pdf` skill helps (0/3 → 3/3) is solid.
+**Correction.** The first run read "the dependency-audit skills turned a pass into a fail". That was a coin flip, and both arms flip.
+- Every run either listed the 3 production findings, which passes, or 22 findings with dev dependencies included, which fails.
+- The October girth runs kept only summaries, so their failure reason isn't known.
+
+**What holds:**
+- The `edit-pdf` skill helps (0/3 → 5/5).
+- The skill fired in every girth run: the trajectories show a `Skill` call naming it. BenchFlow's own counter reads 0.

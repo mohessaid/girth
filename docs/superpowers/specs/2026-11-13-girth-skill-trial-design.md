@@ -38,57 +38,72 @@ girth trial <skill-dir> --task <file> --check <cmd> [--task … --check …] [--
 - Tasks and checks pair up in order. A single `--check` may serve every task.
 
 **Each run:**
-1. The workspace is the project's committed tree (`git archive HEAD`), unpacked into a fresh temp directory. Both arms therefore start from the same files, and uncommitted work never leaks in.
+1. **The workspace** is a fresh local clone of the project (`git clone --quiet <repo> <tmp>`) at `HEAD`.
+   - Both arms start from the same files, and uncommitted work never leaks in.
+   - Unlike `git archive`, a clone keeps the history, so a task that commits or diffs behaves as it does in the real repo.
 2. **The with-skill arm** copies `<skill-dir>` into `<work>/.claude/skills/<name>/`.
 3. **The without arm** removes any `.claude/skills/<name>/` the tree already has.
-4. The agent runs in `<work>` with the prompt on stdin, `GIRTH_HOME` pointed at a temp dir, and `GIRTH_TRIAL=1`.
-5. The check runs in `<work>` with a 600 s timeout. Its exit status is the verdict. Its output is never stored.
-6. If the agent printed Claude Code's `--output-format json` result, the run's cost comes from its `total_cost_usd`. Otherwise the cost is unknown.
+4. **The agent** runs in `<work>`:
+   - The prompt goes on stdin.
+   - `GIRTH_HOME` points at a temp dir, and `GIRTH_TRIAL=1` is set.
+   - `--timeout` (default 1,800 s) kills a run that hangs. A killed run counts as a fail and is marked `timeout`.
+5. **The check** runs in `<work>` with a 600 s timeout. Its exit status is the verdict. Its output is never stored.
 
 **The agent:**
-- The default is `claude -p --output-format json --setting-sources project,local --permission-mode acceptEdits`, plus `--model M` when given. User-level skills, plugins and MCP servers are hidden, so the skill is the only difference between the arms.
-- `--agent` replaces the default with any command that reads a prompt on stdin, such as Codex's `codex exec -` or `gemini -p`. Girth targets every harness, so the runner is not tied to one.
+- **The default** is `claude -p --output-format stream-json --verbose --setting-sources project,local --permission-mode acceptEdits --allowedTools Bash,Skill`, plus `--model M` when given.
+  - User-level skills, plugins and MCP servers are hidden, so the skill is the only difference between the arms.
+  - `Bash` is allowed because, without it, a headless run can't do most tasks and both arms would fail. The exact command is smoke-tested on a trivial task before release.
+  - From the stream, Girth reads two things:
+    - **Whether the skill fired:** a `Skill` tool use naming it.
+    - **The run's cost:** the result line's `total_cost_usd`.
+- **`--agent`** replaces the default with any command that reads a prompt on stdin, such as Codex's `codex exec -` or `gemini -p`. Girth targets every harness, so the runner is not tied to one. For those agents, firing and cost are reported as unknown.
 
 **Order and repeats:**
 - Arms alternate (with, without, with, …), so drift in the model or the network hits both arms alike.
 - Runs are sequential, never in parallel.
-- `--runs` defaults to 3 for each arm and task. That is chosen from the pilot below.
-- `--runs` must be at least 2. With one run, the margin is the whole range, so no verdict could ever be reached.
+- `--runs` defaults to 3 for each arm and task, chosen from the pilot below.
+- `--runs` must be at least 2. With one run, no task could reach the 2-run difference below.
 
 ### The verdict
 
-`verdict(with, without) -> Verdict` is a pure function. `with` and `without` each hold, per arm, `passed`, `runs` and an optional `cost`.
+`verdict(tasks: &[TaskResult], fired: Option<u64>) -> Verdict` is a pure function.
+- Each `TaskResult` holds `with_passed`, `without_passed` and `runs`, all integers.
+- `fired` is how many with-skill runs used the skill, when Girth could tell.
 
-The **gain** is the mean, over tasks, of `pass_rate(with) − pass_rate(without)`.
+**Each task is judged on integer passes,** `d = with_passed − without_passed`:
+- **won** when d ≥ 2;
+- **lost** when d ≤ −2;
+- **tied** otherwise.
 
-The **margin** is one run's worth, `1 / runs`. Unlike 2611.13144, which admits any positive gain, Girth needs the gain to clear this margin. A single flipped run must not decide a verdict (see the pilot).
+A single flipped run never decides a task. That is the pilot's lesson: the paper's "any positive gain" rule, mirrored, would have rejected a skill on one lucky no-skill run.
 
 | Condition | Verdict |
 |---|---|
-| gain > margin | **admit** |
-| gain < −margin | **reject** |
-| \|gain\| ≤ margin, every run of both arms passed, and with-skill cost ≤ 0.9 × without | **admit**, as good and cheaper |
-| \|gain\| ≤ margin, every run of both arms passed, and with-skill cost ≥ 1.25 × without | **reject**, as good and dearer |
-| anything else (both failing, or costs within the band, or unknown) | **undecided** |
+| `fired == Some(0)`: the skill never ran | **undecided** (the arms were the same) |
+| at least one task won, none lost | **admit** |
+| at least one task lost, none won | **reject** |
+| none won or lost, or some of each | **undecided** |
 
-**Why the cost rows:**
-- 2611.12953 found that the added cost has to be paid for by a gain.
-- Girth's own SkillsBench result was equal success with 14–23% fewer output tokens. That is a reason to keep a skill.
-- The band is asymmetric on purpose. Admitting needs a 10% saving. Rejecting needs a 25% overspend, because run-to-run spend varies.
+**Known limits, stated in `--help`:**
+- A skill that adds one pass on every task (+1, +1, +1, +1) is undecided. That is conservative on purpose; more runs settle it.
+- When every run of both arms fails, the task can't tell the arms apart, and the output says so.
 
-**When every run of both arms fails,** the task can't tell the arms apart, so the verdict is undecided and the output says so.
+**Cost is reported, never decisive.**
+- In the pilot, output tokens for the same arm and task varied by 17–32% between runs. A cost threshold at n = 3 would decide on noise.
+- Each arm's mean cost per run is printed next to the counts, and stored. 2611.12953's point that added cost must be paid for by a gain is left to the reader, with the numbers in front of them.
 
 **Reporting:**
-- Results print as raw counts: `with 3/3 · without 1/3 · gain +0.67 · $0.41 vs $0.38 per run → admit`.
-- There is no significance language. The footer says once that a gain within one run's worth is treated as no difference.
+- Each task prints as raw counts: `edit-pdf: with 3/3 · without 0/3 → won`.
+- Then a total: `skill used in 3 of 3 runs · $0.41 vs $0.38 per run → admit`.
+- There is no significance language. A footer says once that a task needs a 2-run difference to count.
 
 ### The ledger
 
 A new event, `trial`, holding:
 - `skill` and `project`;
-- `tasks`, a count only;
-- `runs`;
-- `with` and `without`, each `{passed, runs, cost?}`;
+- `tasks`: one `{with_passed, without_passed, runs}` per task, with no names;
+- `fired?`;
+- `with_cost?` and `without_cost?`, the mean dollars per run;
 - `verdict`.
 
 It stores no prompt text, check command or output, just as outcomes store only labels. `share` never sends it; a sentinel test enforces that. Older Girth versions drop the unknown kind.
@@ -113,17 +128,21 @@ It stores no prompt text, check command or output, just as outcomes store only l
 
 ## The pilot (2026-11-13)
 
-**What ran:** the SkillsBench no-skill arm, two more runs each of `edit-pdf` and `software-dependency-audit`. The setup was the same as `examples/skillsbench`: SkillsBench `f860ecf`, `claude-sonnet-5-5`, local Docker.
+**Setup:** the same as `examples/skillsbench`: SkillsBench `f860ecf`, `claude-sonnet-5-5`, local Docker.
+- On 2026-11-13, both arms ran twice on each task, alternating.
+- The earlier runs are from 10-15 (both arms) and 10-23 (girth only).
 
-| task | no skill (10-15, 11-13, 11-13) | girth skill (10-15, 10-23, 10-23) |
-|---|---|---|
-| edit-pdf | 0/3 | 3/3 |
-| software-dependency-audit | 1/3 (pass, fail, fail) | 0/3 |
+| task | no skill, same day | girth, same day | no skill, all | girth, all |
+|---|---|---|---|---|
+| edit-pdf | 0/2 | 2/2 | 0/3 | 5/5 |
+| software-dependency-audit | 0/2 | 1/2 | 1/3 | 1/5 |
 
 **What it means for the rule:**
-- **`edit-pdf`:** the gain is +1.0, an admit under any rule.
-- **`software-dependency-audit`:**
-  - The gain is −0.33, a single flipped run.
-  - Both of the new no-skill fails were close misses. The agent wrote 22 findings, dev dependencies included, and the grader expected only the production ones.
-  - The paper's "positive gain admits" rule, mirrored, would reject this skill on noise. With the one-run margin, it is undecided, which is the honest answer.
-- **The default stays at 3 runs** per arm and task, with the margin. A user who wants a sharper verdict raises `--runs`, and the margin shrinks with it.
+- **`edit-pdf`:** a clear win. The same-day difference is 2 runs, so the task is won.
+- **`software-dependency-audit`:** noise in both arms.
+  - Every run, with or without the skill, either listed the 3 production findings (pass) or 22 findings with dev dependencies included (fail).
+  - The first run's "the skill turned a pass into a fail" was this coin flip.
+  - The paper's "any positive gain" rule would have admitted on today's runs and rejected on October's. Needing a 2-run difference, the task is tied both times.
+- **The skill fired** (a `Skill` call naming it) in every girth run. The trajectories show it; BenchFlow's own counter reads 0. So firing has to be read from the agent's stream, not assumed.
+- **Cost noise:** output tokens for the same arm and task varied by 17–35% between runs.
+- **The default stays at 3 runs** per arm and task, with a task decided only by a 2-run difference. A user who wants a sharper verdict raises `--runs`.
