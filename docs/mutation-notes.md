@@ -105,3 +105,4 @@ The other two are equivalent:
 
 ## trial (0.25.0)
 - `src/main.rs` `run_trial`: `checks.len() != 1` → `==` timed out under 0.25.0. It skipped the refusal, so the test ran a trial with the default agent: three real `claude -p` runs, about $0.38. Since 0.25.1, the tests set `GIRTH_TRIAL_AGENT=false` and drop `claude` from the PATH, so the mutant fails fast instead.
+- `src/trial.rs` `kill_tree` → `()` times out: the hanging-agent test then waits on a child that is never killed. A timeout counts as caught.
