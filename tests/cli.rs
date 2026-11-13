@@ -978,6 +978,55 @@ fn side_record_appends_each_total_and_stats_report_them_for_claude_code_only() {
 }
 
 #[test]
+fn schema_record_names_the_mcp_servers_every_request_carried() {
+    let tmp = TempDir::new().unwrap();
+    let home = tmp.path().join("home");
+    let schema = r#"{"project":"/w","session":"s","servers":[{"server":"claude_ai_github","tools":46,"sent":20000,"deferred":0},{"server":"pencil","tools":15,"sent":0,"deferred":8580}]}"#;
+    for input in [schema, "not json", r#"{"project":"/w"}"#] {
+        home_cmd(&home)
+            .args(["schema", "record"])
+            .write_stdin(input)
+            .assert()
+            .success()
+            .stdout("");
+    }
+    let turn = r#"{"project":"/w","session":"s","model":"claude-opus-5-5","input":2,"output":7,"cache_read":2000000,"cache_write":10,"agent":false,"aborted":false,"requests":10}"#;
+    home_cmd(&home)
+        .args(["meter", "record"])
+        .write_stdin(turn)
+        .assert()
+        .success();
+    let ledger = std::fs::read_to_string(home.join("ledger.jsonl")).unwrap();
+    assert_eq!(ledger.matches(r#""schema""#).count(), 1, "{ledger}");
+    let out = home_cmd(&home)
+        .args(["stats", "--meter"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    // 20,000 tokens × 10 requests at Opus 5.5's $0.20 cache read.
+    assert!(
+        text.contains("meter: MCP schemas sent with every request (part of the cost above): claude_ai_github ≈ 20,000 tokens × 10 requests · called in 0 turns · ≥ $0.0400"),
+        "{text}"
+    );
+    assert!(!text.contains("pencil"), "{text}");
+    let out = home_cmd(&home).args(["stats", "--json"]).assert().success();
+    let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    assert_eq!(
+        json["meter"]["mcp_schemas"][0]["server"],
+        "claude_ai_github"
+    );
+    home_cmd(&home)
+        .args(["advise", "--since", "1d"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "MCP tool schemas on every request",
+        ))
+        .stdout(predicate::str::contains("ENABLE_TOOL_SEARCH"))
+        .stdout(predicate::str::contains("never called: claude_ai_github"));
+}
+
+#[test]
 fn compact_record_appends_and_stats_report_it() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");

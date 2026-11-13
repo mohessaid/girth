@@ -105,7 +105,8 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
             | Event::Turn(_)
             | Event::Ping(_)
             | Event::Compact(_)
-            | Event::Side(_) => {}
+            | Event::Side(_)
+            | Event::Schema(_) => {}
         }
     }
     for record in records {
@@ -138,7 +139,8 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
             | Event::Turn(_)
             | Event::Ping(_)
             | Event::Compact(_)
-            | Event::Side(_) => {}
+            | Event::Side(_)
+            | Event::Schema(_) => {}
         }
     }
     crafted.sort_by(|a, b| b.uses.cmp(&a.uses).then_with(|| a.skill.cmp(&b.skill)));

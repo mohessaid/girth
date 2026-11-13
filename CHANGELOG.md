@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **What MCP tool schemas cost.** Girth's mod now reads Claude Code's context breakdown (what `/context` shows) after each main-loop turn, and records each MCP server's schema tokens, sent and deferred, whenever they change. It keeps server ids and numbers, never tool names or schemas.
+  - `/girth-meter` and `girth stats --meter` add `meter: MCP schemas sent with every request (part of the cost above): <server> ≈ N tokens × R requests · called in K turns · ≥ $X`, costliest first. The cost is at cache-read rates, so it is a floor.
+  - `girth advise` has a new contributor, `mcp_schemas`: keep tool search on, and disable the servers never called.
+  - Measured on Claude Code 2.1.323 (`examples/mcpcost/RESULTS.md`): with `ENABLE_TOOL_SEARCH=false` and 11 servers connected, `Reply with the word ok.` took 148,717 tokens instead of 23,740, and cost $0.149 instead of $0.0026. GitHub's server alone is 19,427 tokens.
+  - Claude Code marks most tools not loaded even when tool search is off, so Girth counts every schema as sent when nothing is deferred.
+
 ## [0.23.0] - 2026-11-13
 
 ### Added

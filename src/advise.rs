@@ -114,7 +114,8 @@ fn output_fix(turns: &[(u64, &Turn)], harness: Option<&str>) -> (String, String)
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Contributor {
-    /// `skill`, `context`, `sessions`, `rewrites`, `subagents` or `tool_output`.
+    /// `agent_summary`, `mcp_schemas`, `skill`, `context`, `sessions`, `rewrites`, `subagents`
+    /// or `tool_output`.
     pub kind: &'static str,
     pub label: String,
     /// Share of spend in the window, 0–1.
@@ -231,6 +232,30 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
             .sum(),
         "set CLAUDE_CODE_DISABLE_AGENT_PROGRESS_SUMMARIES=1 in your shell or settings env (checked on Claude Code 2.1.319)".into(),
         "background agents run the same; only their progress line goes",
+    );
+
+    // MCP tool schemas every main-loop request carried: Claude Code sends them all when
+    // tool search is off, and a server's schemas when the session searched for its tools.
+    let schemas = crate::schema::mcp_costs(records, |r| in_window(&r));
+    let unused: Vec<&str> = schemas
+        .iter()
+        .filter(|r| r.called == 0)
+        .map(|r| r.server.as_str())
+        .collect();
+    let mut fix = "keep tool search on (leave ENABLE_TOOL_SEARCH unset), so a tool's schema is sent only once it is needed".to_string();
+    if !unused.is_empty() {
+        fix.push_str(&format!(
+            "; disable servers you don't use in /mcp (never called: {})",
+            unused.join(", ")
+        ));
+    }
+    push(
+        &mut out,
+        "mcp_schemas",
+        "MCP tool schemas on every request".into(),
+        schemas.iter().map(|r| r.cost).sum(),
+        fix,
+        "every tool stays available: tool search finds and loads it when a task calls for it",
     );
 
     // Skills. A loaded skill stays in context for the rest of its session, so with a session
@@ -774,6 +799,26 @@ mod tests {
             tool_output: tools.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
             ..bash_out(None, 2, 0, 50_000)
         }
+    }
+
+    #[test]
+    fn a_kind_with_exactly_a_fifth_of_the_large_tokens_is_named() {
+        let advice = advise(
+            &[rec(10, outputs(&[("webfetch", 8_000), ("read", 2_000)]))],
+            100,
+            1000,
+            On::default(),
+        );
+        let fix = &tool_output(&advice).unwrap().fix;
+        assert!(fix.contains("read large files by line range"), "{fix}");
+    }
+
+    #[test]
+    fn other_harnesses_alone_put_no_claude_code_spend_in_the_split() {
+        let mut codex = turn("claude-opus-5-5", 0, 1_000_000);
+        codex.harness = Some("codex".into());
+        let advice = advise(&[rec(10, codex)], 100, 1000, On::default());
+        assert_eq!(advice.harnesses.keys().collect::<Vec<_>>(), ["codex"]);
     }
 
     #[test]

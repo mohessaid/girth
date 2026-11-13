@@ -92,6 +92,29 @@ pub enum Event {
     /// Requests Claude Code sent outside any turn (progress summaries, prompt
     /// suggestions, titles), totalled per source and model.
     Side(Side),
+    /// The MCP tool schemas a session's requests carry, per server, when they changed.
+    Schema(Schema),
+}
+
+/// A session's MCP tool schemas per server, as Claude Code's context breakdown estimates
+/// them. Server ids and numbers only; never tool names or schema text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Schema {
+    pub project: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    pub servers: Vec<ServerSchema>,
+}
+
+/// One MCP server's tools: estimated schema tokens every request carries (`sent`), and
+/// those held back until a tool search loads them (`deferred`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServerSchema {
+    /// The tool-prefix id (`mcp__<server>__…`).
+    pub server: String,
+    pub tools: u64,
+    pub sent: u64,
+    pub deferred: u64,
 }
 
 /// Claude Code's requests of one `query_source` and model outside turns, since the

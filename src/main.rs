@@ -109,6 +109,11 @@ enum Command {
         #[command(subcommand)]
         what: SideWhat,
     },
+    /// The MCP tool schemas a session's requests carry (used by the plugin's mod).
+    Schema {
+        #[command(subcommand)]
+        what: SchemaWhat,
+    },
     /// Idle compactions of large conversations (used by the plugin's mod).
     Compact {
         #[command(subcommand)]
@@ -249,6 +254,12 @@ enum MeterWhat {
 #[derive(Subcommand)]
 enum CompactWhat {
     /// Append one idle compaction, read as JSON from stdin. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum SchemaWhat {
+    /// Append one session's schema tokens per server, read as JSON from stdin. Bad input is ignored.
     Record,
 }
 
@@ -711,7 +722,7 @@ fn only_harness(records: &mut Vec<Record>, h: &str) {
     records.retain(|r| match &r.event {
         Event::Turn(t) => t.harness.as_deref().unwrap_or("claude-code") == h,
         Event::Use { harness, .. } => harness.as_deref().unwrap_or("claude-code") == h,
-        Event::Side(_) => h == "claude-code",
+        Event::Side(_) | Event::Schema(_) => h == "claude-code",
         _ => true,
     });
 }
@@ -1073,6 +1084,17 @@ fn main() -> ExitCode {
                 if let Ok(side) = serde_json::from_value::<ledger::Side>(item) {
                     let _ = ledger::append(&home, Event::Side(side));
                 }
+            }
+            ExitCode::SUCCESS
+        }
+        Command::Schema {
+            what: SchemaWhat::Record,
+        } => {
+            use std::io::Read;
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            if let Ok(schema) = serde_json::from_str::<ledger::Schema>(&input) {
+                let _ = ledger::append(&girth_home(&ctx), Event::Schema(schema));
             }
             ExitCode::SUCCESS
         }

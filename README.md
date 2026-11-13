@@ -189,13 +189,14 @@ You don't need Rust. The first time the skill runs, it downloads (one time, abou
 - **Settings:** pin skills (or server ids such as `claude_ai_Figma`) with `{"lens": {"keep": ["name"]}}` in `.girth/config.json` or `~/.girth/config.json`. Turn Lens off with `{"lens": {"enabled": false}}`, or with `GIRTH_LENS=off` for one session. `GIRTH_LENS_KINDS=skills` limits it to the skill list.
 - **Limit:** on machines where an organization manages Claude Code, a plugin you install yourself can't rewrite the list, so Lens stays off there.
 
-**X-ray:** run `/girth-xray` to see what your last request was made of, part by part, with each part's share, what Lens removed and what it costs. Tool parameter schemas aren't visible to plugins, so they aren't counted.
+**X-ray:** run `/girth-xray` to see what your last request was made of, part by part, with each part's share, what Lens removed and what it costs. Tool schemas aren't among its parts; Meter counts MCP tool schemas from Claude Code's context breakdown.
 
 **Meter** records each turn's real token usage in your local ledger (numbers and a model id only). Run `/girth-meter` or `girth stats --meter` to see:
 - your usage for the project;
 - an estimated cost;
 - how much Lens kept out of the prompt;
 - what each kind of subagent cost (`Explore`, `general-purpose`, a plugin's agents): agents, turns, cost and model, the view Claude Code 2.1.323 took out of its status line;
+- **MCP tool schemas sent with every request,** per server: estimated tokens, requests, how often its tools were called, and the least they cost. With tool search on (Claude Code's default) schemas wait until a tool is needed. With `ENABLE_TOOL_SEARCH=false`, one short prompt with 11 servers connected grew from 23,740 to 148,717 tokens, 57× the cost (`examples/mcpcost/RESULTS.md`). `girth advise` names the servers never called. The figures are Claude Code's own estimates, from its `/context` breakdown;
 - **side queries,** the requests Claude Code sends outside the conversation:
   - background agents' progress summaries (`agent_summary`), sent about every 30 s with none of their input cached
   - prompt suggestions, session titles, compaction

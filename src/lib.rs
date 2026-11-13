@@ -17,6 +17,7 @@ pub mod meter;
 pub mod outcome;
 pub mod price;
 pub mod record;
+pub mod schema;
 pub mod search;
 pub mod sections;
 pub mod share;

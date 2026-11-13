@@ -46,6 +46,9 @@ pub struct Summary {
     pub side_top: Option<String>,
     /// Subagent turns by agent type, costliest first.
     pub subagents: Vec<Subagents>,
+    /// MCP servers whose tool schemas went out with every request, costliest first.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mcp_schemas: Vec<crate::schema::McpCost>,
 }
 
 /// One agent type's subagent turns: how many agents (ids the mod saw), turns, their cost,
@@ -176,6 +179,10 @@ pub fn summarise(records: &[Record], project: Option<&str>) -> Summary {
             .then_with(|| b.cost.total_cmp(&a.cost))
             .then_with(|| a.kind.cmp(&b.kind))
     });
+    s.mcp_schemas = crate::schema::mcp_costs(records, |r| match &r.event {
+        Event::Turn(t) => project.is_none_or(|p| p == t.project),
+        _ => false,
+    });
     s.side_top = by_source
         .into_iter()
         .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(a.0)))
@@ -230,6 +237,27 @@ pub fn render(summary: &Summary) -> String {
             })
             .collect();
         text.push_str(&format!("\nmeter: subagents: {}", rows.join("; ")));
+    }
+    if !summary.mcp_schemas.is_empty() {
+        let rows: Vec<String> = summary
+            .mcp_schemas
+            .iter()
+            .map(|r| {
+                format!(
+                    "{} ≈ {} tokens × {} requests · called in {} turn{} · ≥ ${:.4}",
+                    r.server,
+                    thousands(r.tokens),
+                    thousands(r.requests),
+                    r.called,
+                    if r.called == 1 { "" } else { "s" },
+                    r.cost
+                )
+            })
+            .collect();
+        text.push_str(&format!(
+            "\nmeter: MCP schemas sent with every request (part of the cost above): {}",
+            rows.join("; ")
+        ));
     }
     if summary.side_requests > 0 {
         text.push_str(&format!(
@@ -333,6 +361,38 @@ mod tests {
                 cost_micros,
             }),
         }
+    }
+
+    #[test]
+    fn mcp_schemas_count_only_the_project_s_turns() {
+        let schema = Record {
+            v: 1,
+            ts: 1,
+            event: Event::Schema(crate::ledger::Schema {
+                project: "/a".into(),
+                session: Some("s".into()),
+                servers: vec![crate::ledger::ServerSchema {
+                    server: "github".into(),
+                    tools: 46,
+                    sent: 20_000,
+                    deferred: 0,
+                }],
+            }),
+        };
+        let in_session = |project: &str, requests| {
+            let mut r = turn(project, "claude-opus-5-5", 5, None);
+            if let Event::Turn(t) = &mut r.event {
+                t.session = Some("s".into());
+                t.requests = Some(requests);
+            }
+            r
+        };
+        let records = vec![schema, in_session("/a", 3), in_session("/b", 7)];
+        let s = summarise(&records, Some("/a"));
+        assert_eq!(s.mcp_schemas.len(), 1);
+        assert_eq!(s.mcp_schemas[0].requests, 3);
+        assert!(render(&s).contains("github ≈ 20,000 tokens × 3 requests · called in 0 turns"));
+        assert_eq!(summarise(&records, None).mcp_schemas[0].requests, 10);
     }
 
     #[test]

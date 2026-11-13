@@ -2,7 +2,8 @@
 // - Lens: the skill listing, MCP server instructions and deferred-tool list
 //   Claude reads keep what this project needs; the rest collapses.
 // - JIT: a collapsed server's instructions arrive on its first tool call.
-// - Meter: each turn's token usage goes to the local ledger.
+// - Meter: each turn's token usage goes to the local ledger, and the MCP tool
+//   schemas its requests carried.
 // - X-ray: what the last request was made of.
 // - Doctor: a request that wrote the prompt cache again (after an idle gap or
 //   a changed prompt) is named under the answer.
@@ -227,6 +228,35 @@ async function flushSide($, session, timeoutMs = TIMEOUT_MS) {
   } catch {
     // Metering only: a missing binary costs these totals, nothing else.
   }
+}
+
+// MCP tool schemas per server, as the context breakdown estimates them, recorded when
+// they change. A tool counts as sent when it is loaded, or when nothing is deferred at
+// all: with tool search off, Claude Code still marks most tools not loaded (2.1.323).
+let schemaKey = ''
+async function recordSchemas($, project, session) {
+  const usage = await $.session.usage({ breakdown: 'summary' })
+  const b = usage?.context?.breakdown
+  if (!b || !Array.isArray(b.mcpTools)) return
+  const deferring = (b.categories ?? []).some((c) => c.kind === 'deferred')
+  const by = new Map()
+  for (const t of b.mcpTools) {
+    // The ledger takes whole tokens: a NaN or negative estimate would drop the record.
+    if (typeof t?.serverName !== 'string' || !Number.isFinite(t.tokens) || t.tokens < 0) continue
+    const row = by.get(t.serverName) ?? { server: t.serverName, tools: 0, sent: 0, deferred: 0 }
+    row.tools += 1
+    if (t.isLoaded === true || !deferring) row.sent += Math.round(t.tokens)
+    else row.deferred += Math.round(t.tokens)
+    by.set(t.serverName, row)
+  }
+  const list = [...by.values()].sort((x, y) => (x.server < y.server ? -1 : 1))
+  const key = JSON.stringify(list)
+  if (key === schemaKey) return
+  schemaKey = key
+  await $.process.run([launcher($), 'schema', 'record'], {
+    stdin: JSON.stringify({ project, ...(session ? { session } : {}), servers: list }),
+    timeoutMs: TIMEOUT_MS,
+  })
 }
 
 function launcher($) {
@@ -506,6 +536,13 @@ export function register(on) {
     if (e.agentId === undefined) {
       main = fresh()
       agents = fresh()
+    }
+    if (e.agentId === undefined) {
+      try {
+        await recordSchemas($, turn.project, turn.session)
+      } catch {
+        // Metering only.
+      }
     }
     const note = e.agentId === undefined ? squeeze?.takeNote() : null
     if (note) turn.compacted = note

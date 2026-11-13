@@ -277,6 +277,73 @@ test('turns record the MCP servers they called and Lens bytes summed across kind
   expect(records[1].mcp).toBeUndefined()
 })
 
+function breakdown(deferring: boolean, tools: [string, number, boolean][]) {
+  return {
+    categories: [
+      { name: 'System prompt', kind: 'used', tokens: 3000, color: 'x', isDeferred: false },
+      ...(deferring ? [{ name: 'MCP tools (deferred)', kind: 'deferred', tokens: 9, color: 'x', isDeferred: true }] : []),
+    ],
+    mcpTools: tools.map(([serverName, tokens, isLoaded]) => ({ name: `mcp__${serverName}__t`, serverName, tokens, isLoaded })),
+  }
+}
+
+test('main turns record MCP schema tokens per server when they change, sent or deferred', async ($, on) => {
+  const schemas: any[] = []
+  const asked: any[] = []
+  let shape = breakdown(true, [['pencil', 400, false], ['github', 300, true], ['github', 200.4, false], ['bad', NaN, true], ['neg', -5, true]])
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('session.id', () => ({ value: 's-1' }))
+  on('session.usage', ($, e) => {
+    asked.push(e)
+    return { value: { startedAt: 0, context: { window: 1_000_000, breakdown: shape } } as any }
+  })
+  on('process.run', ($, e) => {
+    if (e.argv[1] === 'schema') schemas.push({ argv: e.argv.slice(1), body: JSON.parse(e.init!.stdin!) })
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  await $.turn.complete({ turnId: 't2', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  // A subagent's turn never asks.
+  await $.turn.complete({ turnId: 't3', agentId: 'a1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(asked.length).toBe(2)
+  expect(asked[0]).toEqual({ breakdown: 'summary' })
+  // Unchanged: recorded once.
+  expect(schemas.length).toBe(1)
+  expect(schemas[0].argv).toEqual(['schema', 'record'])
+  expect(schemas[0].body).toEqual({
+    project: '/work/app',
+    session: 's-1',
+    // Odd estimates are skipped; tokens are whole.
+    servers: [
+      { server: 'github', tools: 2, sent: 300, deferred: 200 },
+      { server: 'pencil', tools: 1, sent: 0, deferred: 400 },
+    ],
+  })
+  // Tool search off: nothing is deferred, so every schema is sent whatever isLoaded says.
+  shape = breakdown(false, [['pencil', 400, false], ['github', 500, false]])
+  await $.turn.complete({ turnId: 't4', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(schemas.length).toBe(2)
+  expect(schemas[1].body.servers).toEqual([
+    { server: 'github', tools: 1, sent: 500, deferred: 0 },
+    { server: 'pencil', tools: 1, sent: 400, deferred: 0 },
+  ])
+})
+
+test('a breakdown that cannot be read records no schema and still records the turn', async ($, on) => {
+  const runs: string[] = []
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('session.usage', () => ({ deny: 'unavailable' }))
+  on('process.run', ($, e) => {
+    runs.push(e.argv[1])
+    return { value: { exitCode: 0, stdout: '{}', stderr: '' } }
+  })
+  on('turn.complete', () => ({ text: '' }))
+  await $.turn.complete({ turnId: 't1', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE })
+  expect(runs).toContain('meter')
+  expect(runs).not.toContain('schema')
+})
+
 test('/girth-xray sends the parts of the last request, with Lens sizes and the model', async ($, on) => {
   let snapshot: any = null
   on('session.cwd', () => ({ value: '/work/app' }))
