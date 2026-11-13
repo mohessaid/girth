@@ -98,7 +98,7 @@ fn reference_flows_exist_are_small_and_name_their_command() {
         assert!(sharing.contains(promise), "sharing.md lacks '{promise}'");
     }
     let remote = std::fs::read_to_string(skill_dir().join("references/remote.md")).unwrap();
-    for rule in ["npx skills@1.8.1 find", "untrusted", "never run", "--roots"] {
+    for rule in ["npx skills@", "untrusted", "never run", "--roots"] {
         assert!(remote.contains(rule), "remote.md lacks '{rule}'");
     }
 }

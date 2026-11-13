@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-13
+
 ### Added
 - **List prices for Claude Fable 5.2 and Mythos 5.2** (launched 2026-11-09; Fable 5.2 is now Claude Code's default Fable): $8 input, $40 output, $16 for 1-hour and $10 for 5-minute cache writes, $0.20 cache reads. Main-loop turns already used Claude Code's own price, so this release covers Fable 5.2 subagent turns that ran in parallel, and turns from other harnesses.
 - **List prices for Gemini 4 Carbon, Argon and Hydrogen.** Carbon and Argon cost $2/$10 with $0.10 cache reads until 2026-11-30, and double from 2026-12-01; the change is dated in Girth's price table. Hydrogen costs $1.50/$7.50 with $0.075 cache reads.
@@ -310,7 +312,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/mohessaid/girth/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/mohessaid/girth/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/mohessaid/girth/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/mohessaid/girth/compare/v0.17.0...v0.18.0

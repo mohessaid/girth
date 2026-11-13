@@ -15,6 +15,8 @@
 //! `gemini-3-pro-preview`, which the page no longer lists, is left unpriced. Cache writes are priced at the 1-hour rate (2× input), the
 //! cache the main conversation writes; this reproduces the cost Claude Code
 //! reports. Claude subagents write the 5-minute cache (1.25× input): see `turn_rates`.
+//! Fast mode (2× on Fable 5.2 and Opus 5.5) is not in the table: turns the mod prices from
+//! Claude Code's own records carry it; parallel subagents and imported turns don't.
 
 /// US dollars per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq)]

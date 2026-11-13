@@ -1,6 +1,6 @@
 {
   "name": "girth",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Just-in-time, project-scoped skills distilled from the skills you already have, and a local ledger of what your agent spends.",
   "author": { "name": "mohessaid", "url": "https://github.com/mohessaid" },
   "homepage": "https://github.com/mohessaid/girth",
