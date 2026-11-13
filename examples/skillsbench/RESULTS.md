@@ -70,3 +70,16 @@ The same harness (`run.sh`), crafted skills (`crafted/`) and model (claude-sonne
 - Input tokens were about the same (139K vs 141K over three runs). Output tokens were 14% lower.
 
 \*BenchFlow's token counts under subscription login are partial (see above). Read them as relative.
+
+## The no-skill arm, 2 more runs (2026-11-13)
+
+This was the pilot for `girth trial` (`docs/superpowers/specs/2026-11-13-girth-skill-trial-design.md`). It used the same harness, model and SkillsBench revision (`f860ecf`), with the none arm only.
+
+| task | none: 10-15 | none: 11-13 r2 | none: 11-13 r3 | girth: 3 runs |
+|---|---|---|---|---|
+| edit-pdf | fail | fail | fail | 3/3 pass |
+| software-dependency-audit | pass | fail | fail | 0/3 |
+
+**Correction.** The first run read "the dependency-audit skills turned a pass into a fail". That was one no-skill run: over three runs the no-skill arm passes 1/3 and the skill arm 0/3.
+- The two new fails were near misses. The agent listed 22 findings, dev dependencies included, and the grader expects only the production ones.
+- So the evidence that the skill hurts is a single flipped run. The evidence that the `edit-pdf` skill helps (0/3 → 3/3) is solid.
