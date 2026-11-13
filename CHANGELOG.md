@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **`girth import` reads OpenCode 2.** OpenCode 2 removed the `opencode db` command, so Girth imported nothing for anyone on v2 (checked on 2.2.7).
+  - Girth now reads the new tables (`session_v2`, `session_message`) directly with `sqlite3 -readonly -json`.
+  - v1 databases are still read through `opencode db`.
+  - OpenCode 2 migrated v1's rows under their v1 ids and times, so an upgraded install picks up where its last import stopped: no turn is counted twice. On the author's machine, all 11 v1 turns came back identical, to the token and the micro-dollar.
+  - v2's `skill` tool takes `id` instead of `name`, and both are read.
+  - OpenCode 2's session totals also count its title-generation requests. Girth's turns don't: they hold the conversation's own requests.
+
 ## [0.21.0] - 2026-11-13
 
 ### Added

@@ -1524,6 +1524,79 @@ fn import_reads_gemini_cli_sessions() {
 }
 
 #[test]
+fn import_reads_opencode_2_through_sqlite3_without_opencode_db() {
+    if std::process::Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipped: no sqlite3");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let data = tmp.path().join("data");
+    std::fs::create_dir_all(data.join("opencode")).unwrap();
+    let sql = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/opencode-v2/opencode.sql"),
+    )
+    .unwrap();
+    let mut make = std::process::Command::new("sqlite3")
+        .arg(data.join("opencode/opencode.db"))
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write as _;
+    make.stdin
+        .take()
+        .unwrap()
+        .write_all(sql.as_bytes())
+        .unwrap();
+    assert!(make.wait().unwrap().success());
+    let g = tmp.path().join("g");
+    // OpenCode 2 has no `opencode db`; the binary here doesn't even exist.
+    for want in [
+        "imported 2 turns from opencode\n",
+        "imported 0 turns from opencode\n",
+    ] {
+        girth()
+            .env("GIRTH_HOME", &g)
+            .env("XDG_DATA_HOME", &data)
+            .args(["import", "--from", "opencode"])
+            .assert()
+            .success()
+            .stdout(want);
+    }
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    let turns: Vec<serde_json::Value> = ledger
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .filter(|r| r["kind"] == "turn")
+        .collect();
+    let main = &turns[0];
+    assert_eq!(main["project"], "/work/v2");
+    assert_eq!(main["model"], "deepseek-v4-pro");
+    assert_eq!(
+        (main["input"].as_u64(), main["output"].as_u64()),
+        (Some(300), Some(35))
+    );
+    assert_eq!(
+        (main["cache_read"].as_u64(), main["cache_write"].as_u64()),
+        (Some(3000), Some(20))
+    );
+    assert_eq!(main["requests"], 2);
+    assert_eq!(main["cost_micros"], 3000);
+    assert_eq!(main["tool_output"]["shell"], 2000);
+    assert_eq!(main["agent"], false);
+    assert_eq!(turns[1]["agent"], true);
+    // v2's skill tool takes `id` where v1 took `name`.
+    assert!(
+        ledger.contains(r#""kind":"use","skill":"girth""#),
+        "{ledger}"
+    );
+}
+
+#[test]
 fn import_reads_antigravity_cli_conversations_through_sqlite3() {
     if std::process::Command::new("sqlite3")
         .arg("-version")

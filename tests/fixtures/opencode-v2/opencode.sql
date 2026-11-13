@@ -1,0 +1,11 @@
+-- Synthetic OpenCode 2 database (made-up rows, the real table layout of the columns Girth reads).
+CREATE TABLE session_v2 (id text PRIMARY KEY, parent_id text, directory text NOT NULL);
+CREATE TABLE session_message (id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL, time_created integer NOT NULL, data text NOT NULL);
+INSERT INTO session_v2 VALUES ('ses_a', NULL, '/work/v2'), ('ses_b', 'ses_a', '/work/v2');
+INSERT INTO session_message VALUES
+ ('m1', 'ses_a', 'user', 1, 1794554293000, '{"time":{"created":1794554293000},"text":"hi"}'),
+ ('m2', 'ses_a', 'assistant', 2, 1794554294000, json_object('time', json_object('created', 1794554294000, 'completed', 1794554295000), 'model', json_object('id', 'deepseek-v4-pro', 'providerID', 'deepseek'), 'finish', 'tool-calls', 'cost', 0.001, 'tokens', json_object('input', 100, 'output', 10, 'reasoning', 5, 'cache', json_object('read', 1000, 'write', 20)), 'content', json_array(json_object('type', 'tool', 'name', 'shell', 'time', json_object('created', 1794554294500), 'state', json_object('status', 'completed', 'content', json_array(json_object('type', 'text', 'text', printf('%8000s', ''))))), json_object('type', 'tool', 'name', 'skill', 'time', json_object('created', 1794554294600), 'state', json_object('status', 'completed', 'input', json_object('id', 'girth')))))),
+ ('m3', 'ses_a', 'assistant', 3, 1794554296000, json_object('time', json_object('created', 1794554296000, 'completed', 1794554297000), 'model', json_object('id', 'deepseek-v4-pro', 'providerID', 'deepseek'), 'finish', 'stop', 'cost', 0.002, 'tokens', json_object('input', 200, 'output', 20, 'reasoning', 0, 'cache', json_object('read', 2000, 'write', 0)), 'content', json_array())),
+ ('m4', 'ses_a', 'idle', 4, 1794554297100, '{"outcome":"succeeded"}'),
+ ('m5', 'ses_b', 'user', 1, 1794554298000, '{"text":"sub"}'),
+ ('m6', 'ses_b', 'assistant', 2, 1794554299000, json_object('time', json_object('created', 1794554299000, 'completed', 1794554299500), 'model', json_object('id', 'deepseek-v4-pro'), 'finish', 'stop', 'cost', 0, 'tokens', json_object('input', 7, 'output', 3, 'reasoning', 0, 'cache', json_object('read', 0, 'write', 0)), 'content', json_array()));

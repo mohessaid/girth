@@ -1158,7 +1158,9 @@ fn main() -> ExitCode {
                         .or_else(|| under_home(".local/share"))
                         .map(|d| {
                             let db = d.join("opencode/opencode.db");
-                            girth::import::import_opencode(&opencode_bin, &db, &g)
+                            let sqlite3 =
+                                var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
+                            girth::import::import_opencode_with(&opencode_bin, &sqlite3, &db, &g)
                         }),
                 };
                 let n = match result {

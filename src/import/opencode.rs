@@ -1,5 +1,6 @@
-//! OpenCode sessions as ledger turns, read through `opencode db` from OpenCode's own
-//! SQLite database (`~/.local/share/opencode/opencode.db`), so Girth needs no SQLite code.
+//! OpenCode sessions as ledger turns, from OpenCode's own SQLite database
+//! (`~/.local/share/opencode/opencode.db`): v1 through `opencode db`, v2 (which dropped
+//! that command) through `sqlite3` with `QUERY_V2`. Girth needs no SQLite code either way.
 //!
 //! A turn is one user prompt: the assistant messages whose `parentID` is that prompt.
 //! Each message is one request. OpenCode's `tokens.input` excludes cache reads and
@@ -39,6 +40,34 @@ WHERE json_extract(p.data, '$.tool') = 'skill' \
 UNION ALL SELECT 't', p.id, p.session_id, NULL, NULL, p.time_created, \
 json_extract(p.data, '$.tool'), length(json_extract(p.data, '$.state.output')) FROM part p \
 WHERE json_extract(p.data, '$.type') = 'tool' ORDER BY t";
+
+/// The same rows as `QUERY`, from OpenCode 2's tables (`session_v2`, `session_message`),
+/// for `sqlite3 -json`. OpenCode 2 has no `opencode db`. It migrated v1's rows under their
+/// v1 ids and times, so the cursors carry over. Its messages are `user`, `assistant`,
+/// `system` and `idle` rows in `seq` order; an assistant row is rebuilt in v1's shape
+/// (its prompt is the session's last `user` row before it), and tool calls and their
+/// results live in its `content`. v2's `skill` tool takes `id` where v1's took `name`.
+pub const QUERY_V2: &str = "SELECT 'm' AS kind, sm.id AS id, sm.session_id AS session, \
+v.parent_id AS parent, v.directory AS dir, sm.time_created AS t, \
+CASE sm.type WHEN 'user' THEN json_object('role', 'user') ELSE json_object('role', 'assistant', \
+'parentID', (SELECT u.id FROM session_message u WHERE u.session_id = sm.session_id \
+AND u.type = 'user' AND u.seq < sm.seq ORDER BY u.seq DESC LIMIT 1), \
+'modelID', json_extract(sm.data, '$.model.id'), 'tokens', json(json_extract(sm.data, '$.tokens')), \
+'cost', json_extract(sm.data, '$.cost'), 'finish', json_extract(sm.data, '$.finish'), \
+'time', json(json_extract(sm.data, '$.time')), 'error', json(json_extract(sm.data, '$.error'))) END AS data, \
+NULL AS n FROM session_message sm JOIN session_v2 v ON v.id = sm.session_id \
+WHERE sm.type IN ('user', 'assistant') \
+UNION ALL SELECT 's', sm.id || ':' || c.key, sm.session_id, NULL, NULL, \
+COALESCE(json_extract(c.value, '$.time.created'), sm.time_created), \
+COALESCE(json_extract(c.value, '$.state.input.id'), json_extract(c.value, '$.state.input.name')), NULL \
+FROM session_message sm, json_each(sm.data, '$.content') c WHERE sm.type = 'assistant' \
+AND json_extract(c.value, '$.type') = 'tool' AND json_extract(c.value, '$.name') = 'skill' \
+UNION ALL SELECT 't', sm.id || ':' || c.key, sm.session_id, NULL, NULL, \
+COALESCE(json_extract(c.value, '$.time.created'), sm.time_created), json_extract(c.value, '$.name'), \
+(SELECT COALESCE(SUM(length(json_extract(x.value, '$.text'))), 0) \
+FROM json_each(c.value, '$.state.content') x) \
+FROM session_message sm, json_each(sm.data, '$.content') c WHERE sm.type = 'assistant' \
+AND json_extract(c.value, '$.type') = 'tool' ORDER BY t";
 
 #[derive(Deserialize)]
 struct Row {

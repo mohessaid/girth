@@ -247,14 +247,39 @@ pub fn import_antigravity(
 /// when `db` doesn't exist, so Girth never creates OpenCode's state. An OpenCode that
 /// can't be run, or has no `db` command, is noted on stderr and imports nothing.
 pub fn import_opencode(bin: &Path, db: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    import_opencode_with(bin, Path::new("sqlite3"), db, girth_home)
+}
+
+/// `import_opencode`, reading an OpenCode 2 database (it has `session_message`, and no
+/// `opencode db` command) with `<sqlite3> -readonly -json` instead.
+pub fn import_opencode_with(
+    bin: &Path,
+    sqlite3: &Path,
+    db: &Path,
+    girth_home: &Path,
+) -> std::io::Result<usize> {
     if !db.is_file() {
         return Ok(0);
     }
-    let run = std::process::Command::new(bin)
-        .args(["db", "--pure", "--format", "json", opencode::QUERY])
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output();
+    let uri = format!("file:{}?mode=ro", db.display());
+    let sqlite = |sql: &str| {
+        std::process::Command::new(sqlite3)
+            .args(["-readonly", "-batch", "-json", &uri, sql])
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+    };
+    let v2 = sqlite("SELECT 1 AS v2 FROM sqlite_master WHERE name = 'session_message'")
+        .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("v2"));
+    let run = if v2 {
+        sqlite(opencode::QUERY_V2)
+    } else {
+        std::process::Command::new(bin)
+            .args(["db", "--pure", "--format", "json", opencode::QUERY])
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+    };
     let rows = match run {
         Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
         Ok(out) => {

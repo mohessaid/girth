@@ -151,7 +151,7 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 | Claude Code | ✓ | `.claude/skills` | native (the mod) | ✓ |
 | Codex CLI 0.164 | ✓ | `.agents/skills` | ✓ `girth import` | ✓ |
 | GitHub Copilot CLI 1.0.106 | ✓ | `.agents/skills` | ✓ `girth import` (per prompt on 1.0.95+, else per session stretch; with premium requests) | ✓ |
-| OpenCode 1.17 | ✓ | `.agents/skills` | ✓ `girth import` (through `opencode db`, with its own costs) | ✓ |
+| OpenCode 1.17–2.2 | ✓ | `.agents/skills` | ✓ `girth import` (v1 through `opencode db`, v2 through `sqlite3`; with its own costs) | ✓ |
 | Antigravity CLI 1.5 | ✓ | `.agents/skills` | ✓ `girth import` (through `sqlite3`) | ✓ |
 | Gemini CLI 0.65 | ✓ | `.agents/skills` | ✓ `girth import` | not yet (its free tier moved to Antigravity) |
 | Cursor, Amp, Goose | ✓ | `.agents/skills` | — (no usable token data on disk) | not yet |
