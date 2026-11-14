@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **A plan window at 80% or more gets one line under the first answer of a session,** with when it resets, from Claude Code's own rate-limit readings. For example: `88% of your 7-day plan window is used; it resets in 2d 5h`. Below 80% it says nothing.
+
 ## [0.28.0] - 2026-11-14
 
 ### Added

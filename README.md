@@ -217,6 +217,8 @@ The estimate prices the main conversation's cache writes at the 1-hour rate Clau
   - On a subscription the saving is in plan usage rather than dollars. Girth can't verify that plans weigh cache reads and writes the way the API prices them.
 - **Settings:** pings only happen for conversations of 20,000 tokens or more. Change that with `{"keeper": {"max_pings": 3, "min_context": 20000}}`. Turn it off with `{"keeper": {"enabled": false}}`, or `GIRTH_KEEPER=off` for one session.
 
+**Plan line:** when a 5-hour or 7-day plan window is 80% used or more, the first answer of a session says so, with when it resets. Otherwise it stays quiet.
+
 **Pane:** `/girth-pane` opens a live panel beside the chat, drawn from Claude Code's own figures. It never opens unasked, and redraws each minute while it's shown.
 - this session's spend;
 - the context size;

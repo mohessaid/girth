@@ -277,6 +277,29 @@ export function paneLines({ usage, now, at, plan, compacted }) {
   return lines
 }
 
+const PLAN_WARN = 80
+const PLAN_NAME = { five_hour: '5-hour plan window', seven_day: '7-day plan window', spend_limit: 'spend limit' }
+
+function span(ms) {
+  const m = Math.max(1, Math.round(ms / 60_000))
+  if (m < 60) return `${m} min`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${m % 60}m`
+  return `${Math.floor(h / 24)}d ${h % 24}h`
+}
+
+/** One line for the fullest plan window at PLAN_WARN% or more, with when it resets; else null. */
+export function planLine(rateLimits, now) {
+  const top = (Array.isArray(rateLimits) ? rateLimits : [])
+    .filter((r) => typeof r?.percentUsed === 'number' && r.percentUsed >= PLAN_WARN)
+    .sort((a, b) => b.percentUsed - a.percentUsed)[0]
+  if (!top) return null
+  const name = PLAN_NAME[top.kind] ?? `${top.kind} window`
+  const at = typeof top.resetsAt === 'string' ? Date.parse(top.resetsAt) : NaN
+  const resets = Number.isFinite(at) && at > now ? `; it resets in ${span(at - now)}` : ''
+  return `${top.percentUsed}% of your ${name} is used${resets}`
+}
+
 // Adds a large result's estimated tokens to its loop's turn.
 function measure(agentId, tool, text) {
   if (text.length < LARGE_OUTPUT_CHARS) return
@@ -709,6 +732,12 @@ export function register(on) {
         if (line.startsWith('girth: ') && !line.includes('\n')) lines.push(line.slice('girth: '.length))
       } catch {
         // Advice is never worth breaking a turn over.
+      }
+      try {
+        const line = planLine((await $.session.usage()).rateLimits, await $.clock.now())
+        if (line) lines.push(line)
+      } catch {
+        // No rate limits read: nothing to say.
       }
     }
     if (lines.length === 0) return result

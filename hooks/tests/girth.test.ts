@@ -294,8 +294,9 @@ test('main turns record MCP schema tokens per server when they change, sent or d
   on('session.cwd', () => ({ value: '/work/app' }))
   let sid = 's-1'
   on('session.id', () => ({ value: sid }))
-  on('session.usage', ($, e) => {
-    asked.push(e)
+  on('session.usage', ($, e: any) => {
+    // The plan line reads usage once without a breakdown; only breakdowns count here.
+    if (e?.breakdown) asked.push(e)
     return { value: { startedAt: 0, context: { window: 1_000_000, breakdown: shape } } as any }
   })
   on('process.run', ($, e) => {
@@ -1248,4 +1249,35 @@ test('/girth-pane opens the pane, and it draws the session on every surface', as
     expect((await ui.find({ type: 'Text', text: /spend/ }))?.text).toContain('$3.42')
     await ui.unmount()
   }
+})
+
+import { planLine } from '../girth.js'
+
+test('a plan window at 80% or more gets one line with when it resets', () => {
+  const now = Date.parse('2026-11-14T10:00:00Z')
+  expect(planLine([{ kind: 'five_hour', percentUsed: 41 }, { kind: 'seven_day', percentUsed: 88 , resetsAt: '2026-11-16T15:30:00Z' }], now)).toBe('88% of your 7-day plan window is used; it resets in 2d 5h')
+  expect(planLine([{ kind: 'five_hour', percentUsed: 92.5, resetsAt: '2026-11-14T10:40:00Z' }, { kind: 'seven_day', percentUsed: 85 }], now)).toBe('92.5% of your 5-hour plan window is used; it resets in 40 min')
+  expect(planLine([{ kind: 'seven_day', percentUsed: 80, resetsAt: '2026-11-14T13:15:00Z' }], now)).toBe('80% of your 7-day plan window is used; it resets in 3h 15m')
+  expect(planLine([{ kind: 'seven_day', percentUsed: 79.9 }], now)).toBe(null)
+  expect(planLine([{ kind: 'spend_limit', percentUsed: 101 }], now)).toBe('101% of your spend limit is used')
+  expect(planLine([], now)).toBe(null)
+  expect(planLine(undefined, now)).toBe(null)
+})
+
+test('the plan line goes under the first main answer with the advice', async ($, on) => {
+  on('session.cwd', () => ({ value: '/work/app' }))
+  on('process.run', ($: any, e: any) => {
+    if (e.argv.includes('advise')) return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    return { value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 } }), stderr: '' } }
+  })
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'seven_day', percentUsed: 88 }] } }))
+  on('clock.now', () => ({ value: 1_000 }))
+  on('turn.complete', () => ({ text: 'a' }))
+  on('command.register', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: true }))
+  on('session.start', () => ({ cwd: '/work/app' }))
+  await $.session.start({ cwd: '/work/app' })
+  const done = { turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE }
+  expect((await $.turn.complete(done)).text).toBe('88% of your 7-day plan window is used')
+  expect((await $.turn.complete(done)).text).toBe('a')
 })
