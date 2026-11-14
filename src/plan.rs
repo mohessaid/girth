@@ -74,7 +74,9 @@ pub fn line(records: &[Record], now: u64) -> Option<String> {
     let first = readings
         .iter()
         .filter(|(t, p)| {
-            p.window == top.window && p.resets_at == top.resets_at && *t < ts && ts - t <= PACE_S
+            p.window == top.window
+                && p.resets_at == top.resets_at
+                && ts.saturating_sub(*t) <= PACE_S
         })
         .min_by_key(|(t, _)| *t);
     let pace = first.and_then(|(t0, p0)| {
@@ -184,6 +186,51 @@ mod tests {
         assert_eq!(
             line(&slow, NOW).unwrap(),
             "88% of your 7-day plan window is used; at the last 20h 0m's pace it lasts until it resets in 5h 0m"
+        );
+    }
+
+    #[test]
+    fn boundaries_freshness_order_resets_and_pace_span() {
+        // Exactly FRESH_S old still describes the window.
+        assert!(line(&[reading(NOW - 6 * H, "seven_day", 900, None)], NOW).is_some());
+        // Each window keeps its own latest reading, whatever order the records come in.
+        let two = vec![
+            reading(NOW - 2 * H, "seven_day", 900, None),
+            reading(NOW - H, "five_hour", 100, None),
+        ];
+        assert_eq!(
+            line(&two, NOW).unwrap(),
+            "90% of your 7-day plan window is used"
+        );
+        let newer_first = vec![
+            reading(NOW, "seven_day", 100, None),
+            reading(NOW - H, "seven_day", 900, None),
+        ];
+        assert_eq!(line(&newer_first, NOW), None);
+        // A reset at this very moment is no reset to wait for.
+        assert_eq!(
+            line(&[reading(NOW, "seven_day", 880, Some(NOW))], NOW).unwrap(),
+            "88% of your 7-day plan window is used"
+        );
+        // A reading exactly PACE_S earlier still sets the pace.
+        let day = vec![
+            reading(NOW - 24 * H, "seven_day", 400, Some(NOW + 10 * 24 * H)),
+            reading(NOW, "seven_day", 880, Some(NOW + 10 * 24 * H)),
+        ];
+        assert!(
+            line(&day, NOW)
+                .unwrap()
+                .contains("at the last 1d 0h's pace")
+        );
+        // Running out exactly at the reset is lasting until it.
+        let even = vec![
+            reading(NOW - 10 * H, "seven_day", 700, Some(NOW + 24_000)),
+            reading(NOW, "seven_day", 880, Some(NOW + 24_000)),
+        ];
+        assert!(
+            line(&even, NOW).unwrap().contains("lasts until it resets"),
+            "{:?}",
+            line(&even, NOW)
         );
     }
 
