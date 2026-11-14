@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-14
+
 ### Added
 - **`girth import --from goose`: Goose's spend.** Girth reads its `sessions.db` through `sqlite3`, from `$GOOSE_PATH_ROOT/data/sessions/` or `<XDG data>/goose/sessions/`.
   - **Running totals:** Goose keeps a running total per session, so each import appends only what grew.
@@ -480,7 +482,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.28.1...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/mohessaid/girth/compare/v0.28.1...v0.29.0
 [0.28.1]: https://github.com/mohessaid/girth/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/mohessaid/girth/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/mohessaid/girth/compare/v0.26.1...v0.27.0
