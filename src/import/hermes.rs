@@ -221,6 +221,8 @@ mod tests {
         other.task = "title".into();
         let both = parse(&[row(1, 10, 0.0), other], &mut seen);
         assert_eq!(both.len(), 2);
+        // The calls were counted on the earlier, token-less import: none are new here.
+        assert_eq!(turn(&both[0]).requests, None);
         assert!(!turn(&both[0]).agent && turn(&both[1]).agent);
         let mut child = row(1, 10, 0.0);
         child.session = "c".into();

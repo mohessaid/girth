@@ -2020,6 +2020,23 @@ fn import_reads_hermes_usage_and_appends_only_what_grew() {
         (Some(2), Some(18800))
     );
     import().stdout("imported 0 turns from hermes\n");
+    // A sqlite3 that fails is not believed, whatever it printed.
+    let fake = tmp.path().join("fake-sqlite3");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\necho '[{\"src\":\"m\",\"session\":\"x\",\"model\":\"m\",\"input\":5}]'\nexit 1\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("g4"))
+        .env("HERMES_HOME", &hermes)
+        .env("GIRTH_SQLITE3_BIN", &fake)
+        .args(["import", "--from", "hermes"])
+        .assert()
+        .success()
+        .stdout("imported 0 turns from hermes\n");
     // No Hermes database: nothing, quietly.
     girth()
         .env("GIRTH_HOME", tmp.path().join("g3"))
