@@ -7,6 +7,7 @@ pub mod antigravity;
 pub mod codex;
 pub mod copilot;
 pub mod gemini;
+pub mod goose;
 pub mod hermes;
 pub mod opencode;
 
@@ -18,13 +19,14 @@ use crate::ledger;
 pub const OFFSETS_FILE: &str = "import.json";
 
 /// The harnesses `girth import` reads, in the order it reads them.
-pub const SOURCES: [&str; 6] = [
+pub const SOURCES: [&str; 7] = [
     "codex",
     "copilot",
     "opencode",
     "gemini",
     "antigravity",
     "hermes",
+    "goose",
 ];
 
 type Offsets = BTreeMap<String, BTreeMap<String, usize>>;
@@ -255,12 +257,51 @@ pub fn import_antigravity(
 /// runs when `db` doesn't exist. A `sqlite3` that can't be run is noted on stderr and
 /// imports nothing; a database it can't read imports nothing.
 pub fn import_hermes(sqlite3: &Path, db: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    import_totals(
+        "hermes",
+        "Hermes",
+        hermes::QUERY,
+        None,
+        sqlite3,
+        db,
+        girth_home,
+    )
+}
+
+/// Append what grew in Goose's session totals in `db` since the last import; returns how
+/// many turns. A database without Goose's cache columns (before schema 18) is skipped
+/// with a note: its input can't be split into cached and uncached.
+pub fn import_goose(sqlite3: &Path, db: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    import_totals(
+        "goose",
+        "Goose",
+        goose::QUERY,
+        Some(
+            "its sessions.db has no cache columns (Goose before schema 18); update Goose to import it",
+        ),
+        sqlite3,
+        db,
+        girth_home,
+    )
+}
+
+/// Runs `query` on `db` with `<sqlite3> -readonly -json` and appends what grew in each
+/// row's totals. A query that fails prints `failed` (when given) as a note.
+fn import_totals(
+    source: &str,
+    label: &str,
+    query: &str,
+    failed: Option<&str>,
+    sqlite3: &Path,
+    db: &Path,
+    girth_home: &Path,
+) -> std::io::Result<usize> {
     if !db.is_file() {
         return Ok(0);
     }
     let uri = format!("file:{}?mode=ro", db.display());
     let run = std::process::Command::new(sqlite3)
-        .args(["-readonly", "-batch", "-json", &uri, hermes::QUERY])
+        .args(["-readonly", "-batch", "-json", &uri, query])
         .stdin(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .output();
@@ -273,19 +314,24 @@ pub fn import_hermes(sqlite3: &Path, db: &Path, girth_home: &Path) -> std::io::R
                 serde_json::from_str(&text).unwrap_or_default()
             }
         }
-        Ok(_) => return Ok(0),
+        Ok(_) => {
+            if let Some(why) = failed {
+                eprintln!("girth: skipped {label}: {why}");
+            }
+            return Ok(0);
+        }
         Err(e) => {
             eprintln!(
-                "girth: skipped Hermes: could not run {}: {e}",
+                "girth: skipped {label}: could not run {}: {e}",
                 sqlite3.display()
             );
             return Ok(0);
         }
     };
     let mut offsets = load(girth_home);
-    let seen = offsets.entry("hermes".into()).or_default();
+    let seen = offsets.entry(source.into()).or_default();
     let mut added = 0;
-    for (ts, event) in hermes::parse(&rows, seen) {
+    for (ts, event) in hermes::parse_for(source, &rows, seen) {
         ledger::append_at(girth_home, ts, event)?;
         added += 1;
     }

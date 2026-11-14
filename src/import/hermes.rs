@@ -94,6 +94,15 @@ const FIELDS: [&str; 6] = [
 
 /// Turns for what grew in each row since the totals in `seen`, which are updated.
 pub fn parse(rows: &[Row], seen: &mut BTreeMap<String, usize>) -> Vec<(u64, Event)> {
+    parse_for(HARNESS, rows, seen)
+}
+
+/// [`parse`] for any harness that keeps running totals in [`Row`]'s shape (Goose too).
+pub fn parse_for(
+    harness: &str,
+    rows: &[Row],
+    seen: &mut BTreeMap<String, usize>,
+) -> Vec<(u64, Event)> {
     let mut out = Vec::new();
     for row in rows {
         let key = row.key();
@@ -140,7 +149,7 @@ pub fn parse(rows: &[Row], seen: &mut BTreeMap<String, usize>) -> Vec<(u64, Even
             mcp: vec![],
             breaks: vec![],
             outcomes: vec![],
-            harness: Some(HARNESS.into()),
+            harness: Some(harness.into()),
             premium: None,
             cost_micros: (delta[5] > 0).then_some(delta[5]),
             context: None,

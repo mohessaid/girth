@@ -84,7 +84,7 @@ enum Command {
         #[arg(long)]
         project: Option<String>,
         /// Only skill uses and turns from this harness (`claude-code`, `codex`, `copilot`,
-        /// `opencode`, `gemini`, `antigravity`, `hermes`); default all.
+        /// `opencode`, `gemini`, `antigravity`, `hermes`, `goose`); default all.
         #[arg(long)]
         harness: Option<String>,
     },
@@ -169,7 +169,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`, `goose`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -184,7 +184,7 @@ enum Command {
     },
     /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode, Gemini CLI) to the ledger.
     Import {
-        /// Which harness: `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes` or `all`.
+        /// Which harness: `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`, `goose` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1278,7 +1278,7 @@ fn main() -> ExitCode {
             use girth::import::SOURCES;
             if from != "all" && !SOURCES.contains(&from.as_str()) {
                 eprintln!(
-                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini, antigravity, hermes or all)"
+                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini, antigravity, hermes, goose or all)"
                 );
                 return ExitCode::from(2);
             }
@@ -1304,6 +1304,18 @@ fn main() -> ExitCode {
                                 var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
                             let dir = h.join(".gemini/antigravity-cli/conversations");
                             girth::import::import_antigravity(&sqlite3, &dir, &g, ledger::now())
+                        }),
+                    "goose" => var("GOOSE_PATH_ROOT")
+                        .map(|r| r.join("data/sessions/sessions.db"))
+                        .or_else(|| {
+                            var("XDG_DATA_HOME")
+                                .or_else(|| under_home(".local/share"))
+                                .map(|d| d.join("goose/sessions/sessions.db"))
+                        })
+                        .map(|db| {
+                            let sqlite3 =
+                                var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
+                            girth::import::import_goose(&sqlite3, &db, &g)
                         }),
                     "hermes" => var("HERMES_HOME")
                         .or_else(|| under_home(".hermes"))

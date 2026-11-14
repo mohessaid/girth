@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth import --from goose`: Goose's spend.** Girth reads its `sessions.db` through `sqlite3`, from `$GOOSE_PATH_ROOT/data/sessions/` or `<XDG data>/goose/sessions/`.
+  - **Running totals:** Goose keeps a running total per session, so each import appends only what grew.
+  - **The cache:** Goose's input total *includes* cache reads and writes (its own `from_bedrock_usage`, for one, adds them in). Girth splits them out, so the uncached input isn't priced as fresh.
+  - **Old databases:** a database from before schema 18 has no cache columns. It's skipped with a note, rather than overpriced the way an input-only import would.
+  - **Cost and side work:** the cost is Goose's own `accumulated_cost`. Sub-agent and hidden sessions count as side work.
+  - **How it's tested:** against Goose's schema-18 columns. The install on the author's machine predates schema 18, so nothing was imported from it.
+- **`girth advise --harness goose`** names `/new` and `AGENTS.md`.
+
 ## [0.28.1] - 2026-11-14
 
 ### Added

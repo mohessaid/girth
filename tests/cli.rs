@@ -19,6 +19,7 @@ fn girth() -> Command {
         .env("XDG_DATA_HOME", &none)
         .env("GEMINI_CLI_HOME", &none)
         .env("HERMES_HOME", &none)
+        .env("GOOSE_PATH_ROOT", &none)
         .env("GIRTH_OPENCODE_BIN", none.join("opencode"));
     cmd
 }
@@ -2073,4 +2074,89 @@ fn advise_for_another_harness_never_claims_girth_compacts_it() {
     assert!(text.contains("large conversations"), "{text}");
     assert!(!text.contains("Girth compacts"), "{text}");
     assert!(text.contains("/new"), "{text}");
+}
+
+#[test]
+fn import_reads_goose_sessions_splitting_the_cache_out_of_its_input() {
+    if std::process::Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipped: no sqlite3");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("goose");
+    let dir = root.join("data/sessions");
+    std::fs::create_dir_all(&dir).unwrap();
+    let make = |db: &std::path::Path, text: &str| {
+        let mut run = std::process::Command::new("sqlite3")
+            .arg(db)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write as _;
+        run.stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        assert!(run.wait().unwrap().success());
+    };
+    let db = dir.join("sessions.db");
+    make(
+        &db,
+        &std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/goose/sessions.sql"),
+        )
+        .unwrap(),
+    );
+    let g = tmp.path().join("g");
+    let import = |root: &std::path::Path, g: &std::path::Path| {
+        girth()
+            .env("GIRTH_HOME", g)
+            .env("GOOSE_PATH_ROOT", root)
+            .args(["import", "--from", "goose"])
+            .assert()
+            .success()
+    };
+    import(&root, &g).stdout("imported 2 turns from goose\n");
+    import(&root, &g).stdout("imported 0 turns from goose\n");
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    let turns: Vec<serde_json::Value> = ledger
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let main = &turns[0];
+    assert_eq!(main["harness"], "goose");
+    assert_eq!(main["project"], "/work/goose-app");
+    assert_eq!(main["model"], "claude-sonnet-5-5");
+    assert_eq!(
+        (main["input"].as_u64(), main["output"].as_u64()),
+        (Some(38113), Some(23803))
+    );
+    assert_eq!(
+        (main["cache_read"].as_u64(), main["cache_write"].as_u64()),
+        (Some(1900000), Some(100000))
+    );
+    assert_eq!(main["cost_micros"], 1250000);
+    assert_eq!(main["ts"], 1794652200);
+    assert_eq!(main["agent"], false);
+    assert!(main.get("requests").is_none(), "{main}");
+    assert_eq!(turns[1]["agent"], true);
+    assert!(turns[1].get("cost_micros").is_none(), "{}", turns[1]);
+    // An old database without the cache columns is skipped with a note, never overpriced.
+    let old_root = tmp.path().join("old");
+    std::fs::create_dir_all(old_root.join("data/sessions")).unwrap();
+    make(
+        &old_root.join("data/sessions/sessions.db"),
+        "CREATE TABLE sessions (id TEXT, working_dir TEXT, updated_at TIMESTAMP, accumulated_input_tokens INTEGER, accumulated_output_tokens INTEGER, provider_name TEXT, model_config_json TEXT, session_type TEXT); INSERT INTO sessions VALUES ('a', '/w', '2026-03-21 14:02:53', 2038113, 23803, 'github_copilot', '{}', 'user');",
+    );
+    import(&old_root, &tmp.path().join("g2"))
+        .stdout("imported 0 turns from goose\n")
+        .stderr(predicates::str::contains(
+            "girth: skipped Goose: its sessions.db has no cache columns",
+        ));
 }
