@@ -1122,9 +1122,15 @@ fn main() -> ExitCode {
                 }
                 let extra = serde_json::from_str::<Extra>(&input).unwrap_or_default();
                 let context = extra.context;
-                let compacted = extra
-                    .compacted
-                    .map(|c| girth::keeper::compact_line(c.before, c.after));
+                // The first idle compaction on this machine also says how to turn it off.
+                let compacted = extra.compacted.map(|c| {
+                    let first = ledger::read(&girth_home(&ctx))
+                        .iter()
+                        .filter(|r| matches!(r.event, Event::Compact(_)))
+                        .count()
+                        <= 1;
+                    girth::keeper::compact_line(c.before, c.after, first)
+                });
                 // Classified here and dropped: command text never reaches the ledger.
                 let calls: Vec<girth::outcome::Call> =
                     serde_json::from_str::<serde_json::Value>(&input)

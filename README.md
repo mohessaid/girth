@@ -218,14 +218,20 @@ The estimate prices the main conversation's cache writes at the 1-hour rate Clau
 
 **Doctor:** when a turn had to write the cache again, Girth says why under the answer, for example: `girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)`. `girth stats --meter` totals these rewrites and the keeper's pings.
 
-**Idle compaction (opt-in)** makes the most expensive conversations cheaper to come back to.
+**Idle compaction (on by default since 0.26)** makes the most expensive conversations cheaper to come back to.
 - **The problem:** every request re-reads the whole conversation. On the author's machine, those re-reads were **62% of spend**, and the median request carried 387K tokens.
 - **What Girth does:** when a conversation of at least 150,000 tokens has sat idle for 55 minutes, Girth compacts it (the same as `/compact`) while its cache is still warm. For that conversation, this replaces the keeper's pings.
   - You come back to a ~50K conversation instead of a ~580K one.
   - The first answer after your return says so, for example: `compacted this conversation while you were away (583K → 21K tokens)`.
-  - On the author's history, this would have saved about $1.8K at API prices, including compactions of sessions never returned to (`examples/compact/analyze-idle-compaction.py` measures yours, locally).
-- **The trade-off:** compaction keeps a summary, not every detail. That's why it stays off until you turn it on.
-- **Settings:** turn it on with `{"compact": {"idle": true}}`, and change the threshold with `"min_context"`. `"idle": false` in any config file, or `GIRTH_COMPACT=off`, turns it off.
+  - **The saving:** on the author's last 7 days (2026-11-07 to 11-14), it would have saved about $440 net of $1,825 at API prices. That's 77 compactions, about $9 in total (`examples/compact/idle_sim.py` measures yours, locally).
+  - Most of the rest ($552 of cache reads) came during continuous work, which no idle lever touches. `girth advise` names the levers for that.
+- **Why it's on by default:** it only fires after 55 minutes with no turn, so never in the middle of your work, and only on the main conversation.
+  - Checked live on Claude Code 2.1.325: a session went from 42K to 16K tokens while idle, and the next answer still knew the earlier exchange.
+- **The trade-off:** compaction keeps a summary, not every detail. The first compaction says how to turn it off.
+- **Settings:** change the threshold with `{"compact": {"min_context": 150000}}`. `"idle": false` in any config file, or `GIRTH_COMPACT=off`, turns it off.
+- **What every compaction is told to keep:** your own `/compact` text comes first. Girth then adds a keep-list (the task and what's left, decisions, exact paths and errors), plus the lines where you stated a rule (always, never, must…), word for word.
+  - This covers Claude Code's own auto-compaction too.
+  - In an 8-rule A/B (`examples/compact/keep_ab.sh`, 3 runs each, Haiku), both arms recalled 23 of 24 rules. Claude Code's own summary already kept short, clearly stated rules, so no gain was shown on that test.
 - **Interactive sessions only.** Claude Code doesn't let plugins compact `claude -p` or SDK sessions.
 
 **Subagent model (opt-in):** `{"agents": {"model": "sonnet"}}` runs built-in subagents (general-purpose, Explore and the like) on that model. A model Claude or the agent's definition chose is kept, as are plugins' agents and forks. On the author's machine subagents were 6% of spend, so expect a modest saving. `/girth-meter` shows each turn's model.

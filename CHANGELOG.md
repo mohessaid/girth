@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+- **Idle compaction is on by default.** When a conversation of 150,000 tokens or more has sat idle for 55 minutes, Girth compacts it while its cache is still warm.
+  - **The saving:** on the author's last 7 days, it would have saved about $440 net of $1,825 at API prices (77 compactions, about $9 in total; `examples/compact/idle_sim.py`).
+  - **Why it's safe as a default:** it never fires mid-turn, never for subagents, and never in `claude -p`.
+  - **Checked live** on Claude Code 2.1.325: a session went from 42K to 16K tokens while idle, and the next answer still knew the earlier exchange.
+  - **Turning it off:** the first compaction says how. `"compact": {"idle": false}` in any config, or `GIRTH_COMPACT=off`, does it.
+- **`girth advise --brief` no longer repeats "large conversations" at every session start when idle compaction is on,** since Girth already acts on it. The full `girth advise` then names what's left for continuous work: `/compact <what to keep>` at a natural break, `/clear` on a task switch, or `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (which can compact mid-task, so it's offered, not set).
+
+### Added
+- **Every compaction of the main conversation is told what to keep.** This covers `/compact`, Claude Code's own auto-compaction, idle compaction and precompute.
+  - Your `/compact` text comes first.
+  - Girth then adds a keep-list (the task and what's left, decisions, exact paths and errors), plus up to 20 lines where you stated a rule (always, never, must…), word for word.
+  - A subagent's own compaction is left alone.
+  - In an 8-rule A/B (`examples/compact/keep_ab.sh`, 3 runs each, Haiku), both arms recalled 23 of 24 rules, so no gain was shown on that test.
+
+### Fixed
+- **The session-start line read `girth: girth: …`.** Claude Code 2.1.325 heads a plugin's note with its name, so the line no longer adds its own.
+
 ## [0.25.2] - 2026-11-13
 
 ### Fixed

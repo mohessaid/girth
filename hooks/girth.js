@@ -9,7 +9,7 @@
 //   a changed prompt) is named under the answer.
 // - Keeper: while the conversation sits idle, a ping (a fork of it) reads the
 //   cache before its hour runs out, so coming back doesn't write it all again.
-// - Idle compaction (opt-in): a large conversation is compacted instead, while
+// - Idle compaction (on by default): a large conversation is compacted instead, while
 //   its cache is still warm, and the next answer says so.
 // - Subagent model (opt-in): built-in subagents run on the configured model.
 // The girth binary makes every decision, and every hook fails open: on any
@@ -178,6 +178,48 @@ export function compactor(deps) {
       return n
     },
   }
+}
+
+const KEEP = [
+  'Also keep, so the work goes on as before:',
+  '- the current task: what is done and what is left, and the next step;',
+  '- every instruction, rule or preference the user gave, in their words;',
+  '- decisions made and why, including approaches tried and dropped;',
+  '- exact file paths, commands, identifiers, versions and error messages that still matter;',
+  '- anything the user asked to remember.',
+].join('\n')
+const RULE = /\b(always|never|must|don't|do not|make sure|from now on|remember|prefer)\b/i
+const RULE_LINES = 20
+const RULE_CHARS = 2500
+
+/**
+ * What a compaction is told to keep: the user's own `/compact` text first, then
+ * Girth's keep-list, then the rule lines the user typed (always, never, must…),
+ * verbatim and newest first kept. Summaries tend to drop stated rules.
+ */
+export function compactInstructions(instructions, messages) {
+  const seen = new Set()
+  const rules = []
+  for (const m of [...messages].reverse()) {
+    if (m.role !== 'user' || (m.toolResults && m.toolResults.length > 0) || typeof m.text !== 'string') continue
+    const text = m.text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '')
+    for (const raw of text.split('\n').reverse()) {
+      const line = raw.trim()
+      if (line.length < 4 || line.length > 300 || line.startsWith('<') || !RULE.test(line) || seen.has(line)) continue
+      seen.add(line)
+      rules.push(line)
+    }
+  }
+  const kept = []
+  let chars = 0
+  for (const r of rules) {
+    if (kept.length >= RULE_LINES || chars + r.length > RULE_CHARS) break
+    kept.push(r)
+    chars += r.length
+  }
+  const parts = [typeof instructions === 'string' && instructions.trim() !== '' ? instructions : '', KEEP]
+  if (kept.length > 0) parts.push("The user's own words, to carry over unchanged:\n" + kept.reverse().map((r) => `- ${r}`).join('\n'))
+  return parts.filter((p) => p !== '').join('\n\n')
 }
 
 // Adds a large result's estimated tokens to its loop's turn.
@@ -595,7 +637,8 @@ export function register(on) {
         const brief = await $.process.run([launcher($), 'advise', '--brief'], { timeoutMs: TIMEOUT_MS })
         const line = brief.exitCode === 0 ? brief.stdout.trim() : ''
         // One line of advice or nothing: anything else (a crash, an old binary) is not shown.
-        if (line.startsWith('girth: ') && !line.includes('\n')) lines.push(line)
+        // The engine heads the note with the plugin's name, so the line drops its own.
+        if (line.startsWith('girth: ') && !line.includes('\n')) lines.push(line.slice('girth: '.length))
       } catch {
         // Advice is never worth breaking a turn over.
       }
@@ -606,6 +649,20 @@ export function register(on) {
     const theirs = result?.text && result.text !== e.answer ? result.text : ''
     const text = [theirs, ...lines].filter((t) => t !== '').join('\n')
     return { ...result, text }
+  }).catch(async ($, e, next) => next(e))
+
+  // Every compaction of the main conversation (/compact, Claude Code's own, Girth's idle
+  // one, a precompute) is told what to keep. A subagent's own is left alone.
+  on('session.compact', async ($, e, next) => {
+    // A subagent's own compaction, or one without a transcript to read, goes on as it came.
+    if (e.agentId !== undefined || !Array.isArray(e.messages)) return next(e)
+    let instructions
+    try {
+      instructions = compactInstructions(e.instructions, e.messages)
+    } catch {
+      return next(e)
+    }
+    return next({ ...e, instructions })
   }).catch(async ($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {

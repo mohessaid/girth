@@ -836,7 +836,9 @@ fn meter_record_plans_the_keeper_and_names_cache_breaks() {
     let turn = format!(
         r#"{{"project":"{p}","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":450000,"agent":false,"aborted":false,"context":450002,"breaks":[{{"lost":460000,"rewritten":450000,"idle_s":11520}}]}}"#
     );
+    // Idle compaction (on by default) would replace the pings at this size.
     let out = home_cmd(&home)
+        .env("GIRTH_COMPACT", "off")
         .args(["meter", "record"])
         .write_stdin(turn.clone())
         .assert()
@@ -1062,7 +1064,7 @@ fn compact_record_appends_and_stats_report_it() {
 }
 
 #[test]
-fn meter_record_plans_an_idle_compaction_only_when_opted_in() {
+fn meter_record_plans_an_idle_compaction_unless_turned_off() {
     let tmp = TempDir::new().unwrap();
     let home = tmp.path().join("home");
     let turn = |agent: bool| {
@@ -1081,17 +1083,16 @@ fn meter_record_plans_an_idle_compaction_only_when_opted_in() {
             .to_string()
     };
     let pings = r#"{"keeper":{"pings":3,"interval_ms":3300000}}"#;
-    assert_eq!(plan(&mut home_cmd(&home), false), pings);
-    std::fs::create_dir_all(&home).unwrap();
-    std::fs::write(home.join("config.json"), r#"{"compact": {"idle": true}}"#).unwrap();
-    assert_eq!(
-        plan(&mut home_cmd(&home), false),
-        r#"{"keeper":{"pings":0,"interval_ms":3300000,"compact":true}}"#
-    );
+    let compact = r#"{"keeper":{"pings":0,"interval_ms":3300000,"compact":true}}"#;
+    assert_eq!(plan(&mut home_cmd(&home), false), compact);
     assert_eq!(
         plan(home_cmd(&home).env("GIRTH_COMPACT", "off"), false),
         pings
     );
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("config.json"), r#"{"compact": {"idle": false}}"#).unwrap();
+    assert_eq!(plan(&mut home_cmd(&home), false), pings);
+    std::fs::remove_file(home.join("config.json")).unwrap();
     assert_eq!(
         plan(&mut home_cmd(&home), true),
         r#"{"keeper":{"pings":0,"interval_ms":3300000}}"#
@@ -1109,11 +1110,21 @@ fn meter_record_reports_an_idle_compaction_under_the_next_answer() {
         .assert()
         .success();
     let json: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    // The first compaction on this machine says how to turn it off.
     assert_eq!(
         json["line"],
-        "compacted this conversation while you were away (583K → 21K tokens)"
+        "compacted this conversation while you were away (583K → 21K tokens); to turn it off: {\"compact\":{\"idle\":false}} in ~/.girth/config.json"
     );
-    // With a cache break as well, both lines, the compaction first.
+    for _ in 0..2 {
+        home_cmd(&home)
+            .args(["compact", "record"])
+            .write_stdin(
+                r#"{"project":"/w","model":"claude-opus-5-5","before":583000,"after":21000}"#,
+            )
+            .assert()
+            .success();
+    }
+    // Later ones don't. With a cache break as well, both lines, the compaction first.
     let turn = r#"{"project":"/w","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":48159,"agent":false,"aborted":false,"breaks":[{"lost":40000,"rewritten":30000,"idle_s":9000}],"compacted":{"before":583000}}"#;
     let out = home_cmd(&home)
         .args(["meter", "record"])
@@ -1391,6 +1402,7 @@ fn meter_record_keeps_the_plan_when_the_bash_output_is_not_well_formed() {
     // cleanly) must not cost the turn its context or its compaction line.
     let turn = r#"{"project":"/work/a","model":"claude-opus-5-5","input":2,"output":7,"cache_read":0,"cache_write":0,"agent":false,"aborted":false,"context":450000,"compacted":{"before":583000,"after":21000},"bash":[{"command":"git commit -m x","output":"[main 1] x","error":false},{"command":"cargo test","output":"\udf89 test result: ok. 1 passed","error":false}]}"#;
     let out = home_cmd(&home)
+        .env("GIRTH_COMPACT", "off")
         .args(["meter", "record"])
         .write_stdin(turn)
         .assert()

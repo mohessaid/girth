@@ -1,5 +1,7 @@
 # Girth v0.8: idle compaction and a subagent model (design)
 
+**Update (2026-11-14, 0.26.0):** idle compaction is now **on by default**, at the user's request ("make it automatic by default… without breaking things"). `"idle": false` or `GIRTH_COMPACT=off` still win. The opt-in rule in Review focus 2 is reversed. Evidence: a live check on 2.1.325, and the 7-day estimate in `examples/compact/idle_sim.py`.
+
 **Status:** the shape was approved in conversation on 2026-10-16: both features opt-in, and the keeper stays on by default. This written spec is pending the author's review.
 **Evidence:** `docs/research/2026-10-15-where-the-money-goes.md`, `examples/compact/SPIKE.md`.
 

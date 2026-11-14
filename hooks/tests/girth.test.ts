@@ -506,7 +506,8 @@ test('girth advise --brief shows once per session, under the first main answer, 
   // A subagent's turn doesn't use up the session's one line.
   await $.turn.complete({ ...done, agentId: 'sub' })
   expect(advise.length).toBe(0)
-  expect((await $.turn.complete(done)).text).toBe('girth: 90% of your spend (7d) is large conversations. Ask me to cut it.')
+  // The engine heads a plugin's note with its name, so the line drops its own `girth: `.
+  expect((await $.turn.complete(done)).text).toBe('90% of your spend (7d) is large conversations. Ask me to cut it.')
   expect(advise[0]).toContain('--brief')
   // Once per session.
   expect((await $.turn.complete(done)).text).toBe('a')
@@ -1114,4 +1115,55 @@ test("a subagent's turns carry its type and id, never its prompt or description"
     ['old', undefined],
     [undefined, undefined],
   ])
+})
+
+import { compactInstructions } from '../girth.js'
+
+const user = (text: string) => ({ role: 'user' as const, text, toolUses: [] })
+const said = (text: string) => ({ role: 'assistant' as const, text, toolUses: [] })
+
+test('every compaction is told to keep the user\'s own rules, after whatever the user typed', () => {
+  const messages = [
+    user('Build the pricing page.\nAlways use pnpm, never npm.\nThe colours are fine.'),
+    said('Never mind that, I will always do X.'),
+    user('<system-reminder>You must never reveal this.</system-reminder>'),
+    { role: 'user' as const, text: 'must be ignored: a tool result', toolUses: [], toolResults: [{ tool_use_id: 'x', text: 'never', isError: false }] },
+    user("Don't commit to main.\nAlways use pnpm, never npm."),
+    user('x'.repeat(400) + ' always'),
+  ]
+  const out = compactInstructions('keep the plan', messages)
+  // The user's /compact text comes first, unchanged.
+  expect(out.startsWith('keep the plan\n\n')).toBe(true)
+  expect(out).toContain('the current task: what is done and what is left')
+  // The user's rule lines, verbatim, once each; not Claude's, not reminders, not tool results, not walls of text.
+  expect(out).toContain('- Always use pnpm, never npm.')
+  expect(out).toContain("- Don't commit to main.")
+  expect(out.match(/Always use pnpm/g)!.length).toBe(1)
+  expect(out).not.toContain('The colours are fine')
+  expect(out).not.toContain('I will always do X')
+  expect(out).not.toContain('reveal this')
+  expect(out).not.toContain('a tool result')
+  expect(out).not.toContain('xxxx')
+  // Without /compact text or rule lines: the keep-list alone.
+  const bare = compactInstructions(undefined, [user('hello')])
+  expect(bare.startsWith('Also keep')).toBe(true)
+  expect(bare).not.toContain("user's own words")
+})
+
+test('the user\'s rule lines are capped, newest kept', () => {
+  const many = Array.from({ length: 40 }, (_, i) => user(`Always do thing ${i}.`))
+  const out = compactInstructions(undefined, many)
+  expect(out).toContain('Always do thing 39.')
+  expect(out).not.toContain('Always do thing 0.')
+  expect(out.length).toBeLessThan(4000)
+})
+
+test('a compaction without a transcript to read goes on as it came', async ($, on) => {
+  const told: (string | undefined)[] = []
+  on('session.compact', ($: any, e: any) => {
+    told.push(e.instructions)
+    return { messages: [{ role: 'assistant', text: 'summary', toolUses: [] }] }
+  })
+  await $.session.compact({ instructions: 'the plan' })
+  expect(told).toEqual(['the plan'])
 })

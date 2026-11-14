@@ -24,7 +24,7 @@ pub struct Settings {
     pub enabled: bool,
     pub max_pings: u32,
     pub min_context: u64,
-    /// Compact a large conversation after an idle interval (opt-in).
+    /// Compact a large conversation after an idle interval (on unless a config says no).
     pub compact_idle: bool,
     pub compact_min_context: u64,
 }
@@ -35,7 +35,7 @@ impl Default for Settings {
             enabled: true,
             max_pings: 3,
             min_context: 20_000,
-            compact_idle: false,
+            compact_idle: true,
             compact_min_context: 150_000,
         }
     }
@@ -53,7 +53,7 @@ pub struct Plan {
 
 /// `keeper` and `compact` settings from `GIRTH_HOME/config.json`, then the
 /// project's `.girth/config.json` (which wins for numbers); off when either
-/// says so. Idle compaction is on only when a file says so and none says no.
+/// says so. Idle compaction is on unless a file says `"idle": false`.
 pub fn settings(project_dir: &Path, home: &Path) -> Settings {
     let mut s = Settings::default();
     let mut compact_no = false;
@@ -65,10 +65,8 @@ pub fn settings(project_dir: &Path, home: &Path) -> Settings {
             .ok()
             .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
         if let Some(compact) = value.as_ref().and_then(|v| v.get("compact")) {
-            match compact.get("idle").and_then(|v| v.as_bool()) {
-                Some(true) => s.compact_idle = true,
-                Some(false) => compact_no = true,
-                None => {}
+            if compact.get("idle").and_then(|v| v.as_bool()) == Some(false) {
+                compact_no = true;
             }
             if let Some(n) = compact.get("min_context").and_then(|v| v.as_u64()) {
                 s.compact_min_context = n;
@@ -143,12 +141,18 @@ fn short_tokens(n: u64) -> String {
 
 /// The line under the first answer after an idle compaction. Claude Code
 /// puts the plugin's name in front, so the line has no `girth:` of its own.
-pub fn compact_line(before: u64, after: Option<u64>) -> String {
+/// The first one also says how to turn it off.
+pub fn compact_line(before: u64, after: Option<u64>, first: bool) -> String {
     let sizes = match after {
         Some(after) => format!("{} → {} tokens", short_tokens(before), short_tokens(after)),
         None => format!("it was {} tokens", short_tokens(before)),
     };
-    format!("compacted this conversation while you were away ({sizes})")
+    let off = if first {
+        "; to turn it off: {\"compact\":{\"idle\":false}} in ~/.girth/config.json"
+    } else {
+        ""
+    };
+    format!("compacted this conversation while you were away ({sizes}){off}")
 }
 
 /// The line under the answer for a turn whose cache was written again, if any.
@@ -370,21 +374,22 @@ mod tests {
     }
 
     #[test]
-    fn idle_compaction_replaces_pings_for_large_conversations_when_turned_on() {
-        let off = Settings::default();
-        assert!(!off.compact_idle);
-        assert_eq!(off.compact_min_context, 150_000);
-        // Off by default: v0.7 pings, and no `compact` key in the JSON.
+    fn idle_compaction_replaces_pings_for_large_conversations_by_default() {
+        let on = Settings::default();
+        assert!(on.compact_idle);
+        assert_eq!(on.compact_min_context, 150_000);
+        assert_eq!(plan(&on, false, false, None, 900_000).pings, 0);
+        // Turned off: v0.7 pings, and no `compact` key in the JSON.
+        let off = Settings {
+            compact_idle: false,
+            ..Settings::default()
+        };
         let p = plan(&off, false, false, None, 900_000);
         assert_eq!((p.pings, p.compact), (3, false));
         assert_eq!(
             serde_json::to_string(&p).unwrap(),
             r#"{"pings":3,"interval_ms":3300000}"#
         );
-        let on = Settings {
-            compact_idle: true,
-            ..Settings::default()
-        };
         let p = plan(&on, false, false, Some(50), 150_000);
         assert_eq!(
             p,
@@ -410,13 +415,15 @@ mod tests {
     }
 
     #[test]
-    fn compact_settings_are_opt_in_and_a_no_anywhere_wins() {
+    fn idle_compaction_is_on_unless_a_config_says_no() {
         let tmp = tempfile::TempDir::new().unwrap();
         let (project, home) = (tmp.path().join("p"), tmp.path().join("h"));
         std::fs::create_dir_all(project.join(".girth")).unwrap();
         std::fs::create_dir_all(&home).unwrap();
         let home_cfg = home.join("config.json");
         let project_cfg = project.join(".girth/config.json");
+        // No config at all: on.
+        assert!(settings(&project, &home).compact_idle);
         std::fs::write(
             &home_cfg,
             r#"{"compact": {"idle": true, "min_context": 90000}}"#,
@@ -436,7 +443,7 @@ mod tests {
         std::fs::write(&home_cfg, r#"{"compact": {"idle": false}}"#).unwrap();
         std::fs::write(&project_cfg, r#"{"compact": {"idle": true}}"#).unwrap();
         assert!(!settings(&project, &home).compact_idle);
-        // The project alone can turn it on; malformed values are ignored.
+        // Malformed values are ignored: it stays on.
         std::fs::write(
             &home_cfg,
             r#"{"compact": {"idle": "yes", "min_context": "big"}}"#,
@@ -646,12 +653,16 @@ mod tests {
     #[test]
     fn compact_line_says_what_shrank_while_away() {
         assert_eq!(
-            compact_line(583_412, Some(21_999)),
+            compact_line(583_412, Some(21_999), false),
             "compacted this conversation while you were away (583K → 21K tokens)"
         );
         assert_eq!(
-            compact_line(1_250_000, None),
+            compact_line(1_250_000, None, false),
             "compacted this conversation while you were away (it was 1.2M tokens)"
+        );
+        assert_eq!(
+            compact_line(583_412, Some(21_999), true),
+            "compacted this conversation while you were away (583K → 21K tokens); to turn it off: {\"compact\":{\"idle\":false}} in ~/.girth/config.json"
         );
     }
 

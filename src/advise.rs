@@ -133,6 +133,9 @@ pub struct Advice {
     pub window_s: u64,
     pub spend: f64,
     pub contributors: Vec<Contributor>,
+    /// Kinds Girth already acts on (idle compaction), left out of the brief line.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub handled: Vec<&'static str>,
     /// Turns on models with no known prices; their tokens are not in `spend`.
     pub unpriced: u64,
     /// Spend per harness (`claude-code` for turns the mod recorded).
@@ -201,6 +204,7 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         return Advice {
             window_s,
             spend,
+            handled: vec![],
             contributors: out,
             unpriced,
             harnesses,
@@ -319,13 +323,28 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
         .filter(|(_, t)| t.cache_read / t.requests.unwrap_or(1).max(1) > LARGE_CONTEXT)
         .map(|(ts, t)| turn_cost(*ts, t))
         .sum();
+    let (fix, guard) = if on.compact_idle {
+        (
+            format!(
+                "Girth compacts large conversations after 55 minutes idle; what's left is continuous work: /compact <what to keep> at a natural break, {clear} when you switch tasks, or CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000 so Claude Code compacts sooner (it can then compact mid-task)"
+            ),
+            format!(
+                "Girth tells every compaction to keep your task and the rules you stated, word for word; {clear} starts clean for unrelated work"
+            ),
+        )
+    } else {
+        (
+            format!("/compact <what to keep> at a natural break, or {clear} when you switch tasks"),
+            format!("the summary keeps what you name; {clear} starts clean for unrelated work"),
+        )
+    };
     push(
         &mut out,
         "context",
         "large conversations".into(),
         large,
-        format!("/compact <what to keep> at a natural break, or {clear} when you switch tasks"),
-        &format!("the summary keeps what you name; {clear} starts clean for unrelated work"),
+        fix,
+        &guard,
     );
 
     // Long sessions: turns taken more than LONG_SESSION after the session's first turn.
@@ -481,6 +500,11 @@ pub fn advise(records: &[Record], now: u64, window_s: u64, on: On) -> Advice {
     Advice {
         window_s,
         spend,
+        handled: if on.compact_idle {
+            vec!["context", "sessions"]
+        } else {
+            vec![]
+        },
         contributors: out,
         unpriced,
         harnesses,
@@ -553,7 +577,8 @@ fn unpriced_note(unpriced: u64) -> String {
 pub fn brief(advice: &Advice) -> Option<String> {
     let top = advice
         .contributors
-        .first()
+        .iter()
+        .find(|c| !advice.handled.contains(&c.kind))
         .filter(|c| c.share >= BRIEF_SHARE)?;
     let pct = (top.share * 100.0).round();
     let when = window_label(advice.window_s);
@@ -1325,6 +1350,55 @@ mod tests {
             "{line}"
         );
         assert!(line.chars().count() <= BRIEF_MAX_CHARS, "{line}");
+    }
+
+    #[test]
+    fn with_idle_compaction_on_the_brief_skips_large_conversations_and_the_fix_names_what_is_left()
+    {
+        // A large conversation (most of the spend) and a skill's turn.
+        let records = vec![
+            rec(NOW - 90, turn(SONNET, 400_000, 0)),
+            used(NOW - 60, "playwright-cli"),
+            rec(NOW - 50, turn(SONNET, 100_000, 15_000)),
+        ];
+        let off = advise(&records, NOW, WEEK, On::default());
+        assert_eq!(
+            off.contributors[0].kind, "context",
+            "{:?}",
+            off.contributors
+        );
+        assert!(brief(&off).unwrap().contains("large conversations"));
+        let on = On {
+            compact_idle: true,
+            ..On::default()
+        };
+        let a = advise(&records, NOW, WEEK, on);
+        let context = a.contributors.iter().find(|c| c.kind == "context").unwrap();
+        assert!(
+            context
+                .fix
+                .contains("Girth compacts large conversations after 55 minutes idle"),
+            "{}",
+            context.fix
+        );
+        assert!(
+            context.fix.contains("CLAUDE_CODE_AUTO_COMPACT_WINDOW"),
+            "{}",
+            context.fix
+        );
+        assert!(
+            context
+                .guard
+                .contains("keep your task and the rules you stated"),
+            "{}",
+            context.guard
+        );
+        // The next contributor that Girth isn't already acting on.
+        let line = brief(&a).unwrap();
+        assert!(line.contains("playwright-cli"), "{line}");
+        // Nothing else worth saying: no line at all.
+        let only = advise(&[rec(NOW - 90, turn(SONNET, 400_000, 0))], NOW, WEEK, on);
+        assert_eq!(brief(&only), None);
     }
 
     #[test]
