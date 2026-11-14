@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-11-14
+
 ### Added
 - **A plan window at 80% or more gets one line under the first answer of a session,** with when it resets, from Claude Code's own rate-limit readings. For example: `88% of your 7-day plan window is used; it resets in 2d 5h`. Below 80% it says nothing.
 
@@ -469,7 +471,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/mohessaid/girth/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/mohessaid/girth/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/mohessaid/girth/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/mohessaid/girth/compare/v0.26.0...v0.26.1
