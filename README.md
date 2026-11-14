@@ -137,7 +137,7 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 
 - **Finds skills wherever your harnesses keep them.** It searches each skill folder that exists, for all 79 harnesses in the [`skills` CLI's table](https://github.com/vercel-labs/skills/blob/main/docs/agents.md), plus folders their own docs name (`~/.codex/skills`, `.cursor/skills`, `.github/skills`, `.opencode/skills`, `.gemini/skills`), plus DeepSeek Harness, which the table doesn't list yet (`.dsh/skills`, `~/.dsh/skills`).
 - **Writes crafted skills where your harness reads them:** `.agents/skills`, which Codex, Cursor, Copilot, Gemini CLI, Antigravity, OpenCode, Cline, Amp and most others read. Under Claude Code it writes `.claude/skills` instead. `girth validate` then links each crafted skill into the other folder, so a skill crafted in one harness loads in all of them, and the project cache keeps compounding when you switch harnesses.
-- **Counts what other harnesses spend.** `girth import` reads the local session logs of Codex, GitHub Copilot CLI, OpenCode, Gemini CLI and Antigravity CLI. `girth advise --harness codex` (or `copilot`, `opencode`, `gemini`, `antigravity`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent:
+- **Counts what other harnesses spend.** `girth import` reads the local session logs of Codex, GitHub Copilot CLI, OpenCode, Gemini CLI, Antigravity CLI and Hermes Agent. `girth advise --harness codex` (or `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`) ranks them with that harness's own fixes. On the author's machine, each total matched an independent sum to the cent:
   - 140 Codex turns, $173.00 at OpenAI list prices;
   - 103 Copilot turns, $618.16 at list prices (one per prompt where Copilot 1.0.95+ logs each request, otherwise one per session stretch);
   - 11 OpenCode turns, $0.28 by OpenCode's own per-request cost;
@@ -154,6 +154,7 @@ Girth's core is a plain binary and an [Agent Skills](https://agentskills.io/spec
 | OpenCode 1.17–2.2 | ✓ | `.agents/skills` | ✓ `girth import` (v1 through `opencode db`, v2 through `sqlite3`; with its own costs) | ✓ |
 | Antigravity CLI 1.5 | ✓ | `.agents/skills` | ✓ `girth import` (through `sqlite3`) | ✓ |
 | Gemini CLI 0.65 | ✓ | `.agents/skills` | ✓ `girth import` | not yet (its free tier moved to Antigravity) |
+| Hermes Agent 0.19 | ✓ | `.agents/skills` | ✓ `girth import` (its `state.db` usage totals through `sqlite3`, with its own costs) | not yet (tested against its v0.19.0 schema; no provider set up here) |
 | Cursor, Amp, Goose | ✓ | `.agents/skills` | — (no usable token data on disk) | not yet |
 | The other 70 or so harnesses in the `skills` table | ✓ | per their table row | — | not yet |
 

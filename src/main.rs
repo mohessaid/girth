@@ -84,7 +84,7 @@ enum Command {
         #[arg(long)]
         project: Option<String>,
         /// Only skill uses and turns from this harness (`claude-code`, `codex`, `copilot`,
-        /// `opencode`, `gemini`, `antigravity`); default all.
+        /// `opencode`, `gemini`, `antigravity`, `hermes`); default all.
         #[arg(long)]
         harness: Option<String>,
     },
@@ -169,7 +169,7 @@ enum Command {
         brief: bool,
         #[arg(long)]
         json: bool,
-        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`, `antigravity`); default all, or
+        /// Only turns from this harness (`claude-code`, `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`); default all, or
         /// `claude-code` with --brief, which Claude Code shows at session start.
         #[arg(long)]
         harness: Option<String>,
@@ -184,7 +184,7 @@ enum Command {
     },
     /// Append spend from other harnesses' local session logs (Codex, Copilot CLI, OpenCode, Gemini CLI) to the ledger.
     Import {
-        /// Which harness: `codex`, `copilot`, `opencode`, `gemini`, `antigravity` or `all`.
+        /// Which harness: `codex`, `copilot`, `opencode`, `gemini`, `antigravity`, `hermes` or `all`.
         #[arg(long, default_value = "all")]
         from: String,
     },
@@ -1278,7 +1278,7 @@ fn main() -> ExitCode {
             use girth::import::SOURCES;
             if from != "all" && !SOURCES.contains(&from.as_str()) {
                 eprintln!(
-                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini, antigravity or all)"
+                    "girth: unknown harness: {from} (try codex, copilot, opencode, gemini, antigravity, hermes or all)"
                 );
                 return ExitCode::from(2);
             }
@@ -1304,6 +1304,13 @@ fn main() -> ExitCode {
                                 var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
                             let dir = h.join(".gemini/antigravity-cli/conversations");
                             girth::import::import_antigravity(&sqlite3, &dir, &g, ledger::now())
+                        }),
+                    "hermes" => var("HERMES_HOME")
+                        .or_else(|| under_home(".hermes"))
+                        .map(|h| {
+                            let sqlite3 =
+                                var("GIRTH_SQLITE3_BIN").unwrap_or_else(|| "sqlite3".into());
+                            girth::import::import_hermes(&sqlite3, &h.join("state.db"), &g)
                         }),
                     _ => var("XDG_DATA_HOME")
                         .or_else(|| under_home(".local/share"))
@@ -1347,7 +1354,9 @@ fn main() -> ExitCode {
             let keeper = girth::keeper::settings(&ctx.cwd, &home);
             let on = girth::advise::On {
                 keeper: keeper.enabled,
-                compact_idle: keeper.compact_idle,
+                // Idle compaction is the Claude Code mod's: other harnesses' advice never counts on it.
+                compact_idle: keeper.compact_idle
+                    && matches!(harness.as_deref(), None | Some("claude-code")),
                 agents_model: girth::keeper::agents_model(&ctx.cwd, &home).is_some(),
                 harness: girth::import::SOURCES
                     .into_iter()

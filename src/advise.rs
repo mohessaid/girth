@@ -40,6 +40,8 @@ fn names(harness: Option<&str>) -> (&'static str, &'static str) {
         Some("copilot" | "opencode") => ("/clear", "AGENTS.md"),
         Some("gemini") => ("/clear", "GEMINI.md"),
         Some("antigravity") => ("/clear", "AGENTS.md"),
+        // Hermes reads .hermes.md or HERMES.md first, then AGENTS.md like the rest.
+        Some("hermes") => ("/new", "AGENTS.md"),
         _ => ("/clear", "CLAUDE.md"),
     }
 }
@@ -823,6 +825,7 @@ mod tests {
     #[test]
     fn each_harness_names_its_own_fresh_session_command_and_instructions_file() {
         assert_eq!(names(Some("antigravity")), ("/clear", "AGENTS.md"));
+        assert_eq!(names(Some("hermes")), ("/new", "AGENTS.md"));
         assert_eq!(names(Some("gemini")), ("/clear", "GEMINI.md"));
         assert_eq!(names(Some("codex")), ("/new", "AGENTS.md"));
         assert_eq!(names(None), ("/clear", "CLAUDE.md"));

@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **`girth import --from hermes`: Hermes Agent's spend.** Girth reads `~/.hermes/state.db` (or `$HERMES_HOME`) through `sqlite3`.
+  - **Where the usage comes from:**
+    - Per-model rows, which Hermes's command line fills.
+    - The session row, for gateway sessions that have no per-model row.
+  - **Running totals:** Hermes keeps totals, not turns, so each import appends only what grew since the last one.
+  - **What gets recorded:** cache reads and writes, and Hermes's own cost (the actual one when known, else its estimate).
+  - **What counts as side work:** delegated runs and auxiliary tasks, such as compression.
+  - **What the columns mean,** from Hermes's own `usage_pricing.py`: input excludes the cache, and output already includes reasoning.
+  - **How it's tested:** against a fixture with Hermes v0.19.0's schema, not yet against a real Hermes session.
+- **`girth advise --harness hermes`** names Hermes's `/new` and `AGENTS.md`.
+
+### Fixed
+- **`girth advise --harness <another harness>` no longer says Girth compacts large conversations.** Idle compaction is the Claude Code mod's, so only Claude Code advice counts on it.
+
 ## [0.26.1] - 2026-11-14
 
 ### Fixed

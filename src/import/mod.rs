@@ -7,6 +7,7 @@ pub mod antigravity;
 pub mod codex;
 pub mod copilot;
 pub mod gemini;
+pub mod hermes;
 pub mod opencode;
 
 use std::collections::BTreeMap;
@@ -17,7 +18,14 @@ use crate::ledger;
 pub const OFFSETS_FILE: &str = "import.json";
 
 /// The harnesses `girth import` reads, in the order it reads them.
-pub const SOURCES: [&str; 5] = ["codex", "copilot", "opencode", "gemini", "antigravity"];
+pub const SOURCES: [&str; 6] = [
+    "codex",
+    "copilot",
+    "opencode",
+    "gemini",
+    "antigravity",
+    "hermes",
+];
 
 type Offsets = BTreeMap<String, BTreeMap<String, usize>>;
 
@@ -240,6 +248,49 @@ pub fn import_antigravity(
     }
     save(girth_home, &offsets, added)?;
     Ok(turns)
+}
+
+/// Append what grew in Hermes Agent's usage totals in `db` (its `state.db`) since the
+/// last import, read with `<sqlite3> -readonly -json`; returns how many turns. Nothing
+/// runs when `db` doesn't exist. A `sqlite3` that can't be run is noted on stderr and
+/// imports nothing; a database it can't read imports nothing.
+pub fn import_hermes(sqlite3: &Path, db: &Path, girth_home: &Path) -> std::io::Result<usize> {
+    if !db.is_file() {
+        return Ok(0);
+    }
+    let uri = format!("file:{}?mode=ro", db.display());
+    let run = std::process::Command::new(sqlite3)
+        .args(["-readonly", "-batch", "-json", &uri, hermes::QUERY])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
+    let rows: Vec<hermes::Row> = match run {
+        Ok(out) if out.status.success() => {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if text.trim().is_empty() {
+                Vec::new()
+            } else {
+                serde_json::from_str(&text).unwrap_or_default()
+            }
+        }
+        Ok(_) => return Ok(0),
+        Err(e) => {
+            eprintln!(
+                "girth: skipped Hermes: could not run {}: {e}",
+                sqlite3.display()
+            );
+            return Ok(0);
+        }
+    };
+    let mut offsets = load(girth_home);
+    let seen = offsets.entry("hermes".into()).or_default();
+    let mut added = 0;
+    for (ts, event) in hermes::parse(&rows, seen) {
+        ledger::append_at(girth_home, ts, event)?;
+        added += 1;
+    }
+    save(girth_home, &offsets, added)?;
+    Ok(added)
 }
 
 /// Append the OpenCode turns and skill uses in `db` not imported before, read by running

@@ -18,6 +18,7 @@ fn girth() -> Command {
         .env("COPILOT_HOME", &none)
         .env("XDG_DATA_HOME", &none)
         .env("GEMINI_CLI_HOME", &none)
+        .env("HERMES_HOME", &none)
         .env("GIRTH_OPENCODE_BIN", none.join("opencode"));
     cmd
 }
@@ -1918,4 +1919,141 @@ fn advise_filters_by_harness() {
         .assert()
         .success()
         .stdout("");
+}
+
+#[test]
+fn import_reads_hermes_usage_and_appends_only_what_grew() {
+    if std::process::Command::new("sqlite3")
+        .arg("-version")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipped: no sqlite3");
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let hermes = tmp.path().join("hermes");
+    std::fs::create_dir_all(&hermes).unwrap();
+    let db = hermes.join("state.db");
+    let sql = |text: &str| {
+        let mut make = std::process::Command::new("sqlite3")
+            .arg(&db)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write as _;
+        make.stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        assert!(make.wait().unwrap().success());
+    };
+    sql(&std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/hermes/state.sql"),
+    )
+    .unwrap());
+    let g = tmp.path().join("g");
+    let import = || {
+        girth()
+            .env("GIRTH_HOME", &g)
+            .env("HERMES_HOME", &hermes)
+            .args(["import", "--from", "hermes"])
+            .assert()
+            .success()
+    };
+    // s1's two rows, s2's session row, s4's row; s3 spent nothing.
+    import().stdout("imported 4 turns from hermes\n");
+    import().stdout("imported 0 turns from hermes\n");
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    let turns: Vec<serde_json::Value> = ledger
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let main = &turns[0];
+    assert_eq!(main["harness"], "hermes");
+    assert_eq!(main["project"], "/work/hermes-app");
+    assert_eq!(main["session"], "s1");
+    assert_eq!(main["model"], "claude-sonnet-5-5");
+    assert_eq!(main["ts"], 1794600000);
+    // Hermes's output already counts reasoning; its input excludes cache reads and writes.
+    assert_eq!(
+        (main["input"].as_u64(), main["output"].as_u64()),
+        (Some(1200), Some(800))
+    );
+    assert_eq!(
+        (main["cache_read"].as_u64(), main["cache_write"].as_u64()),
+        (Some(50000), Some(9000))
+    );
+    assert_eq!(main["requests"], 3);
+    assert_eq!(main["cost_micros"], 31200);
+    assert_eq!(main["agent"], false);
+    // An auxiliary task and a delegated child count as side work, not the main loop.
+    assert_eq!(turns[1]["agent"], true);
+    assert_eq!(turns[1]["model"], "claude-haiku-5-5");
+    let gateway = turns.iter().find(|t| t["session"] == "s2").unwrap();
+    // The actual cost wins over the estimate; no folder becomes an empty project.
+    assert_eq!(gateway["cost_micros"], 2000);
+    assert_eq!(gateway["project"], "");
+    assert_eq!(gateway["ts"], 1794600100);
+    assert_eq!(
+        turns.iter().find(|t| t["session"] == "s4").unwrap()["agent"],
+        true
+    );
+    // The session goes on: only what grew is appended.
+    sql(
+        "UPDATE session_model_usage SET api_call_count = 5, input_tokens = 2000, output_tokens = 1300, cache_read_tokens = 90000, estimated_cost_usd = 0.05, last_seen = 1794601000 WHERE session_id = 's1' AND task = '';",
+    );
+    import().stdout("imported 1 turns from hermes\n");
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    let last: serde_json::Value = serde_json::from_str(ledger.lines().last().unwrap()).unwrap();
+    assert_eq!(
+        (last["input"].as_u64(), last["output"].as_u64()),
+        (Some(800), Some(500))
+    );
+    assert_eq!(
+        (last["cache_read"].as_u64(), last["cache_write"].as_u64()),
+        (Some(40000), Some(0))
+    );
+    assert_eq!(
+        (last["requests"].as_u64(), last["cost_micros"].as_u64()),
+        (Some(2), Some(18800))
+    );
+    import().stdout("imported 0 turns from hermes\n");
+    // No Hermes database: nothing, quietly.
+    girth()
+        .env("GIRTH_HOME", tmp.path().join("g3"))
+        .env("HERMES_HOME", tmp.path().join("nowhere"))
+        .args(["import", "--from", "hermes"])
+        .assert()
+        .success()
+        .stdout("imported 0 turns from hermes\n")
+        .stderr("");
+}
+
+#[test]
+fn advise_for_another_harness_never_claims_girth_compacts_it() {
+    let tmp = TempDir::new().unwrap();
+    let g = tmp.path().join("g");
+    std::fs::create_dir_all(&g).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    std::fs::write(
+        g.join("ledger.jsonl"),
+        format!(
+            r#"{{"v":1,"ts":{now},"kind":"turn","project":"/w","model":"claude-sonnet-5-5","input":1,"output":1,"cache_read":400000,"cache_write":0,"agent":false,"aborted":false,"requests":1,"harness":"hermes"}}"#
+        ) + "\n",
+    )
+    .unwrap();
+    let out = girth()
+        .env("GIRTH_HOME", &g)
+        .args(["advise", "--harness", "hermes"])
+        .assert()
+        .success();
+    let text = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(text.contains("large conversations"), "{text}");
+    assert!(!text.contains("Girth compacts"), "{text}");
+    assert!(text.contains("/new"), "{text}");
 }

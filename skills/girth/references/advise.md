@@ -1,7 +1,7 @@
 # Cut usage, keep things working
 
 1. Run `scripts/girth advise` (`--since 24h` for today). Costs are list-price estimates; shares overlap.
-   Outside Claude Code, run `scripts/girth import` first, then `scripts/girth advise --harness codex` (or `copilot`, `opencode`, `gemini`, `antigravity`). The fixes then name that harness's commands. For Copilot, the dollars are list prices; its bill is the premium requests the report names.
+   Outside Claude Code, run `scripts/girth import` first, then `scripts/girth advise --harness codex` (or `copilot`, `opencode`, `gemini`, `antigravity`, `hermes`). The fixes then name that harness's commands. For Copilot, the dollars are list prices; its bill is the premium requests the report names.
 2. Summarise the top three contributors in one line each: the share, what it is, and the fix.
 3. Apply **one** fix at a time, and only the one the user picks. Then run its guard:
    - a skill: distil its slice (the craft flow), then `scripts/girth validate` and `scripts/girth drift`;
