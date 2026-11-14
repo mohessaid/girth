@@ -169,7 +169,7 @@ test('session start registers /girth-meter and warms the binary up with a long t
   on('fs.exists', () => ({ value: false }))
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  expect(names).toEqual(['girth-meter', 'girth-xray'])
+  expect(names).toEqual(['girth-meter', 'girth-xray', 'girth-pane'])
   // A fresh install downloads the binary once; do it here, not inside Lens's 5 s budget.
   expect(runs.length).toBe(1)
   expect(runs[0].argv.slice(1)).toEqual(['--version'])
@@ -199,7 +199,7 @@ test('a failed warm-up still registers the command', async ($, on) => {
   on('fs.exists', () => ({ value: false }))
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  expect(names).toEqual(['girth-meter', 'girth-xray'])
+  expect(names).toEqual(['girth-meter', 'girth-xray', 'girth-pane'])
 })
 
 const MCP = '# MCP\n\n## claude.ai Figma\nUse get_design_context.\n'
@@ -1166,4 +1166,86 @@ test('a compaction without a transcript to read goes on as it came', async ($, o
   })
   await $.session.compact({ instructions: 'the plan' })
   expect(told).toEqual(['the plan'])
+})
+
+import { paneLines } from '../girth.js'
+
+const MIN = 60_000
+const usage = (over = {}) => ({
+  startedAt: 0,
+  cost: { usd: 3.4219 },
+  context: { tokens: 324_349, window: 1_000_000, percent: 32 },
+  rateLimits: [
+    { kind: 'five_hour', percentUsed: 23.5 },
+    { kind: 'seven_day', percentUsed: 41 },
+  ],
+  ...over,
+})
+
+test('the pane says what this session cost, how big it is, and what happens next', () => {
+  const at = 1_000 * MIN
+  const lines = paneLines({ usage: usage(), now: at + 17 * MIN, at, plan: { pings: 0, interval_ms: 55 * MIN, compact: true }, compacted: null })
+  expect(lines).toEqual([
+    'spend    $3.42 this session (Claude Code\'s own figure)',
+    'context  324K of 1M tokens (32%)',
+    'cache    warm for 43 more min',
+    'next     idle compaction in 38 min, if no turn comes first',
+    'plan     5h 23.5% · 7d 41%',
+  ])
+})
+
+test('the pane after the cache expired, with the keeper, a compaction and nothing known', () => {
+  const at = 1_000 * MIN
+  const keeper = paneLines({
+    usage: usage({ rateLimits: [], cost: undefined, context: { window: 200_000 } }),
+    now: at + 70 * MIN,
+    at,
+    plan: { pings: 3, interval_ms: 55 * MIN },
+    compacted: { before: 583_000, after: 21_000, at: at + 55 * MIN },
+  })
+  expect(keeper).toEqual([
+    'spend    unknown',
+    'context  unknown of 200K tokens',
+    'cache    expired 10 min ago: the next turn writes the whole context again',
+    'next     nothing scheduled',
+    'last     compacted 583K → 21K tokens, 15 min ago',
+  ])
+  const pinging = paneLines({ usage: usage(), now: at + 5 * MIN, at, plan: { pings: 3, interval_ms: 55 * MIN }, compacted: null })
+  expect(pinging[3]).toBe('next     the keeper pings in 50 min to keep the cache warm')
+  const fresh = paneLines({ usage: usage(), now: 5, at: 0, plan: null, compacted: null })
+  expect(fresh[2]).toBe('cache    no turn yet')
+  expect(fresh[3]).toBe('next     nothing scheduled')
+  // Cents and less keep their digits.
+  expect(paneLines({ usage: usage({ cost: { usd: 0.00431 } }), now: 5, at: 0, plan: null, compacted: null })[0]).toBe("spend    $0.0043 this session (Claude Code's own figure)")
+  expect(paneLines({ usage: usage({ context: { tokens: 1_250_000, window: 2_000_000 } }), now: 5, at: 0, plan: null, compacted: null })[1]).toBe('context  1.2M of 2M tokens')
+})
+
+test('/girth-pane opens the pane, and it draws the session on every surface', async ($, on) => {
+  const opened: unknown[] = []
+  on('command.register', () => ({ value: undefined }))
+  on('fs.exists', () => ({ value: true }))
+  on('session.start', () => ({ cwd: '/work/app' }))
+  on('ui.open', ($: any, e: any) => {
+    opened.push(e)
+    return { value: { isPlaced: true } }
+  })
+  on('session.usage', () => ({ value: usage() }))
+  on('clock.now', () => ({ value: 1_000 }))
+  on('clock.after', () => ({ value: { cancel() {} } }))
+  await $.session.start({ cwd: '/work/app' })
+  expect(opened.length).toBe(0)
+  const ran = await $.command.run({ command: 'girth-pane', args: '' })
+  expect(ran.text).toContain('pane')
+  expect(opened.length).toBe(1)
+  for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'girth',
+      component: 'Pane',
+      requestId: 'girth',
+      props: { title: 'Girth', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+      surface,
+    })
+    expect((await ui.find({ type: 'Text', text: /spend/ }))?.text).toContain('$3.42')
+    await ui.unmount()
+  }
 })

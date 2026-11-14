@@ -222,6 +222,61 @@ export function compactInstructions(instructions, messages) {
   return parts.filter((p) => p !== '').join('\n\n')
 }
 
+// The pane: what this session costs and what Girth will do next, from the engine's own
+// figures ($.session.usage, free) and the last main turn's keeper plan.
+const PANE = 'girth'
+const CACHE_TTL_MS = 60 * 60 * 1000
+const REFRESH_MS = 60 * 1000
+const pane = { at: 0, plan: null, compacted: null }
+let paneRefresh = null
+
+function tokens(n) {
+  if (n >= 1_000_000) {
+    const m = Math.floor(n / 100_000) / 10
+    return `${m % 1 === 0 ? m.toFixed(0) : m}M`
+  }
+  return n >= 1_000 ? `${Math.floor(n / 1_000)}K` : `${n}`
+}
+
+const minutes = (ms) => Math.max(1, Math.ceil(ms / 60_000))
+
+const WINDOW = { five_hour: '5h', seven_day: '7d', spend_limit: 'spend limit' }
+
+/** The pane's lines: spend, context, cache, what happens next, the plan, the last compaction. */
+export function paneLines({ usage, now, at, plan, compacted }) {
+  const lines = []
+  const usd = usage?.cost?.usd
+  lines.push(typeof usd === 'number' ? `spend    $${usd.toFixed(usd < 1 ? 4 : 2)} this session (Claude Code's own figure)` : 'spend    unknown')
+  const ctx = usage?.context ?? {}
+  const size = typeof ctx.tokens === 'number' ? tokens(ctx.tokens) : 'unknown'
+  const pct = typeof ctx.percent === 'number' ? ` (${ctx.percent}%)` : ''
+  lines.push(`context  ${size} of ${typeof ctx.window === 'number' ? tokens(ctx.window) : '?'} tokens${pct}`)
+  if (!at) {
+    lines.push('cache    no turn yet')
+  } else if (now - at < CACHE_TTL_MS) {
+    lines.push(`cache    warm for ${minutes(at + CACHE_TTL_MS - now)} more min`)
+  } else {
+    lines.push(`cache    expired ${minutes(now - at - CACHE_TTL_MS)} min ago: the next turn writes the whole context again`)
+  }
+  const fire = at && plan ? at + (plan.interval_ms ?? 0) : 0
+  if (fire > now && plan?.compact === true) {
+    lines.push(`next     idle compaction in ${minutes(fire - now)} min, if no turn comes first`)
+  } else if (fire > now && plan?.pings > 0) {
+    lines.push(`next     the keeper pings in ${minutes(fire - now)} min to keep the cache warm`)
+  } else {
+    lines.push('next     nothing scheduled')
+  }
+  const limits = (usage?.rateLimits ?? [])
+    .filter((r) => typeof r?.percentUsed === 'number')
+    .map((r) => `${WINDOW[r.kind] ?? r.kind} ${r.percentUsed}%`)
+  if (limits.length > 0) lines.push(`plan     ${limits.join(' · ')}`)
+  if (compacted && typeof compacted.before === 'number') {
+    const sizes = typeof compacted.after === 'number' ? `${tokens(compacted.before)} → ${tokens(compacted.after)} tokens` : `${tokens(compacted.before)} tokens`
+    lines.push(`last     compacted ${sizes}, ${minutes(now - compacted.at)} min ago`)
+  }
+  return lines
+}
+
 // Adds a large result's estimated tokens to its loop's turn.
 function measure(agentId, tool, text) {
   if (text.length < LARGE_OUTPUT_CHARS) return
@@ -359,6 +414,7 @@ export function register(on) {
     for (const [name, description] of [
       ['girth-meter', 'Show token usage and Lens savings for this project'],
       ['girth-xray', 'Show what the last request was made of'],
+      ['girth-pane', 'Open a pane with this session\'s spend, cache and what Girth does next'],
     ]) {
       await $.command.register({ name, description })
     }
@@ -610,13 +666,25 @@ export function register(on) {
       squeeze ??= compactor({
         after: (ms, fn) => $.clock.after(ms, fn),
         compact: () => $.session.compact(),
-        record: (c) =>
-          $.process.run([launcher($), 'compact', 'record'], {
+        record: async (c) => {
+          pane.compacted = { ...c, at: await $.clock.now() }
+          $.ui.invalidate('ui.render')
+          return $.process.run([launcher($), 'compact', 'record'], {
             stdin: JSON.stringify({ project: cwd, model: usage.model, ...c }),
             timeoutMs: TIMEOUT_MS,
-          }),
+          })
+        },
       })
       squeeze.start(report.keeper, context)
+    }
+    if (e.agentId === undefined) {
+      try {
+        pane.at = await $.clock.now()
+        pane.plan = report.keeper ?? null
+        $.ui.invalidate('ui.render')
+      } catch {
+        // The pane is a view; it never costs a turn.
+      }
     }
     if (e.agentId !== undefined) return result
     // After the turn is recorded, and never holding the answer up for long; the timer is
@@ -671,6 +739,23 @@ export function register(on) {
     if (typeof result?.agentId === 'string' && typeof e.subagentType === 'string') kinds.set(result.agentId, e.subagentType)
     return result
   }).catch(async ($, e, next) => next(e))
+
+  on('command.run', { command: 'girth-pane' }, async ($) => {
+    await $.ui.open({ id: PANE, title: 'Girth' })
+    return { text: 'girth: pane opened (spend, context, cache and what Girth does next)' }
+  }).catch(async () => ({ text: 'girth: the pane is unavailable here' }))
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text } = $.ui.resolve(e)
+    const [usage, now] = await Promise.all([$.session.usage(), $.clock.now()])
+    // Relative times go stale: draw again each minute while the pane is shown.
+    paneRefresh ??= $.clock.after(REFRESH_MS, () => {
+      paneRefresh = null
+      $.ui.invalidate('ui.render')
+    })
+    const lines = paneLines({ usage, now, ...pane })
+    return h(Box, { flexDirection: 'column' }, ...lines.map((line) => h(Text, {}, line)))
+  })
 
   on('command.run', { command: 'girth-meter' }, async ($, e) => {
     const cwd = await $.session.cwd()

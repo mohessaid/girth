@@ -217,6 +217,14 @@ The estimate prices the main conversation's cache writes at the 1-hour rate Clau
   - On a subscription the saving is in plan usage rather than dollars. Girth can't verify that plans weigh cache reads and writes the way the API prices them.
 - **Settings:** pings only happen for conversations of 20,000 tokens or more. Change that with `{"keeper": {"max_pings": 3, "min_context": 20000}}`. Turn it off with `{"keeper": {"enabled": false}}`, or `GIRTH_KEEPER=off` for one session.
 
+**Pane:** `/girth-pane` opens a live panel beside the chat, drawn from Claude Code's own figures. It never opens unasked, and redraws each minute while it's shown.
+- this session's spend;
+- the context size;
+- how long the prompt cache stays warm;
+- what Girth does next (a keeper ping or an idle compaction, and when);
+- the plan's 5-hour and 7-day usage;
+- the last compaction.
+
 **Doctor:** when a turn had to write the cache again, Girth says why under the answer, for example: `girth: the prompt cache had expired (idle 3h 12m); this turn re-wrote 450K tokens (≈ $3.60)`. `girth stats --meter` totals these rewrites and the keeper's pings.
 
 **Idle compaction (on by default since 0.26)** makes the most expensive conversations cheaper to come back to.

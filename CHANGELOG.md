@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-14
+
+### Added
+- **`/girth-pane`: a live panel beside the chat.** It draws from Claude Code's own `session.usage` figures (free) and the last turn's keeper plan:
+  - this session's spend;
+  - the context size and its share of the window;
+  - how long the prompt cache stays warm, or how long ago it expired;
+  - what Girth does next, and when: idle compaction or a keeper ping;
+  - the 5-hour and 7-day plan windows;
+  - the last idle compaction.
+
+  It opens only when asked, and redraws each minute while it's shown. Checked live on Claude Code 2.1.325.
+
 ## [0.27.0] - 2026-11-14
 
 ### Added
@@ -453,7 +466,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/mohessaid/girth/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/mohessaid/girth/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/mohessaid/girth/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/mohessaid/girth/compare/v0.25.2...v0.26.0
