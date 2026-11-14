@@ -95,12 +95,15 @@ pub fn verdict(tasks: &[TaskResult], fired: Option<u64>) -> Verdict {
 
 /// What an agent's output says about one run: whether the skill fired and what the run
 /// cost. `None` when the output isn't Claude Code's JSON.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Stream {
     pub fired: Option<bool>,
     pub cost: Option<f64>,
     /// The result said the run errored (`is_error`), such as a login or API failure.
     pub error: bool,
+    /// The first tool a permission prompt blocked, when the result lists denials:
+    /// nobody is there to answer one in a headless run.
+    pub denied: Option<String>,
 }
 
 /// Reads Claude Code's `stream-json` lines (or one `json` result object).
@@ -136,6 +139,12 @@ pub fn read_stream(stdout: &str, skill: &str) -> Stream {
             }
             "result" => {
                 out.error |= v.get("is_error").and_then(|e| e.as_bool()) == Some(true);
+                if let Some(first) = v
+                    .pointer("/permission_denials/0/tool_name")
+                    .and_then(|t| t.as_str())
+                {
+                    out.denied.get_or_insert_with(|| first.to_string());
+                }
                 out.cost = v
                     .get("total_cost_usd")
                     .and_then(|c| c.as_f64())
@@ -149,7 +158,11 @@ pub fn read_stream(stdout: &str, skill: &str) -> Stream {
 
 /// The agent `girth trial` runs when `--agent` isn't given: Claude Code, headless, with
 /// user-level skills, plugins and MCP servers hidden so the skill is the only difference.
-pub const DEFAULT_AGENT: &str = "claude -p --output-format stream-json --verbose --setting-sources project,local --permission-mode acceptEdits --allowedTools Bash,Skill";
+/// It runs with permissions bypassed: a headless run can't answer a prompt, and Claude
+/// Code asks even under `acceptEdits` before writing a protected path such as `.claude/`
+/// (checked on 2.1.325). Each run is a throwaway clone, and Bash alone could already
+/// write anywhere, so this adds reach to the clone, not to what a run could do.
+pub const DEFAULT_AGENT: &str = "claude -p --output-format stream-json --verbose --setting-sources project,local --permission-mode bypassPermissions";
 
 pub struct Options {
     pub skill_dir: PathBuf,
@@ -176,6 +189,9 @@ pub struct Report {
     pub timed_out: u64,
     pub check_timed_out: u64,
     pub errored: u64,
+    /// Runs a permission prompt blocked, and the first tool it blocked.
+    pub blocked: u64,
+    pub blocked_tool: Option<String>,
     /// The first line an erroring agent printed to stderr, to say why.
     pub error_line: Option<String>,
     pub verdict: Verdict,
@@ -224,6 +240,13 @@ impl Report {
             lines.push(format!(
                 "{} agent runs ended in an error (counted as fails){why}",
                 self.errored
+            ));
+        }
+        if self.blocked > 0 {
+            let first = self.blocked_tool.as_deref().unwrap_or("a tool");
+            lines.push(format!(
+                "{} runs were blocked by a permission prompt that a headless run can't answer (first: {first}); give --agent a permission mode that allows it",
+                self.blocked
             ));
         }
         if !self.tasks.is_empty()
@@ -280,6 +303,7 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
         let (mut fired, mut fired_known) = (0u64, true);
         let (mut with_costs, mut without_costs) = (Vec::new(), Vec::new());
         let (mut timed_out, mut check_timed_out, mut errored) = (0, 0, 0);
+        let (mut blocked, mut blocked_tool) = (0u64, None::<String>);
         let mut error_line = None;
         for (i, (prompt, check)) in opts.tasks.iter().enumerate() {
             let mut t = TaskResult {
@@ -314,6 +338,10 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
                 let stream =
                     read_stream(&std::fs::read_to_string(&out).unwrap_or_default(), &skill);
                 let failed = agent == Exit::Failed || stream.error;
+                if let Some(tool) = &stream.denied {
+                    blocked += 1;
+                    blocked_tool.get_or_insert_with(|| tool.clone());
+                }
                 if failed {
                     errored += 1;
                     if error_line.is_none() {
@@ -375,6 +403,8 @@ pub fn run(project: &Path, opts: &Options, mut log: impl FnMut(&str)) -> Result<
             check_timed_out,
             errored,
             error_line,
+            blocked,
+            blocked_tool,
         })
     })();
     let _ = std::fs::remove_dir_all(&scratch);
@@ -628,7 +658,8 @@ mod tests {
             Stream {
                 fired: Some(true),
                 cost: Some(0.00221888),
-                error: false
+                error: false,
+                denied: None
             }
         );
         let namespaced = SMOKE.replace("\"greeting-file\"", "\"plug:greeting-file\"");
@@ -649,12 +680,21 @@ mod tests {
             Stream {
                 fired: None,
                 cost: Some(0.5),
-                error: false
+                error: false,
+                denied: None
             }
         );
         assert_eq!(
             read_stream("done\n{not json\n[1,2]", "x"),
             Stream::default()
         );
+        let failed = r#"{"type":"result","is_error":true,"result":"Invalid API key"}"#;
+        assert!(read_stream(failed, "x").error);
+        assert!(!read_stream(json, "x").error);
+        let blocked = r#"{"type":"result","permission_denials":[{"tool_name":"Write","tool_input":{}},{"tool_name":"Edit"}]}"#;
+        assert_eq!(read_stream(blocked, "x").denied.as_deref(), Some("Write"));
+        assert_eq!(read_stream(json, "x").denied, None);
+        let none = r#"{"type":"result","permission_denials":[]}"#;
+        assert_eq!(read_stream(none, "x").denied, None);
     }
 }

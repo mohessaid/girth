@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- **`girth trial`'s default agent could not write under `.claude/`.** Claude Code asks before writing a protected path, even under `acceptEdits` with `Write` allowed, and nobody is there to answer in a headless run. So a trial of a skill-writing task failed in both arms: a dogfood trial of this repo's `girth-skill-authoring` went 0/3 vs 0/3.
+  - The default agent now runs with `--permission-mode bypassPermissions` inside each throwaway clone. Bash alone could already write anywhere, so this adds reach inside the clone, not to what a run could do.
+  - A run that a permission prompt blocked is now reported, with the first tool it blocked, instead of passing as a silent fail.
+
 ## [0.26.0] - 2026-11-14
 
 ### Changed

@@ -245,7 +245,7 @@ Girth keeps a local, append-only ledger (`~/.girth/ledger.jsonl`) of which skill
 - A skill that never fired decides nothing.
 - Cost is shown but not judged.
 - The verdict (admit, reject or undecided) goes to the ledger and shows in `girth stats`.
-- It uses headless Claude Code by default, with Bash pre-approved, so trial only skills you'd let run.
+- It uses headless Claude Code by default, with permissions bypassed inside each throwaway clone (a headless run can't answer a prompt), so trial only skills you'd let run.
 - `--agent` takes another harness's command-line agent; the skill goes in `.agents/skills` too (verified with Codex).
 
 **Sharing is opt-in and anonymous.** Girth asks once. If you allow it, only **content hashes of public skill sections plus counts** (used / kept / removed / up / down) would be shared, never names, paths, text, notes or anything from your project. Nothing is uploaded until the Girth index launches. Run `girth share preview` to see exactly what would be sent.

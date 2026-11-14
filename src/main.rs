@@ -193,7 +193,7 @@ enum Command {
     /// Each run works in a fresh clone of this repo at HEAD (untracked files and build caches aren't there, so checks may
     /// rebuild). A task counts as won or lost only when chance would give its gap at most 1 time in 20 (Fisher's exact
     /// test): at 3 runs only 3/3 vs 0/3 decides, and more runs sharpen it. Cost is shown, never judged. The default agent
-    /// is Claude Code, headless, with user-level skills, plugins and MCP servers hidden, and Bash pre-approved: the skill's
+    /// is Claude Code, headless, with user-level skills, plugins and MCP servers hidden, and permissions bypassed inside its throwaway clone: the skill's
     /// instructions run with your environment, so trial only skills you'd let run. `--agent` takes any command that
     /// reads the prompt on stdin (the skill is placed in .claude/skills and .agents/skills; whether it fired is then
     /// unknown). Runs spend model usage.

@@ -1,0 +1,1 @@
+Create a new project skill for this repo at .claude/skills/girth-sql-migrations/SKILL.md. It should help an agent write reversible Postgres schema migrations (up and down scripts, no data loss, locks on big tables). Write only that one file.

@@ -2,7 +2,7 @@
 
 A trial runs the same task with and without the skill and grades each run with a command. Runs cost model usage, so start one only when the user asks.
 
-The default agent pre-approves Bash. The skill's instructions then run shell commands with the user's environment, so trial only skills the user would let run (never a fetched, unreviewed one).
+The default agent runs with permissions bypassed inside each throwaway clone, since a headless run can't answer a prompt. The skill's instructions then run commands with the user's environment, so trial only skills the user would let run (never a fetched, unreviewed one).
 
 1. Ask for, or agree on, two things:
    - **A task prompt.** Write it to a file outside the repo.

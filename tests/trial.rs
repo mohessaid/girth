@@ -287,6 +287,19 @@ fn agent_errors_and_check_timeouts_count_as_fails_and_say_why() {
         .stdout(predicates::str::contains(
             "4 checks timed out (counted as fails)",
         ));
+    // A run a permission prompt blocked says so: a headless run can't answer it.
+    let a = agent(
+        &f,
+        "p.sh",
+        r#"echo '{"type":"result","permission_denials":[{"tool_name":"Write"}]}'"#,
+    );
+    trial(&f)
+        .args(["--task", task, "--check", "false", "--runs", "2", "--agent", &a])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "4 runs were blocked by a permission prompt that a headless run can't answer (first: Write)",
+        ));
     // An `is_error` result fails the run even when the agent exits 0.
     let a = agent(
         &f,
