@@ -111,6 +111,7 @@ fn a_skill_that_makes_the_check_pass_is_admitted_and_recorded() {
         "ended in an error",
         "every run failed",
         "no task can be decided",
+        "blocked by a permission prompt",
     ] {
         assert!(!text.contains(quiet), "{quiet}: {text}");
     }

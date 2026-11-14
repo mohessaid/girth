@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-11-14
+
 ### Fixed
 - **`girth trial`'s default agent could not write under `.claude/`.** Claude Code asks before writing a protected path, even under `acceptEdits` with `Write` allowed, and nobody is there to answer in a headless run. So a trial of a skill-writing task failed in both arms: a dogfood trial of this repo's `girth-skill-authoring` went 0/3 vs 0/3.
   - The default agent now runs with `--permission-mode bypassPermissions` inside each throwaway clone. Bash alone could already write anywhere, so this adds reach inside the clone, not to what a run could do.
@@ -434,7 +436,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.26.1...HEAD
+[0.26.1]: https://github.com/mohessaid/girth/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/mohessaid/girth/compare/v0.25.2...v0.26.0
 [0.25.2]: https://github.com/mohessaid/girth/compare/v0.25.1...v0.25.2
 [0.25.1]: https://github.com/mohessaid/girth/compare/v0.25.0...v0.25.1
