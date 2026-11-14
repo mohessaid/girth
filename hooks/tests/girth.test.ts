@@ -1265,19 +1265,40 @@ test('a plan window at 80% or more gets one line with when it resets', () => {
 })
 
 test('the plan line goes under the first main answer with the advice', async ($, on) => {
+  const plans: any[] = []
+  let binaryKnowsPlan = false
+  let clock = 1_000
   on('session.cwd', () => ({ value: '/work/app' }))
   on('process.run', ($: any, e: any) => {
     if (e.argv.includes('advise')) return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    if (e.argv.includes('plan')) {
+      plans.push(JSON.parse(e.init.stdin))
+      return binaryKnowsPlan
+        ? { value: { exitCode: 0, stdout: '{"line":"88% used; at the last 10h pace it runs out in 6h 40m"}', stderr: '' } }
+        : { value: { exitCode: 2, stdout: '', stderr: 'unknown command' } }
+    }
     return { value: { exitCode: 0, stdout: JSON.stringify({ keeper: { pings: 0, interval_ms: 1 } }), stderr: '' } }
   })
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'seven_day', percentUsed: 88 }] } }))
-  on('clock.now', () => ({ value: 1_000 }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1 }, rateLimits: [{ kind: 'seven_day', percentUsed: 88, resetsAt: '2026-11-16T15:30:00Z' }] } }))
+  on('clock.now', () => ({ value: clock }))
   on('turn.complete', () => ({ text: 'a' }))
   on('command.register', () => ({ value: undefined }))
   on('fs.exists', () => ({ value: true }))
   on('session.start', () => ({ cwd: '/work/app' }))
   await $.session.start({ cwd: '/work/app' })
   const done = { turnId: 't', answer: 'a', durationMs: 1, isAborted: false, usage: USAGE }
-  expect((await $.turn.complete(done)).text).toBe('88% of your 7-day plan window is used')
+  // An older binary without `plan record`: the plain line, with the reset.
+  const first = (await $.turn.complete(done)).text
+  expect(first).toMatch(/^88% of your 7-day plan window is used/)
+  expect(plans[0]).toEqual({ readings: [{ kind: 'seven_day', permille: 880, resets_at: 1794843000 }] })
+  // Later turns record again only every 15 minutes, and say nothing more.
   expect((await $.turn.complete(done)).text).toBe('a')
+  expect(plans.length).toBe(1)
+  clock += 15 * 60 * 1000
+  expect((await $.turn.complete(done)).text).toBe('a')
+  expect(plans.length).toBe(2)
+  // A new session with a binary that knows the pace: its line.
+  binaryKnowsPlan = true
+  await $.session.start({ cwd: '/work/app' })
+  expect((await $.turn.complete(done)).text).toBe('88% used; at the last 10h pace it runs out in 6h 40m')
 })

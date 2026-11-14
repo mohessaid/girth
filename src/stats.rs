@@ -120,6 +120,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
             | Event::Compact(_)
             | Event::Side(_)
             | Event::Schema(_)
+            | Event::Plan(_)
             | Event::Trial(_) => {}
         }
     }
@@ -164,6 +165,7 @@ pub fn compute(records: &[Record], sharing: Sharing) -> Stats {
             | Event::Ping(_)
             | Event::Compact(_)
             | Event::Side(_)
+            | Event::Plan(_)
             | Event::Schema(_) => {}
         }
     }

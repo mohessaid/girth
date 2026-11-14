@@ -114,6 +114,11 @@ enum Command {
         #[command(subcommand)]
         what: SchemaWhat,
     },
+    /// Plan-window readings, and the line for a window 80% used (used by the plugin's mod).
+    Plan {
+        #[command(subcommand)]
+        what: PlanWhat,
+    },
     /// Idle compactions of large conversations (used by the plugin's mod).
     Compact {
         #[command(subcommand)]
@@ -288,6 +293,13 @@ enum MeterWhat {
 #[derive(Subcommand)]
 enum CompactWhat {
     /// Append one idle compaction, read as JSON from stdin. Bad input is ignored.
+    Record,
+}
+
+#[derive(Subcommand)]
+enum PlanWhat {
+    /// Append readings from stdin (`{"readings": [{"kind", "permille", "resets_at"}]}`) and
+    /// print `{"line": …}` for a window 80% used or more, else `{}`. Bad input is ignored.
     Record,
 }
 
@@ -1214,6 +1226,48 @@ fn main() -> ExitCode {
                     let _ = ledger::append(&home, Event::Side(side));
                 }
             }
+            ExitCode::SUCCESS
+        }
+        Command::Plan {
+            what: PlanWhat::Record,
+        } => {
+            use std::io::Read;
+            #[derive(serde::Deserialize, Default)]
+            struct Input {
+                #[serde(default)]
+                readings: Vec<serde_json::Value>,
+            }
+            let mut input = String::new();
+            let _ = std::io::stdin().read_to_string(&mut input);
+            let home = girth_home(&ctx);
+            let readings = serde_json::from_str::<Input>(&input).unwrap_or_default();
+            #[derive(serde::Deserialize)]
+            struct Reading {
+                kind: String,
+                permille: u32,
+                resets_at: Option<u64>,
+            }
+            for r in readings.readings.into_iter().take(8) {
+                if let Ok(r) = serde_json::from_value::<Reading>(r) {
+                    if !r.kind.is_empty() && r.kind.len() <= 32 {
+                        let p = ledger::PlanReading {
+                            window: r.kind,
+                            permille: r.permille,
+                            resets_at: r.resets_at,
+                        };
+                        let _ = ledger::append(&home, Event::Plan(p));
+                    }
+                }
+            }
+            let line = girth::plan::line(&ledger::read(&home), ledger::now());
+            let _ = writeln!(
+                out,
+                "{}",
+                match line {
+                    Some(l) => serde_json::json!({ "line": l }),
+                    None => serde_json::json!({}),
+                }
+            );
             ExitCode::SUCCESS
         }
         Command::Schema {

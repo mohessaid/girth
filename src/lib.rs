@@ -15,6 +15,7 @@ pub mod mcp_lens;
 pub mod measure;
 pub mod meter;
 pub mod outcome;
+pub mod plan;
 pub mod price;
 pub mod record;
 pub mod schema;

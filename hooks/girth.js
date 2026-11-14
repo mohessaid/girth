@@ -288,6 +288,43 @@ function span(ms) {
   return `${Math.floor(h / 24)}d ${h % 24}h`
 }
 
+const PLAN_EVERY_MS = 15 * 60 * 1000
+let planAt = 0
+
+/** Claude Code's rate-limit readings as the binary's plan readings (per mille, Unix seconds). */
+export function planReadings(rateLimits) {
+  return (Array.isArray(rateLimits) ? rateLimits : [])
+    .filter((r) => typeof r?.kind === 'string' && Number.isFinite(r?.percentUsed) && r.percentUsed >= 0)
+    .map((r) => {
+      const at = typeof r.resetsAt === 'string' ? Date.parse(r.resetsAt) : NaN
+      const reading = { kind: r.kind, permille: Math.round(r.percentUsed * 10) }
+      if (Number.isFinite(at)) reading.resets_at = Math.floor(at / 1000)
+      return reading
+    })
+}
+
+/** Records the plan readings (at most every PLAN_EVERY_MS unless `force`) and returns the
+ * line to show: the binary's, with its pace, or the plain one if the binary can't say. */
+async function recordPlan($, force) {
+  const usage = await $.session.usage()
+  const now = await $.clock.now()
+  let line = planLine(usage.rateLimits, now)
+  const readings = planReadings(usage.rateLimits)
+  if (readings.length === 0 || (!force && now - planAt < PLAN_EVERY_MS)) return line
+  planAt = now
+  try {
+    const run = await $.process.run([launcher($), 'plan', 'record'], {
+      stdin: JSON.stringify({ readings }),
+      timeoutMs: TIMEOUT_MS,
+    })
+    const said = run.exitCode === 0 ? JSON.parse(run.stdout) : null
+    if (said && typeof said === 'object') line = typeof said.line === 'string' ? said.line : null
+  } catch {
+    // An older binary: the plain line stands.
+  }
+  return line
+}
+
 /** One line for the fullest plan window at PLAN_WARN% or more, with when it resets; else null. */
 export function planLine(rateLimits, now) {
   const top = (Array.isArray(rateLimits) ? rateLimits : [])
@@ -734,10 +771,16 @@ export function register(on) {
         // Advice is never worth breaking a turn over.
       }
       try {
-        const line = planLine((await $.session.usage()).rateLimits, await $.clock.now())
+        const line = await recordPlan($, true)
         if (line) lines.push(line)
       } catch {
         // No rate limits read: nothing to say.
+      }
+    } else {
+      try {
+        await recordPlan($, false)
+      } catch {
+        // Readings are for the pace; a missed one costs nothing.
       }
     }
     if (lines.length === 0) return result

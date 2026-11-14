@@ -96,6 +96,19 @@ pub enum Event {
     Schema(Schema),
     /// A skill trial: the same tasks run with and without a skill, and the verdict.
     Trial(Trial),
+    /// One plan window's fill as Claude Code last read it.
+    Plan(PlanReading),
+}
+
+/// A plan window (`five_hour`, `seven_day`, `spend_limit`), how full it was in per mille,
+/// and when it resets (Unix seconds). Numbers and a window name only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanReading {
+    /// The window's name. Not `kind`: that's the ledger's event tag.
+    pub window: String,
+    pub permille: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<u64>,
 }
 
 /// A `girth trial` result. Pass counts, costs and the verdict only; never task text,

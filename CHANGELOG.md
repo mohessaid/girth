@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- **The plan line now says whether the window runs out before it resets.**
+  - **What's recorded:** the mod records Claude Code's plan readings in the local ledger: at a session's first turn, then at most every 15 minutes. Only the window name, its fill and its reset time are kept.
+  - **The pace:** for a window 80% used or more, `girth plan record` works it out from that window's own readings over up to the last 24 hours (at least 1 hour apart). For example: `88% of your 7-day plan window is used; at the last 10h 0m's pace it runs out in 6h 40m, 2d 17h before it resets`. When the pace is slower, it says the window lasts until it resets.
+  - **Without enough readings,** it gives the reset time alone. An older binary leaves the mod's plain line.
+
 ## [0.29.0] - 2026-11-14
 
 ### Added

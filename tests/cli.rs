@@ -2160,3 +2160,42 @@ fn import_reads_goose_sessions_splitting_the_cache_out_of_its_input() {
             "girth: skipped Goose: its sessions.db has no cache columns",
         ));
 }
+
+#[test]
+fn plan_record_keeps_readings_and_names_a_window_80_percent_used() {
+    let tmp = TempDir::new().unwrap();
+    let g = tmp.path().join("g");
+    let record = |input: &str| {
+        let out = girth()
+            .env("GIRTH_HOME", &g)
+            .args(["plan", "record"])
+            .write_stdin(input.to_string())
+            .assert()
+            .success();
+        String::from_utf8_lossy(&out.get_output().stdout)
+            .trim()
+            .to_string()
+    };
+    assert_eq!(record("not json"), "{}");
+    assert_eq!(
+        record(r#"{"readings":[{"kind":"seven_day","permille":790}]}"#),
+        "{}"
+    );
+    let resets = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 2 * 86_400
+        + 5 * 3600
+        + 20;
+    let line = record(&format!(
+        r#"{{"readings":[{{"kind":"five_hour","permille":410}},{{"kind":"seven_day","permille":880,"resets_at":{resets}}},{{"kind":"","permille":999}},{{"bad":1}}]}}"#
+    ));
+    assert_eq!(
+        line,
+        r#"{"line":"88% of your 7-day plan window is used; it resets in 2d 5h"}"#
+    );
+    let ledger = std::fs::read_to_string(g.join("ledger.jsonl")).unwrap();
+    // Three valid readings in all; the nameless one and the malformed one are dropped.
+    assert_eq!(ledger.matches(r#""kind":"plan""#).count(), 3, "{ledger}");
+}
