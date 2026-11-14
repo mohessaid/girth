@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-14
+
 ### Changed
 - **Idle compaction is on by default.** When a conversation of 150,000 tokens or more has sat idle for 55 minutes, Girth compacts it while its cache is still warm.
   - **The saving:** on the author's last 7 days, it would have saved about $440 net of $1,825 at API prices (77 compactions, about $9 in total; `examples/compact/idle_sim.py`).
@@ -427,7 +429,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - A launcher that downloads checksum-verified release binaries (Linux musl x86_64/ARM64, macOS Intel/Apple Silicon).
 - A behavioural eval suite (3 cases, all 1.00) and the hyperframes acceptance demo (38× lower always-on skill cost).
 
-[Unreleased]: https://github.com/mohessaid/girth/compare/v0.25.2...HEAD
+[Unreleased]: https://github.com/mohessaid/girth/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/mohessaid/girth/compare/v0.25.2...v0.26.0
 [0.25.2]: https://github.com/mohessaid/girth/compare/v0.25.1...v0.25.2
 [0.25.1]: https://github.com/mohessaid/girth/compare/v0.25.0...v0.25.1
 [0.25.0]: https://github.com/mohessaid/girth/compare/v0.24.4...v0.25.0
